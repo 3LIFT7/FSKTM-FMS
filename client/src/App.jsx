@@ -31,15 +31,14 @@ import Reports from './pages/admin/Reports';
 import SettingsPage from './pages/admin/SettingsPage';
 import RoomsControl from './pages/admin/RoomsControl';
 
+import { Spin } from 'antd';
+
 function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-xs font-semibold text-slate-500">Loading FSKTM FMS...</p>
-        </div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
+        <Spin size="large" tip="Loading FSKTM FMS..." />
       </div>
     );
   }

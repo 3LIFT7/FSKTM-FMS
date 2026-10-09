@@ -1,23 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, Segmented, DatePicker, TimePicker, Button, Radio, Space, Typography, Tag, Row, Col, Alert, Tooltip, Grid } from 'antd';
+import {
+  CompassOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  PlusOutlined,
+  ToolOutlined,
+  CheckCircleOutlined,
+  EnvironmentOutlined,
+  BankOutlined,
+  InfoCircleOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { FLOOR_PLANS } from './floorData';
 import RoomDetailModal from './RoomDetailModal';
 import BookRoomModal from '../booking/BookRoomModal';
-import { 
-  Building, 
-  Layers, 
-  Wrench, 
-  CheckCircle2, 
-  Clock, 
-  Info, 
-  RefreshCw, 
-  Filter,
-  Maximize2,
-  Calendar as CalendarIcon,
-  MapPin,
-  Sparkles
-} from 'lucide-react';
+import StatusTag from '../../components/StatusTag';
+import PageHeader from '../../components/PageHeader';
+import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
+
+const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 export default function InteractiveFloorMap({ onBookRoom }) {
+  const screens = useBreakpoint();
+  const isPhone = screens.md === false;
   const [currentFloor, setCurrentFloor] = useState('Ground');
   const [locations, setLocations] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -25,9 +32,9 @@ export default function InteractiveFloorMap({ onBookRoom }) {
   const [selectedLocationId, setSelectedLocationId] = useState(null);
 
   // Time-slot availability filter
-  const [viewTimeMode, setViewTimeMode] = useState('now'); // 'now' or 'custom'
-  const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
-  const [customTime, setCustomTime] = useState('10:00');
+  const [viewTimeMode, setViewTimeMode] = useState('now');
+  const [customDate, setCustomDate] = useState(dayjs());
+  const [customTime, setCustomTime] = useState(dayjs().hour(10).minute(0));
 
   // Booking modal state
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -42,7 +49,7 @@ export default function InteractiveFloorMap({ onBookRoom }) {
     try {
       const [locRes, bookRes] = await Promise.all([
         fetch('/api/locations'),
-        fetch('/api/bookings')
+        fetch('/api/bookings'),
       ]);
       const locData = await locRes.json();
       const bookData = await bookRes.json();
@@ -55,53 +62,70 @@ export default function InteractiveFloorMap({ onBookRoom }) {
     }
   }
 
-  // Create lookup map by room code & name
-  const locationLookup = {};
-  locations.forEach(loc => {
-    locationLookup[loc.code.toUpperCase()] = loc;
-    locationLookup[loc.name.toUpperCase()] = loc;
-  });
+  // Lookup map by room code & name
+  const locationLookup = useMemo(() => {
+    const map = {};
+    locations.forEach(loc => {
+      map[loc.code.toUpperCase()] = loc;
+      map[loc.name.toUpperCase()] = loc;
+    });
+    return map;
+  }, [locations]);
 
   // Target timestamp to evaluate availability against
-  const targetCheckTime = viewTimeMode === 'now'
-    ? new Date()
-    : new Date(`${customDate}T${customTime}:00`);
+  const targetCheckTime = useMemo(() => {
+    if (viewTimeMode === 'now') return new Date();
+    const dateStr = customDate.format('YYYY-MM-DD');
+    const timeStr = customTime.format('HH:mm:00');
+    return new Date(`${dateStr}T${timeStr}`);
+  }, [viewTimeMode, customDate, customTime]);
 
-  // Active bookings at targetCheckTime (approved or pending)
-  const activeBookingsAtTime = {};
-  bookings
-    .filter(b => b.status === 'approved' || b.status === 'pending')
-    .forEach(b => {
-      const bStart = new Date(b.start_time);
-      const bEnd = new Date(b.end_time);
-      if (bStart <= targetCheckTime && bEnd >= targetCheckTime) {
-        activeBookingsAtTime[b.location_id] = b;
-      }
-    });
+  // Active bookings at check time
+  const activeBookingsAtTime = useMemo(() => {
+    const map = {};
+    bookings
+      .filter(b => b.status === 'approved' || b.status === 'pending')
+      .forEach(b => {
+        const bStart = new Date(b.start_time);
+        const bEnd = new Date(b.end_time);
+        if (bStart <= targetCheckTime && bEnd >= targetCheckTime) {
+          map[b.location_id] = b;
+        }
+      });
+    return map;
+  }, [bookings, targetCheckTime]);
 
   const floorPlan = FLOOR_PLANS[currentFloor] || FLOOR_PLANS.Ground;
 
-  // Render individual room card
-  const renderRoomBox = (roomDef, customClass = '') => {
+  // Render individual architectural room box
+  const renderRoomBox = (roomDef, extraClass = '') => {
     const backendLoc = locationLookup[roomDef.code.toUpperCase()] || locationLookup[roomDef.name.toUpperCase()];
     const isMaintenance = backendLoc?.status === 'maintenance';
     const activeBooking = backendLoc ? activeBookingsAtTime[backendLoc.location_id] : null;
     const isBooked = Boolean(activeBooking);
     const isPending = activeBooking?.status === 'pending';
 
-    let bgStyle = 'bg-white hover:bg-emerald-50/50 border-emerald-300 text-slate-800 shadow-xs hover:shadow-md hover:border-emerald-500';
-    let statusDot = 'bg-emerald-500';
+    let borderStyle = '1px solid #BBF7D0';
+    let bgStyle = '#F0FDF4';
+    let titleColor = '#166534';
+    let status = 'Available';
 
     if (isMaintenance) {
-      bgStyle = 'maintenance-stripe bg-amber-50/90 border-amber-400 text-amber-950 opacity-95 hover:opacity-100 ring-2 ring-amber-300/60 shadow-xs';
-      statusDot = 'bg-amber-500 animate-pulse';
+      borderStyle = '2px dashed #F59E0B';
+      bgStyle = '#FFFBEB';
+      titleColor = '#92400E';
+      status = 'Maintenance';
     } else if (isBooked) {
       if (isPending) {
-        bgStyle = 'bg-amber-50/80 border-amber-300 border-dashed text-amber-950 hover:bg-amber-100 shadow-xs hover:shadow-md';
-        statusDot = 'bg-amber-500';
+        borderStyle = '1px dashed #FCD34D';
+        bgStyle = '#FEFCE8';
+        titleColor = '#854D0E';
+        status = 'In Progress';
       } else {
-        bgStyle = 'bg-blue-50/90 border-blue-400 text-blue-950 hover:bg-blue-100 hover:border-blue-600 shadow-xs hover:shadow-md';
-        statusDot = 'bg-blue-600';
+        borderStyle = '1px solid #93C5FD';
+        bgStyle = '#EFF6FF';
+        titleColor = '#1E40AF';
+        status = 'Booked';
       }
     }
 
@@ -113,319 +137,316 @@ export default function InteractiveFloorMap({ onBookRoom }) {
             setSelectedLocationId(backendLoc.location_id);
           }
         }}
-        className={`rounded-2xl border-2 p-3 sm:p-3.5 flex flex-col justify-between cursor-pointer transition-all duration-200 transform hover:-translate-y-0.5 ${bgStyle} ${customClass}`}
+        style={{
+          border: borderStyle,
+          background: bgStyle,
+          borderRadius: 12,
+          padding: '12px 14px',
+          cursor: backendLoc ? 'pointer' : 'default',
+          transition: 'all 0.2s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          minHeight: 100,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+        }}
+        className={`hover:scale-[1.02] hover:shadow-md ${extraClass}`}
       >
-        <div className="flex items-center justify-between gap-1">
-          <span className="font-black text-xs sm:text-sm tracking-tight text-slate-900">
-            {roomDef.code}
-          </span>
-          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusDot}`} />
-        </div>
-
-        <div className="font-semibold text-[11px] sm:text-xs leading-snug my-1 line-clamp-2 text-slate-700">
-          {roomDef.name}
-        </div>
-
-        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider pt-1 border-t border-slate-100">
-          {isMaintenance ? (
-            <span className="text-amber-700 flex items-center gap-1 font-semibold">
-              <Wrench className="w-3 h-3 inline" /> Maintenance
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontWeight: 800, fontSize: 13, color: titleColor }}>
+              {roomDef.code}
             </span>
-          ) : isBooked ? (
-            <span className={isPending ? 'text-amber-800 font-semibold' : 'text-blue-700 font-semibold'}>
-              {isPending ? 'Pending Req' : 'Booked'}
-            </span>
-          ) : (
-            <span className="text-emerald-700 font-semibold">Available</span>
+            <StatusTag status={status} />
+          </div>
+
+          <div style={{ fontSize: 11, color: '#334155', fontWeight: 600, lineHeight: 1.3 }}>
+            {roomDef.name}
+          </div>
+
+          {activeBooking && (
+            <div style={{ fontSize: 10, color: '#2563EB', marginTop: 4, fontStyle: 'italic' }}>
+              {activeBooking.purpose?.slice(0, 24)}...
+            </div>
           )}
+        </div>
 
-          <span className="text-slate-400 font-medium lowercase">
-            {backendLoc?.capacity || roomDef.capacity} pax
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontSize: 10, color: '#64748B' }}>
+          <span>{backendLoc?.capacity || roomDef.capacity || 30} seats</span>
+          {backendLoc && (
+            <span style={{ color: '#1E3A8A', fontWeight: 700 }}>
+              Details &rarr;
+            </span>
+          )}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Top Header & Floor Switcher */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 sm:p-2 rounded-xl bg-blue-50 text-blue-600">
-              <Layers className="w-4 sm:w-5 h-4 sm:h-5" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Interactive Floor Map & Facility Availability"
+        subtitle="Architectural kiosk map of FSKTM featuring 4 floor plans with live room availability and maintenance indicators."
+      />
+
+      {/* Control Panel: Floor & Time Switcher */}
+      <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <Row gutter={[16, 16]} align="middle" justify="space-between">
+          <Col xs={24} md={12}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
+              Select Floor Level:
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Interactive Floor Map
-            </h1>
-          </div>
-          <p className="text-[11px] sm:text-xs text-slate-500">
-            FSKTM Faculty Building Navigation & Real-Time Facility Availability
-          </p>
-        </div>
-
-        {/* Floor Tabs - scrollable horizontally on narrow phones */}
-        <div className="flex bg-slate-100 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl gap-1 overflow-x-auto max-w-full">
-          {['Ground', 'First', 'Second', 'Third'].map(floor => (
-            <button
-              key={floor}
-              onClick={() => setCurrentFloor(floor)}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-                currentFloor === floor
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span>{floor} Floor</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Legend & Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 bg-white px-4 sm:px-5 py-3 rounded-2xl border border-slate-200 text-xs shadow-2xs">
-        <div className="flex items-center gap-3 sm:gap-5 flex-wrap">
-          <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] sm:text-[11px]">Room Status:</span>
-          
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md bg-emerald-500 border border-emerald-600"></span>
-            <span className="font-semibold text-slate-700 text-[11px] sm:text-xs">Available</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md bg-blue-500 border border-blue-600"></span>
-            <span className="font-semibold text-slate-700 text-[11px] sm:text-xs">In Use / Booked</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-md bg-amber-400 border border-amber-500 maintenance-stripe"></span>
-            <span className="font-semibold text-amber-800 text-[11px] sm:text-xs">Under Maintenance</span>
-          </div>
-        </div>
-
-        <button
-          onClick={fetchData}
-          title="Refresh Live Status"
-          className="p-1.5 sm:p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition border border-slate-200 flex items-center gap-1.5 text-xs font-medium shrink-0"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
-          <span className="hidden sm:inline">Refresh Status</span>
-        </button>
-      </div>
-
-      {/* Time Slot Availability Filter */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 text-xs shadow-2xs">
-        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-          <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600 shrink-0">
-            <Clock className="w-4 h-4" />
-          </div>
-          <span className="font-bold text-slate-800 text-xs">Availability For:</span>
-          <div className="flex bg-slate-100 p-0.5 sm:p-1 rounded-xl gap-0.5 sm:gap-1">
-            <button
-              onClick={() => setViewTimeMode('now')}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg font-bold text-[11px] sm:text-xs transition ${
-                viewTimeMode === 'now' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Live
-            </button>
-            <button
-              onClick={() => setViewTimeMode('custom')}
-              className={`px-2.5 sm:px-3 py-1 rounded-lg font-bold text-[11px] sm:text-xs transition ${
-                viewTimeMode === 'custom' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Time Slot
-            </button>
-          </div>
-        </div>
-
-        {viewTimeMode === 'custom' && (
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <input
-              type="date"
-              value={customDate}
-              onChange={(e) => setCustomDate(e.target.value)}
-              className="px-2 sm:px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-600 flex-1 sm:flex-initial"
+            <Segmented
+              block
+              size={isPhone ? 'middle' : 'large'}
+              value={currentFloor}
+              onChange={setCurrentFloor}
+              options={
+                isPhone
+                  ? [
+                      { label: 'Ground', value: 'Ground' },
+                      { label: 'Level 1', value: 'First' },
+                      { label: 'Level 2', value: 'Second' },
+                      { label: 'Level 3', value: 'Third' },
+                    ]
+                  : [
+                      { label: 'Ground Floor', value: 'Ground' },
+                      { label: 'First Floor', value: 'First' },
+                      { label: 'Second Floor', value: 'Second' },
+                      { label: 'Third Floor', value: 'Third' },
+                    ]
+              }
+              style={{ width: '100%', maxWidth: '100%' }}
             />
-            <input
-              type="time"
-              value={customTime}
-              onChange={(e) => setCustomTime(e.target.value)}
-              className="px-2 sm:px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-        )}
+          </Col>
 
-        <div className="text-slate-500 text-[10px] sm:text-[11px] w-full sm:w-auto text-right">
-          Target Slot:{' '}
-          <strong className="text-slate-800 font-mono">
-            {targetCheckTime.toLocaleDateString('en-MY', { month: 'short', day: 'numeric' })}{' '}
-            {targetCheckTime.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })}
-          </strong>
-        </div>
-      </div>
-
-      {/* Architectural Schematic Canvas matching the kiosk map */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-4 sm:p-6 md:p-8 3xl:p-10 shadow-xs relative overflow-hidden">
-        {/* Floor Watermark Banner */}
-        <div className="mb-4 sm:mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-2xl sm:text-3xl md:text-4xl 3xl:text-5xl font-black text-amber-500/90 tracking-tighter uppercase select-none">
-              {floorPlan.label}
-            </span>
-            <span className="hidden sm:inline-block text-xs bg-amber-100/80 text-amber-800 font-bold px-2.5 py-1 rounded-full border border-amber-200">
-              Schematic Kiosk View
-            </span>
-          </div>
-          <span className="text-[10px] sm:text-xs text-slate-400 font-medium">
-            Tap room to view schedule & book
-          </span>
-        </div>
-
-        {/* Building Plan Schematic Grid: 1 col on mobile, 12 cols on desktop/tablets landscape */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 3xl:grid-cols-12 gap-4 sm:gap-6 items-stretch">
-          
-          {/* ================= LEFT / WEST WING (Angled corridor in physical layout) ================= */}
-          <div className="lg:col-span-5 bg-amber-50/40 border-2 border-dashed border-amber-200/80 rounded-3xl p-5 flex flex-col justify-between relative overflow-hidden">
-            <div className="flex items-center justify-between mb-4 border-b border-amber-200/60 pb-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span className="font-extrabold text-xs uppercase tracking-wider text-amber-900">
-                  West Wing (Tutorials, Labs & Study)
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-amber-700/70 bg-amber-100 px-2 py-0.5 rounded-md">
-                Angled Wing
-              </span>
+          <Col xs={24} md={12}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
+              Evaluate Room Availability At:
             </div>
+            <Space wrap>
+              <Radio.Group
+                value={viewTimeMode}
+                onChange={(e) => setViewTimeMode(e.target.value)}
+                buttonStyle="solid"
+              >
+                <Radio.Button value="now">Live Now</Radio.Button>
+                <Radio.Button value="custom">Custom Time</Radio.Button>
+              </Radio.Group>
 
-            <div className="space-y-4 flex-1 flex flex-col justify-center">
-              {/* Row Top (Main Rooms / Study / Labs) */}
-              <div className={`grid gap-3 ${floorPlan.westWing.rowTop.length > 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                {floorPlan.westWing.rowTop.map(room => renderRoomBox(room))}
+              {viewTimeMode === 'custom' && (
+                <>
+                  <DatePicker value={customDate} onChange={setCustomDate} format={DATE_FORMAT} />
+                  <TimePicker value={customTime} onChange={setCustomTime} format={TIME_FORMAT} minuteStep={15} />
+                </>
+              )}
+            </Space>
+          </Col>
+        </Row>
+      </Card>
+
+      {/* Status Legend */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '0 4px' }}>
+        <Text strong style={{ fontSize: 12, color: '#475569' }}>Status Legend:</Text>
+        <Space size="middle" wrap>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#16A34A', display: 'inline-block' }} />
+            <Text style={{ fontSize: 12 }}>Available</Text>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#2563EB', display: 'inline-block' }} />
+            <Text style={{ fontSize: 12 }}>Booked / In Session</Text>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#F59E0B', display: 'inline-block' }} />
+            <Text style={{ fontSize: 12 }}>Under Maintenance</Text>
+          </div>
+        </Space>
+      </div>
+
+      {/* Main Architectural Floor Plan Visualizer */}
+      <Card
+        title={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space>
+              <CompassOutlined style={{ color: '#1E3A8A' }} />
+              <span style={{ fontWeight: 800 }}>FSKTM {floorPlan.name.toUpperCase()} WING MAP</span>
+            </Space>
+            <Tag color="blue">{floorPlan.label}</Tag>
+          </div>
+        }
+        bordered={false}
+        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Row gutter={[16, 16]} align="stretch">
+          {/* ================= WEST WING ================= */}
+          <Col xs={24} lg={10}>
+            <div
+              style={{
+                height: '100%',
+                background: '#FFFBEB',
+                border: '2px dashed #FDE68A',
+                borderRadius: 16,
+                padding: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #FEF3C7', pb: 8 }}>
+                  <Text strong style={{ color: '#92400E', fontSize: 13 }}>
+                    West Wing (Tutorial Rooms & Labs)
+                  </Text>
+                  <Tag color="gold" style={{ fontSize: 10 }}>Angled Wing</Tag>
+                </div>
+
+                {/* West Wing Top Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: floorPlan.westWing.rowTop.length > 2 ? 'repeat(2, 1fr)' : '1fr', gap: 10, marginBottom: 12 }}>
+                  {floorPlan.westWing.rowTop.map(room => renderRoomBox(room))}
+                </div>
+
+                {/* Corridor Line */}
+                {floorPlan.westWing.rowBottom.length > 0 && (
+                  <div style={{ textAlign: 'center', margin: '8px 0', borderTop: '2px dashed #FCD34D', position: 'relative' }}>
+                    <span style={{ position: 'relative', top: -10, background: '#FEF3C7', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#92400E' }}>
+                      West Corridor
+                    </span>
+                  </div>
+                )}
+
+                {/* West Wing Bottom Row */}
+                {floorPlan.westWing.rowBottom.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
+                    {floorPlan.westWing.rowBottom.map(room => renderRoomBox(room))}
+                  </div>
+                )}
               </div>
 
-              {/* Corridor Line Visual */}
-              {floorPlan.westWing.rowBottom.length > 0 && (
-                <div className="relative py-1 flex items-center justify-center">
-                  <div className="w-full border-t-2 border-dashed border-amber-300" />
-                  <span className="absolute bg-amber-100 text-amber-800 text-[9px] font-bold px-2 rounded-full uppercase tracking-wider">
-                    West Corridor
+              <div style={{ marginTop: 16, paddingTop: 8, borderTop: '1px solid #FEF3C7', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#B45309', fontWeight: 600 }}>
+                <span>Restrooms & Water Station</span>
+                <span>Staircase A</span>
+              </div>
+            </div>
+          </Col>
+
+          {/* ================= CENTRAL CORE (Elevator Lobby & Offices) ================= */}
+          <Col xs={24} lg={4}>
+            <div
+              style={{
+                height: '100%',
+                background: '#F1F5F9',
+                border: '2px solid #E2E8F0',
+                borderRadius: 16,
+                padding: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ width: '100%' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
+                  CENTRAL CORE
+                </div>
+
+                {/* Lift Box */}
+                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontSize: 24, marginBottom: 4 }}>🛗</div>
+                  <Text strong style={{ fontSize: 12, color: '#334155', display: 'block' }}>
+                    ELEVATOR LOBBY
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 10 }}>Core Lifts 1 & 2</Text>
+                </div>
+
+                <div style={{ width: 10, height: 40, background: '#CBD5E1', borderRadius: 99, margin: '8px auto' }} />
+
+                {/* Office Suite area */}
+                <div style={{ background: '#E2E8F0', borderRadius: 12, padding: 12, marginTop: 8 }}>
+                  <BankOutlined style={{ fontSize: 18, color: '#64748B', marginBottom: 4 }} />
+                  <div style={{ fontWeight: 800, fontSize: 11, color: '#475569' }}>
+                    Administrative Offices
+                  </div>
+                  <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>
+                    Dean's Office & Academic Suites
+                  </div>
+                </div>
+              </div>
+
+              {currentFloor === 'Ground' && (
+                <div style={{ marginTop: 12, background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#1E3A8A' }}>
+                  <EnvironmentOutlined style={{ marginRight: 4 }} /> Kiosk Terminal
+                </div>
+              )}
+
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginTop: 12 }}>
+                Central Spine
+              </div>
+            </div>
+          </Col>
+
+          {/* ================= EAST WING (Dual Row Labs) ================= */}
+          <Col xs={24} lg={10}>
+            <div
+              style={{
+                height: '100%',
+                background: '#F0F9FF',
+                border: '2px dashed #BAE6FD',
+                borderRadius: 16,
+                padding: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #E0F2FE', pb: 8 }}>
+                  <Text strong style={{ color: '#0369A1', fontSize: 13 }}>
+                    East Wing (Specialized Computer Labs)
+                  </Text>
+                  <Tag color="cyan" style={{ fontSize: 10 }}>Dual Row Labs</Tag>
+                </div>
+
+                {/* East Wing Top Row */}
+                <div style={{ marginBottom: 6 }}>
+                  <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                    North Labs Row
+                  </Text>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                    {floorPlan.eastWing.rowTop.map(room => renderRoomBox(room))}
+                  </div>
+                </div>
+
+                {/* Main Hallway Corridor */}
+                <div style={{ textAlign: 'center', margin: '10px 0', borderTop: '2px dashed #7DD3FC', position: 'relative' }}>
+                  <span style={{ position: 'relative', top: -10, background: '#E0F2FE', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#0369A1' }}>
+                    East Lab Corridor
                   </span>
                 </div>
-              )}
 
-              {/* Row Bottom (Postgraduate Rooms / Pantry on Ground) */}
-              {floorPlan.westWing.rowBottom.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  {floorPlan.westWing.rowBottom.map(room => renderRoomBox(room, 'p-2 sm:p-2.5'))}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4 pt-2 border-t border-amber-200/60 flex items-center justify-between text-[11px] text-amber-800 font-semibold">
-              <span>🚻 Restroom & Water Stations</span>
-              <span>🚪 Staircase A</span>
-            </div>
-          </div>
-
-          {/* ================= CENTER SPINE (Offices - EXCLUDED AS DIRECTED) ================= */}
-          <div className="lg:col-span-2 bg-slate-100/70 border-2 border-slate-200 rounded-3xl p-4 flex flex-col justify-between items-center text-center relative shadow-inner">
-            <div className="w-full flex flex-col items-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                CENTRAL CORE
-              </span>
-
-              {/* Lift Box */}
-              <div className="w-full bg-white border border-slate-200 rounded-2xl p-3 mb-3 shadow-2xs flex flex-col items-center">
-                <span className="text-2xl mb-1">🛗</span>
-                <span className="font-black text-xs text-slate-700">ELEVATOR LOBBY</span>
-                <span className="text-[10px] text-slate-400 font-medium">Core Lifts 1 & 2</span>
-              </div>
-
-              {/* Central Passage / Corridor */}
-              <div className="w-3 h-16 bg-slate-300 rounded-full my-2" />
-
-              {/* Office Exclusion Zone Banner */}
-              <div className="w-full bg-slate-200/80 border border-slate-300 rounded-2xl p-3 text-slate-600 flex flex-col items-center">
-                <Building className="w-5 h-5 text-slate-500 mb-1" />
-                <span className="font-extrabold text-[11px] text-slate-700 uppercase tracking-tight">
-                  Office Suites
-                </span>
-                <span className="text-[10px] text-slate-500 leading-tight mt-1">
-                  Faculty Administrative & Lecturer Offices (Private Area)
-                </span>
-              </div>
-            </div>
-
-            {currentFloor === 'Ground' && (
-              <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl px-2.5 py-1.5 text-blue-700 text-[10px] font-bold flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 shrink-0 text-blue-600" />
-                <span>You are here (Kiosk)</span>
-              </div>
-            )}
-
-            <div className="w-full pt-3 border-t border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Central Circulation
-            </div>
-          </div>
-
-          {/* ================= RIGHT / EAST WING (Labs in 2 Rows) ================= */}
-          <div className="lg:col-span-5 bg-sky-50/40 border-2 border-dashed border-sky-200/80 rounded-3xl p-5 flex flex-col justify-between relative overflow-hidden">
-            <div className="flex items-center justify-between mb-4 border-b border-sky-200/60 pb-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                <span className="font-extrabold text-xs uppercase tracking-wider text-sky-900">
-                  East Wing (Computer Labs & Studios)
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
-                Dual Row Labs
-              </span>
-            </div>
-
-            <div className="space-y-4 flex-1 flex flex-col justify-center">
-              {/* Top Row Labs */}
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700/80 block mb-1.5">
-                  North Row Labs
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {floorPlan.eastWing.rowTop.map(room => renderRoomBox(room))}
+                {/* East Wing Bottom Row */}
+                <div>
+                  <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                    South Labs Row
+                  </Text>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                    {floorPlan.eastWing.rowBottom.map(room => renderRoomBox(room))}
+                  </div>
                 </div>
               </div>
 
-              {/* Main Hallway Corridor */}
-              <div className="relative py-1 flex items-center justify-center">
-                <div className="w-full border-t-2 border-dashed border-sky-300" />
-                <span className="absolute bg-sky-100 text-sky-800 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  East Lab Corridor
-                </span>
-              </div>
-
-              {/* Bottom Row Labs */}
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700/80 block mb-1.5">
-                  South Row Labs
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {floorPlan.eastWing.rowBottom.map(room => renderRoomBox(room))}
-                </div>
+              <div style={{ marginTop: 16, paddingTop: 8, borderTop: '1px solid #E0F2FE', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#0369A1', fontWeight: 600 }}>
+                <span>Surau (Musalla)</span>
+                <span>Restrooms & Staircase B</span>
               </div>
             </div>
+          </Col>
+        </Row>
+      </Card>
 
-            <div className="mt-4 pt-2 border-t border-sky-200/60 flex items-center justify-between text-[11px] text-sky-800 font-semibold">
-              <span>🕌 Surau (Musalla)</span>
-              <span>🚻 Restrooms & Staircase B</span>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Slide-over / Modal for Clicked Room Details */}
+      {/* Room Detail Drawer (Section 6: Floor map side panel) */}
       <RoomDetailModal
         locationId={selectedLocationId}
         onClose={() => setSelectedLocationId(null)}
@@ -435,22 +456,19 @@ export default function InteractiveFloorMap({ onBookRoom }) {
           setIsBookModalOpen(true);
           if (onBookRoom) onBookRoom(loc);
         }}
-        onStatusChanged={() => {
-          fetchData();
-        }}
+        onStatusChanged={() => fetchData()}
+        onRoomUpdated={() => fetchData()}
       />
 
-      {/* Embedded Facility Booking Modal */}
+      {/* Booking Modal */}
       <BookRoomModal
         isOpen={isBookModalOpen}
+        initialLocation={bookingModalLocation}
         onClose={() => {
           setIsBookModalOpen(false);
           setBookingModalLocation(null);
         }}
-        initialLocation={bookingModalLocation}
-        onBookingCreated={() => {
-          fetchData();
-        }}
+        onBookingCreated={() => fetchData()}
       />
     </div>
   );

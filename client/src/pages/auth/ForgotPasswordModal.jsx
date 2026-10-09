@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import { Mail, CheckCircle2, AlertCircle, X, KeyRound } from 'lucide-react';
+import { Modal, Form, Input, Button, Alert, Result } from 'antd';
+import { MailOutlined, KeyOutlined } from '@ant-design/icons';
 
 export default function ForgotPasswordModal({ isOpen, onClose }) {
-  const [email, setEmail] = useState('');
+  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [responseInfo, setResponseInfo] = useState(null);
 
-  if (!isOpen) return null;
-
-  async function handleSubmit(e) {
-    e.preventDefault();
+  const handleFinish = async (values) => {
     setError('');
     setLoading(true);
 
@@ -18,12 +16,12 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email: values.email }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit reset request.');
+        throw new Error(data.error || 'Failed to submit password reset request.');
       }
 
       setResponseInfo(data);
@@ -32,92 +30,90 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const handleCancel = () => {
+    form.resetFields();
+    setError('');
+    setResponseInfo(null);
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-100 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4">
-          <KeyRound className="w-6 h-6" />
+    <Modal
+      open={isOpen}
+      onCancel={handleCancel}
+      footer={null}
+      destroyOnClose
+      centered
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <KeyOutlined style={{ color: '#1E3A8A' }} />
+          <span>Reset Account Password</span>
         </div>
-
-        <h3 className="text-xl font-bold text-slate-900 mb-1">Reset Account Password</h3>
-        <p className="text-sm text-slate-500 mb-5">
-          Enter your registered Universiti Malaya faculty email to receive a password reset token.
-        </p>
-
+      }
+    >
+      <div style={{ marginTop: 12 }}>
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
+          <Alert
+            type="error"
+            message={error}
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
         )}
 
         {responseInfo ? (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-sm space-y-3">
-            <div className="flex items-center gap-2 font-semibold">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Reset Request Registered!</span>
-            </div>
-            <p className="text-emerald-700">{responseInfo.message}</p>
-            {responseInfo.stub_token && (
-              <div className="bg-white p-3 rounded-lg border border-emerald-300 font-mono text-xs text-slate-800 break-all">
-                <span className="text-slate-400 block mb-1">Generated Reset Token (Dev Stub):</span>
-                {responseInfo.stub_token}
-              </div>
-            )}
-            <button
-              onClick={onClose}
-              className="w-full mt-3 py-2 bg-emerald-600 text-white rounded-lg font-medium text-sm hover:bg-emerald-700 transition"
-            >
-              Close Window
-            </button>
-          </div>
+          <Result
+            status="success"
+            title="Reset Request Registered"
+            subTitle={responseInfo.message}
+            extra={
+              responseInfo.stub_token ? (
+                <div style={{ textAlign: 'left', background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', marginTop: 12 }}>
+                  <div style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Dev Stub Reset Token:</div>
+                  <code style={{ fontSize: 12, wordBreak: 'break-all' }}>{responseInfo.stub_token}</code>
+                </div>
+              ) : null
+            }
+          >
+            <Button type="primary" block onClick={handleCancel}>
+              Close
+            </Button>
+          </Result>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-                University Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  required
+          <>
+            <p style={{ color: '#64748B', fontSize: 13, marginBottom: 16 }}>
+              Enter your registered faculty email address to receive a secure password reset token.
+            </p>
+            <Form form={form} layout="vertical" onFinish={handleFinish}>
+              <Form.Item
+                name="email"
+                label="University Email Address"
+                rules={[
+                  { required: true, message: 'Please enter your email address' },
+                  { type: 'email', message: 'Please enter a valid email address' },
+                ]}
+              >
+                <Input
+                  prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
                   placeholder="name@fsktm.um.edu.my"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                  size="large"
                 />
-              </div>
-            </div>
+              </Form.Item>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-medium text-sm hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {loading ? 'Submitting...' : 'Send Reset Link'}
-              </button>
-            </div>
-          </form>
+              <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                  <Button onClick={handleCancel}>Cancel</Button>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    Send Reset Link
+                  </Button>
+                </div>
+              </Form.Item>
+            </Form>
+          </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

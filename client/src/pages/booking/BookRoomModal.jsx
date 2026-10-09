@@ -1,65 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Modal, Form, Select, DatePicker, TimePicker, Input, Switch, Alert, Button, Space, Typography, Tag, message } from 'antd';
+import {
+  CalendarOutlined,
+  ClockCircleOutlined,
+  AlertOutlined,
+  CheckCircleOutlined,
+  BookOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
-import { X, Calendar, Clock, Layers, ShieldAlert, CheckCircle2, AlertTriangle, Info, Laptop } from 'lucide-react';
+import StatusTag from '../../components/StatusTag';
+import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
+
+const { Text, Paragraph } = Typography;
 
 export default function BookRoomModal({ isOpen, onClose, initialLocation, onBookingCreated }) {
-  const { user, isLecturer, isManager, isTechnician } = useAuth();
-  const isStaff = isManager || isTechnician;
+  const { user, isLecturer, isStaff } = useAuth();
+  const [form] = Form.useForm();
 
   const [locations, setLocations] = useState([]);
-  const [selectedLocationId, setSelectedLocationId] = useState('');
-  const [roomDevices, setRoomDevices] = useState([]);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('11:00');
-  const [purpose, setPurpose] = useState('');
-  const [courseId, setCourseId] = useState('');
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [weeks, setWeeks] = useState(14);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  // Fetch in-room devices whenever selectedLocationId changes
-  useEffect(() => {
-    if (selectedLocationId) {
-      fetch(`/api/locations/${selectedLocationId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.location?.devices) {
-            setRoomDevices(data.location.devices);
-          } else {
-            setRoomDevices([]);
-          }
-        })
-        .catch(() => setRoomDevices([]));
-    } else {
-      setRoomDevices([]);
-    }
-  }, [selectedLocationId]);
-
-  // Slot availability tracking for the chosen room & date
+  const [selectedLocationId, setSelectedLocationId] = useState(null);
   const [existingBookingsOnDate, setExistingBookingsOnDate] = useState([]);
   const [fetchingSlots, setFetchingSlots] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+
+  // Watch form values for conflict detection
+  const selectedDate = Form.useWatch('date', form);
+  const selectedTimeRange = Form.useWatch('timeRange', form);
+  const watchedLocationId = Form.useWatch('location_id', form);
 
   useEffect(() => {
     if (isOpen) {
       fetchLocations();
+      form.resetFields();
+      setError('');
+      setIsRecurring(false);
+
       if (initialLocation) {
         setSelectedLocationId(initialLocation.location_id);
+        form.setFieldsValue({
+          location_id: initialLocation.location_id,
+          date: dayjs(),
+          timeRange: [dayjs().hour(9).minute(0), dayjs().hour(11).minute(0)],
+        });
+      } else {
+        form.setFieldsValue({
+          date: dayjs(),
+          timeRange: [dayjs().hour(9).minute(0), dayjs().hour(11).minute(0)],
+        });
       }
-      setError('');
-      setSuccessMsg('');
     }
-  }, [isOpen, initialLocation]);
-
-  useEffect(() => {
-    if (isOpen && selectedLocationId && date) {
-      fetchSlotsForDate(selectedLocationId, date);
-    } else {
-      setExistingBookingsOnDate([]);
-    }
-  }, [isOpen, selectedLocationId, date]);
+  }, [isOpen, initialLocation, form]);
 
   async function fetchLocations() {
     try {
@@ -73,77 +66,100 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, onBook
     }
   }
 
-  async function fetchSlotsForDate(locationId, chosenDate) {
+  // Filter out rooms under active maintenance according to Section 8
+  const selectableRooms = useMemo(() => {
+    return locations.filter(loc => loc.status !== 'maintenance');
+  }, [locations]);
+
+  // Fetch slots whenever location and date change
+  useEffect(() => {
+    const locId = watchedLocationId || selectedLocationId;
+    if (isOpen && locId && selectedDate) {
+      const dateStr = selectedDate.format('YYYY-MM-DD');
+      fetchSlotsForDate(locId, dateStr);
+    } else {
+      setExistingBookingsOnDate([]);
+    }
+  }, [isOpen, watchedLocationId, selectedLocationId, selectedDate]);
+
+  async function fetchSlotsForDate(locationId, chosenDateStr) {
     setFetchingSlots(true);
     try {
-      const startOfDay = `${chosenDate}T00:00:00`;
-      const endOfDay = `${chosenDate}T23:59:59`;
+      const startOfDay = `${chosenDateStr}T00:00:00`;
+      const endOfDay = `${chosenDateStr}T23:59:59`;
       const res = await fetch(`/api/bookings?location_id=${locationId}&startDate=${startOfDay}&endDate=${endOfDay}`);
       const data = await res.json();
       if (data.success) {
-        // Only consider pending or approved bookings
         const active = data.bookings.filter(b => b.status === 'approved' || b.status === 'pending');
         setExistingBookingsOnDate(active);
       }
     } catch (err) {
-      console.error('Error checking existing slots:', err);
+      console.error('Error checking slots:', err);
     } finally {
       setFetchingSlots(false);
     }
   }
 
-  // Real-time conflict check on client
-  const hasTimeConflict = () => {
-    if (!startTime || !endTime || existingBookingsOnDate.length === 0) return null;
-    const userStart = new Date(`${date}T${startTime}:00`);
-    const userEnd = new Date(`${date}T${endTime}:00`);
+  // Conflict calculation adhering to Section 8
+  const conflict = useMemo(() => {
+    if (!selectedDate || !selectedTimeRange || !selectedTimeRange[0] || !selectedTimeRange[1]) {
+      return null;
+    }
+    const chosenDateStr = selectedDate.format('YYYY-MM-DD');
+    const startStr = `${chosenDateStr}T${selectedTimeRange[0].format('HH:mm:00')}`;
+    const endStr = `${chosenDateStr}T${selectedTimeRange[1].format('HH:mm:00')}`;
 
-    return existingBookingsOnDate.find(b => {
+    const reqStart = new Date(startStr);
+    const reqEnd = new Date(endStr);
+
+    for (const b of existingBookingsOnDate) {
       const bStart = new Date(b.start_time);
       const bEnd = new Date(b.end_time);
-      return bStart < userEnd && bEnd > userStart;
-    });
-  };
+      // Overlap condition
+      if (reqStart < bEnd && reqEnd > bStart) {
+        return b;
+      }
+    }
+    return null;
+  }, [selectedDate, selectedTimeRange, existingBookingsOnDate]);
 
-  const conflictingSlot = hasTimeConflict();
+  async function handleFinish(values) {
+    if (conflict) {
+      setError('Cannot submit booking due to schedule overlap with an existing slot.');
+      return;
+    }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
     setLoading(true);
+    setError('');
 
     try {
-      const startDateTime = `${date}T${startTime}:00`;
-      const endDateTime = `${date}T${endTime}:00`;
+      const chosenDateStr = values.date.format('YYYY-MM-DD');
+      const startTimeStr = `${chosenDateStr}T${values.timeRange[0].format('HH:mm:00')}`;
+      const endTimeStr = `${chosenDateStr}T${values.timeRange[1].format('HH:mm:00')}`;
 
       const payload = {
-        location_id: selectedLocationId,
-        start_time: startDateTime,
-        end_time: endDateTime,
-        purpose,
-        course_id: courseId || null,
+        location_id: values.location_id,
+        start_time: startTimeStr,
+        end_time: endTimeStr,
+        purpose: values.purpose,
+        course_id: values.course_id || null,
         is_recurring: isRecurring,
-        weeks: isRecurring ? parseInt(weeks, 10) : 1
+        weeks: isRecurring ? (values.weeks || 14) : 1,
       };
 
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit room reservation.');
-      }
+      if (!res.ok) throw new Error(data.error || 'Failed to reserve facility');
 
-      setSuccessMsg(data.message || 'Booking successfully processed!');
+      message.success(data.message || 'Facility booked successfully!');
       if (onBookingCreated) onBookingCreated();
-      setTimeout(() => {
-        onClose();
-      }, 1600);
+      onClose();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -151,319 +167,151 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, onBook
     }
   }
 
-  if (!isOpen) return null;
-
-  const selectedLoc = locations.find(l => String(l.location_id) === String(selectedLocationId));
-  const isSelectedUnderMaintenance = selectedLoc?.status === 'maintenance';
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
-        {/* Modal Header */}
-        <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 sm:p-6 text-white relative">
-          <button
-            onClick={onClose}
-            className="absolute top-3 sm:top-5 right-3 sm:right-5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-white/20">
-              Facility Reservation
-            </span>
-          </div>
-          <h2 className="text-lg sm:text-xl font-black">
-            {isStaff ? 'Schedule Facility / Classroom' : 'Request Room Reservation'}
-          </h2>
-          <p className="text-[11px] sm:text-xs text-blue-200 mt-0.5 sm:mt-1">
-            FSKTM Operating Hours: 08:00 AM - 08:00 PM
-          </p>
+    <Modal
+      open={isOpen}
+      onCancel={onClose}
+      footer={null}
+      destroyOnClose
+      centered
+      width={560}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CalendarOutlined style={{ color: '#1E3A8A' }} />
+          <span>{isLecturer || isStaff ? 'Facility Reservation' : 'Request Room Booking'}</span>
         </div>
+      }
+    >
+      <div style={{ marginTop: 12 }}>
+        {error && (
+          <Alert
+            type="error"
+            message={error}
+            showIcon
+            closable
+            onClose={() => setError('')}
+            style={{ marginBottom: 16 }}
+          />
+        )}
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 max-h-[85vh] sm:max-h-[80vh] overflow-y-auto">
-          {error && (
-            <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-start gap-2.5">
-              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {successMsg && (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-start gap-2.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-
-          {/* Core policy explanation badge for Student/Lecturer */}
-          {!isStaff && (
-            <div className="p-3 bg-blue-50/80 border border-blue-200 text-blue-900 rounded-xl text-xs flex items-start gap-2.5">
-              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+        {/* Real-time double-booking warning banner (Section 8 Rule) */}
+        {conflict && (
+          <Alert
+            type="error"
+            showIcon
+            icon={<AlertOutlined />}
+            message="Double-Booking Conflict Detected"
+            description={
               <div>
-                <strong className="font-bold">Admin Approval Required: </strong>
-                Your reservation request will be submitted as <em>Pending Approval</em>. Once approved by faculty administration, it will be officially confirmed and visible to everyone.
+                This slot overlaps with an existing {conflict.status} reservation:{' '}
+                <strong>{conflict.purpose || conflict.course_id || 'Reserved Class'}</strong> (
+                {dayjs(conflict.start_time).format('HH:mm')} &rarr; {dayjs(conflict.end_time).format('HH:mm')}).
+                Please adjust your chosen time window.
               </div>
-            </div>
+            }
+            style={{ marginBottom: 16 }}
+          />
+        )}
+
+        <Form form={form} layout="vertical" onFinish={handleFinish} requiredMark="optional">
+          <Form.Item
+            name="location_id"
+            label="Lab / Room Facility"
+            rules={[{ required: true, message: 'Please select a lab or room' }]}
+            extra="Rooms under active maintenance are automatically hidden."
+          >
+            <Select
+              placeholder="Select available classroom or lab"
+              onChange={(val) => setSelectedLocationId(val)}
+              showSearch
+              filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              options={selectableRooms.map(loc => ({
+                value: loc.location_id,
+                label: `${loc.name} (${loc.code}) — Floor ${loc.floor} • Capacity: ${loc.capacity}`,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="date"
+            label="Reservation Date"
+            rules={[{ required: true, message: 'Please select reservation date' }]}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format={DATE_FORMAT}
+              disabledDate={(current) => current && current < dayjs().startOf('day')}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="timeRange"
+            label="Reservation Time Window"
+            rules={[{ required: true, message: 'Please select start and end time' }]}
+          >
+            <TimePicker.RangePicker
+              style={{ width: '100%' }}
+              format={TIME_FORMAT}
+              minuteStep={15}
+            />
+          </Form.Item>
+
+          {isLecturer && (
+            <Form.Item name="course_id" label="Course Code (Optional)">
+              <Input placeholder="e.g. WIX1002 or WIE2001" style={{ textTransform: 'uppercase' }} />
+            </Form.Item>
           )}
 
-          {/* Location Picker */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-              Select Facility / Room
-            </label>
-            <select
-              required
-              value={selectedLocationId}
-              onChange={(e) => setSelectedLocationId(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+          <Form.Item
+            name="purpose"
+            label="Purpose of Booking"
+            rules={[{ required: true, message: 'Please explain the purpose of your reservation' }]}
+          >
+            <Input.TextArea
+              rows={3}
+              placeholder="e.g. Software Engineering practical session, student team project discussion"
+            />
+          </Form.Item>
+
+          {/* Lecturer recurring options */}
+          {(isLecturer || isStaff) && (
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 8,
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                marginBottom: 16,
+              }}
             >
-              <option value="">-- Choose a facility --</option>
-              {locations.map(loc => (
-                <option 
-                  key={loc.location_id} 
-                  value={loc.location_id}
-                  disabled={loc.status === 'maintenance'}
-                >
-                  {loc.code} - {loc.name} ({loc.floor} Flr, Cap: {loc.capacity})
-                  {loc.status === 'maintenance' ? ' [UNDER MAINTENANCE - UNAVAILABLE]' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stationed In-Room Equipment (Fixed / Non-Loanable Devices) */}
-          {selectedLocationId && (
-            <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Laptop className="w-4 h-4 text-blue-600" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Stationed Room Equipment ({roomDevices.length})
-                  </span>
-                </div>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700">
-                  Fixed in Room
-                </span>
-              </div>
-
-              {roomDevices.length > 0 ? (
-                <>
-                  <p className="text-[11px] text-slate-500">
-                    These non-loanable devices are physically installed in this room and ready for use when you book this facility:
-                  </p>
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                    {roomDevices.map(dev => (
-                      <div 
-                        key={dev.device_id}
-                        className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-start justify-between gap-3 text-xs shadow-xs"
-                      >
-                        <div className="min-w-0">
-                          <div className="font-semibold text-slate-800 truncate">{dev.name}</div>
-                          <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                            SN: {dev.serial_number} {dev.specs ? `• ${dev.specs}` : ''}
-                          </div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
-                          dev.status === 'available' || dev.status === 'operational'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : dev.status === 'maintenance'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {dev.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="text-[11px] text-slate-400 italic py-0.5">
-                  No specialized fixed hardware stationed in this room.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Alert if selected location is under maintenance */}
-          {isSelectedUnderMaintenance && (
-            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                <strong>Under Maintenance:</strong> This facility is temporarily offline and closed for reservations.
-              </span>
-            </div>
-          )}
-
-          {/* Date & Times */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Date
-              </label>
-              <input
-                type="date"
-                required
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Start Time
-              </label>
-              <input
-                type="time"
-                required
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                End Time
-              </label>
-              <input
-                type="time"
-                required
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-          </div>
-
-          {/* Existing reserved time slots banner for chosen room & date */}
-          {selectedLocationId && date && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                <span>Reserved Slots on {date}</span>
-                {fetchingSlots && <span className="text-blue-600 lowercase font-normal">checking...</span>}
-              </div>
-
-              {existingBookingsOnDate.length === 0 ? (
-                <div className="text-slate-500 text-[11px] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>No reservations for this facility on this day. All hours open!</span>
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {existingBookingsOnDate.map(b => (
-                    <span 
-                      key={b.booking_id}
-                      className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold border ${
-                        b.status === 'approved' 
-                          ? 'bg-blue-100 text-blue-800 border-blue-200' 
-                          : 'bg-amber-100 text-amber-800 border-amber-200'
-                      }`}
-                    >
-                      {new Date(b.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      {' - '}
-                      {new Date(b.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      {' '}({b.status === 'approved' ? 'Booked' : 'Pending'})
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {conflictingSlot && (
-                <div className="pt-1.5 text-red-600 font-semibold flex items-center gap-1 text-[11px]">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    Conflict Warning: The chosen time overlaps with an existing {conflictingSlot.status === 'approved' ? 'booking' : 'pending request'} ({new Date(conflictingSlot.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(conflictingSlot.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}).
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Purpose & Course Code */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-              Booking Purpose / Event Title
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. WIF3001 Artificial Intelligence Practical or Peer Study"
-              value={purpose}
-              onChange={(e) => setPurpose(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-              Course Code (Optional)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. WIF2002 / WIX1002"
-              value={courseId}
-              onChange={(e) => setCourseId(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-
-          {/* Recurring Weekly Bookings (Lecturers / Managers) */}
-          {(isLecturer || isManager) && (
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isRecurring}
-                  onChange={(e) => setIsRecurring(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                />
-                <span className="text-xs font-bold text-slate-800">
-                  Recurring Weekly Booking (Full Semester)
-                </span>
-              </label>
-
-              {isRecurring && (
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                  <span className="text-slate-600">Repeat weekly for:</span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="1"
-                      max="18"
-                      value={weeks}
-                      onChange={(e) => setWeeks(e.target.value)}
-                      className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-center font-bold"
-                    />
-                    <span className="text-slate-500">weeks</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <Text strong style={{ fontSize: 13 }}>Repeat for Entire Semester (14 Weeks)</Text>
+                  <div style={{ fontSize: 11, color: '#64748B' }}>
+                    Auto-schedules recurring bookings on this day each week
                   </div>
                 </div>
-              )}
+                <Switch checked={isRecurring} onChange={setIsRecurring} />
+              </div>
             </div>
           )}
 
-          <div className="flex gap-3 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || isSelectedUnderMaintenance || Boolean(conflictingSlot)}
-              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition disabled:opacity-50"
-            >
-              {loading 
-                ? 'Processing...' 
-                : isStaff 
-                  ? 'Confirm Reservation' 
-                  : 'Submit Booking Request'}
-            </button>
-          </div>
-        </form>
+          <Form.Item style={{ marginBottom: 0, marginTop: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <Button onClick={onClose}>Cancel</Button>
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={loading}
+                disabled={Boolean(conflict)}
+                style={{ fontWeight: 600 }}
+              >
+                {isLecturer || isStaff ? 'Confirm Reservation' : 'Submit Booking Request'}
+              </Button>
+            </div>
+          </Form.Item>
+        </Form>
       </div>
-    </div>
+    </Modal>
   );
 }

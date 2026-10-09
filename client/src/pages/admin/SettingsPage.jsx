@@ -1,168 +1,148 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, CheckCircle2, ShieldCheck, Clock, Layers } from 'lucide-react';
+import { Card, Form, TimePicker, InputNumber, Switch, Button, Alert, Typography, message, Space, Row, Col } from 'antd';
+import { SettingOutlined, SaveOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import PageHeader from '../../components/PageHeader';
+import { TIME_FORMAT } from '../../utils/date';
+
+const { Text, Paragraph } = Typography;
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState({
-    device_booking_requires_approval: 'true',
-    operating_hours_start: '08:00',
-    operating_hours_end: '20:00',
-    max_booking_duration_hours: '4'
-  });
+  const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [savedMsg, setSavedMsg] = useState('');
 
   useEffect(() => {
     fetchSettings();
   }, []);
 
   async function fetchSettings() {
+    setLoading(true);
     try {
       const res = await fetch('/api/settings');
       const data = await res.json();
-      if (data.success) {
-        setSettings(prev => ({ ...prev, ...data.settings }));
+      if (data.success && data.settings) {
+        const s = data.settings;
+        form.setFieldsValue({
+          device_booking_requires_approval: s.device_booking_requires_approval === 'true',
+          operating_hours_start: s.operating_hours_start ? dayjs(`2000-01-01T${s.operating_hours_start}`) : dayjs('2000-01-01T08:00'),
+          operating_hours_end: s.operating_hours_end ? dayjs(`2000-01-01T${s.operating_hours_end}`) : dayjs('2000-01-01T20:00'),
+          max_booking_duration_hours: parseInt(s.max_booking_duration_hours || '4', 10),
+        });
       }
     } catch (err) {
       console.error(err);
+      message.error('Failed to load system settings');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleSave(e) {
-    e.preventDefault();
+  async function handleFinish(values) {
     setSaving(true);
-    setSavedMsg('');
     try {
+      const payload = {
+        settings: {
+          device_booking_requires_approval: String(values.device_booking_requires_approval),
+          operating_hours_start: values.operating_hours_start.format('HH:mm'),
+          operating_hours_end: values.operating_hours_end.format('HH:mm'),
+          max_booking_duration_hours: String(values.max_booking_duration_hours),
+        },
+      };
+
       const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ settings })
+        body: JSON.stringify(payload),
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setSavedMsg('System configuration settings saved successfully!');
-      setTimeout(() => setSavedMsg(''), 3000);
+      if (!res.ok) throw new Error(data.error || 'Failed to save settings');
+
+      message.success('System configuration updated successfully');
     } catch (err) {
-      alert(err.message);
+      message.error(err.message);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-2 rounded-xl bg-slate-100 text-slate-700">
-              <Settings className="w-5 h-5" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 800 }}>
+      <PageHeader
+        title="Faculty System Configuration"
+        subtitle="Manage facility operational hours, maximum reservation limits, and equipment checkout approval policies."
+      />
+
+      <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleFinish}
+          requiredMark="optional"
+        >
+          <div style={{ marginBottom: 24, padding: '16px', background: '#F8FAFC', borderRadius: 12, border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ minWidth: 200, flex: 1 }}>
+                <Text strong style={{ fontSize: 14 }}>
+                  Equipment Loans Require Technician Approval
+                </Text>
+                <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                  When enabled, all hardware loan requests must be approved by counter technicians before handover.
+                </div>
+              </div>
+              <Form.Item name="device_booking_requires_approval" valuePropName="checked" noStyle>
+                <Switch />
+              </Form.Item>
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              System Configuration Settings
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500">
-            Control facility operating hours, single booking duration limits, and device loan approval workflow policies.
-          </p>
-        </div>
-      </div>
-
-      {savedMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-bold flex items-center gap-2 animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>{savedMsg}</span>
-        </div>
-      )}
-
-      <form onSubmit={handleSave} className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-xs space-y-6 text-xs">
-        {/* Device Approval Policy */}
-        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-blue-600" />
-              <span>Device Booking Approval Policy</span>
-            </div>
-            <p className="text-slate-500 leading-relaxed text-xs">
-              When enabled, student and lecturer device requests will require explicit technician review before check-out is authorized.
-            </p>
           </div>
 
-          <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-            <input
-              type="checkbox"
-              checked={settings.device_booking_requires_approval === 'true'}
-              onChange={(e) => setSettings({
-                ...settings,
-                device_booking_requires_approval: e.target.checked ? 'true' : 'false'
-              })}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-          </label>
-        </div>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="operating_hours_start"
+                label="Daily Facility Opening Time"
+                rules={[{ required: true }]}
+              >
+                <TimePicker format={TIME_FORMAT} style={{ width: '100%' }} minuteStep={30} />
+              </Form.Item>
+            </Col>
 
-        {/* Operating Hours */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              Facility Opening Time
-            </label>
-            <input
-              type="time"
-              value={settings.operating_hours_start}
-              onChange={(e) => setSettings({ ...settings, operating_hours_start: e.target.value })}
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 font-semibold"
-            />
-          </div>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="operating_hours_end"
+                label="Daily Facility Closing Time"
+                rules={[{ required: true }]}
+              >
+                <TimePicker format={TIME_FORMAT} style={{ width: '100%' }} minuteStep={30} />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          <div>
-            <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              Facility Closing Time
-            </label>
-            <input
-              type="time"
-              value={settings.operating_hours_end}
-              onChange={(e) => setSettings({ ...settings, operating_hours_end: e.target.value })}
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 font-semibold"
-            />
-          </div>
-        </div>
-
-        {/* Duration Limits */}
-        <div>
-          <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-            Maximum Single Booking Duration (Hours)
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="12"
-            value={settings.max_booking_duration_hours}
-            onChange={(e) => setSettings({ ...settings, max_booking_duration_hours: e.target.value })}
-            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 font-semibold"
-          />
-          <p className="text-slate-400 text-[11px] mt-1">
-            Enforces booking rule to prevent individual reservations from monopolizing faculty resources.
-          </p>
-        </div>
-
-        <div className="pt-4 border-t border-slate-100 flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 flex items-center gap-2 transition disabled:opacity-50"
+          <Form.Item
+            name="max_booking_duration_hours"
+            label="Maximum Single Slot Reservation Duration (Hours)"
+            rules={[{ required: true }]}
+            extra="Limits the continuous duration a student or lecturer may reserve a laboratory per session."
           >
-            <Save className="w-4 h-4" />
-            <span>{saving ? 'Saving...' : 'Save Configuration Changes'}</span>
-          </button>
-        </div>
-      </form>
+            <InputNumber min={1} max={12} style={{ width: '100%' }} suffix="Hours" />
+          </Form.Item>
+
+          <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              size="large"
+              icon={<SaveOutlined />}
+              loading={saving}
+              style={{ fontWeight: 600 }}
+            >
+              Save System Configuration
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
     </div>
   );
 }

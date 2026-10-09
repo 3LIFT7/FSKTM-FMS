@@ -1,5 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, Shield, RefreshCw, X, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, Table, Button, Input, Select, Modal, Form, Space, Typography, Tag, Row, Col, Empty, message } from 'antd';
+import {
+  TeamOutlined,
+  UserAddOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
+import StatusTag from '../../components/StatusTag';
+import PageHeader from '../../components/PageHeader';
+
+const { Text } = Typography;
 
 export default function UsersManage() {
   const [users, setUsers] = useState([]);
@@ -7,14 +17,8 @@ export default function UsersManage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-
-  // Form state
-  const [newName, setNewName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState('student');
-  const [newId, setNewId] = useState('');
-  const [newDept, setNewDept] = useState('Software Engineering');
+  const [updatingId, setUpdatingId] = useState(null);
+  const [addForm] = Form.useForm();
 
   useEffect(() => {
     fetchUsers();
@@ -28,269 +32,245 @@ export default function UsersManage() {
       if (data.success) setUsers(data.users);
     } catch (err) {
       console.error(err);
+      message.error('Failed to load user accounts');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleRoleChange(userId, role) {
+  async function handleRoleChange(userId, newRole) {
+    setUpdatingId(userId);
     try {
       const res = await fetch(`/api/admin/users/${userId}/role`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ role })
+        body: JSON.stringify({ role: newRole }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      message.success('User role updated successfully');
       fetchUsers();
     } catch (err) {
-      alert(err.message);
+      message.error(err.message);
+    } finally {
+      setUpdatingId(null);
     }
   }
 
-  async function handleCreateUser(e) {
-    e.preventDefault();
+  async function handleCreateUser(values) {
     try {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          name: newName,
-          email: newEmail,
-          password: newPassword,
-          role: newRole,
-          matric_or_staff_id: newId,
-          department: newDept
-        })
+          name: values.name.trim(),
+          email: values.email.trim().toLowerCase(),
+          password: values.password,
+          role: values.role,
+          matric_or_staff_id: values.id ? values.id.trim().toUpperCase() : null,
+          department: values.department || 'Software Engineering',
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      message.success('New user account provisioned');
       setIsAddUserOpen(false);
-      setNewName('');
-      setNewEmail('');
-      setNewPassword('');
-      setNewId('');
+      addForm.resetFields();
       fetchUsers();
     } catch (err) {
-      alert(err.message);
+      message.error(err.message);
     }
   }
 
-  const filteredUsers = users.filter(u => {
-    if (roleFilter !== 'All' && u.role !== roleFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        u.name.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        (u.matric_or_staff_id && u.matric_or_staff_id.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      if (roleFilter !== 'All' && u.role !== roleFilter) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.matric_or_staff_id && u.matric_or_staff_id.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [users, roleFilter, search]);
+
+  const columns = [
+    {
+      title: 'Full Name',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name) => <Text strong>{name}</Text>,
+    },
+    {
+      title: 'Email Address',
+      dataIndex: 'email',
+      key: 'email',
+    },
+    {
+      title: 'Matric / Staff ID',
+      dataIndex: 'matric_or_staff_id',
+      key: 'matric_or_staff_id',
+      render: (id) => (id ? <Text code>{id}</Text> : '-'),
+    },
+    {
+      title: 'Department / Faculty',
+      dataIndex: 'department',
+      key: 'department',
+      render: (dept) => dept || 'FSKTM',
+    },
+    {
+      title: 'Role Authorization',
+      key: 'role',
+      width: 170,
+      render: (_, record) => (
+        <Select
+          size="small"
+          value={record.role}
+          loading={updatingId === record.user_id}
+          onChange={(newRole) => handleRoleChange(record.user_id, newRole)}
+          style={{ width: '100%' }}
+          options={[
+            { value: 'student', label: 'Student' },
+            { value: 'lecturer', label: 'Lecturer' },
+            { value: 'technician', label: 'Technician' },
+            { value: 'manager', label: 'Manager / Admin' },
+          ]}
+        />
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
-              <Users className="w-5 h-5" />
-            </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              User Accounts & Role Permissions
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500">
-            RBAC administration for Students, Lecturers, Technicians, and Lab Managers.
-          </p>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="User Accounts & Role Permissions"
+        subtitle="Manage faculty user directory, authorize role transitions, and provision technical staff accounts."
+        extra={
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={fetchUsers}>
+              Refresh
+            </Button>
+            <Button
+              type="primary"
+              icon={<UserAddOutlined />}
+              onClick={() => setIsAddUserOpen(true)}
+              style={{ fontWeight: 600 }}
+            >
+              Provision New User
+            </Button>
+          </Space>
+        }
+      />
 
-        <button
-          onClick={() => setIsAddUserOpen(true)}
-          className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-purple-600/20 flex items-center gap-2 transition"
+      <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} md={12}>
+              <Input
+                prefix={<SearchOutlined style={{ color: '#94A3B8' }} />}
+                placeholder="Search users by name, email, or matric/staff ID..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                allowClear
+              />
+            </Col>
+            <Col xs={12} md={6}>
+              <Select
+                style={{ width: '100%' }}
+                value={roleFilter}
+                onChange={setRoleFilter}
+                options={[
+                  { value: 'All', label: 'All Roles' },
+                  { value: 'student', label: 'Students Only' },
+                  { value: 'lecturer', label: 'Lecturers Only' },
+                  { value: 'technician', label: 'Technicians Only' },
+                  { value: 'manager', label: 'Lab Managers Only' },
+                ]}
+              />
+            </Col>
+            <Col xs={12} md={6} style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                Showing <strong>{filteredUsers.length}</strong> registered users
+              </Text>
+            </Col>
+          </Row>
+
+          <Table
+            dataSource={filteredUsers}
+            columns={columns}
+            rowKey="user_id"
+            loading={loading}
+            pagination={{ pageSize: 8 }}
+            locale={{ emptyText: <Empty description="No users found" /> }}
+            size="small"
+            scroll={{ x: 'max-content' }}
+          />
+        </div>
+      </Card>
+
+      {/* Provision User Modal */}
+      <Modal
+        open={isAddUserOpen}
+        onCancel={() => setIsAddUserOpen(false)}
+        footer={null}
+        destroyOnClose
+        centered
+        title="Provision Faculty User Account"
+      >
+        <Form
+          form={addForm}
+          layout="vertical"
+          onFinish={handleCreateUser}
+          initialValues={{ role: 'student', department: 'Software Engineering' }}
+          style={{ marginTop: 16 }}
         >
-          <Plus className="w-4 h-4" />
-          <span>New User Account</span>
-        </button>
-      </div>
+          <Form.Item name="name" label="Full Name" rules={[{ required: true }]}>
+            <Input placeholder="e.g. Dr. Ahmad Zaki" />
+          </Form.Item>
 
-      {/* Filter & Search */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search user by name, email, or matric/staff ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-600"
-            />
+          <Form.Item name="email" label="University Email" rules={[{ required: true, type: 'email' }]}>
+            <Input placeholder="user@uthm.edu.my" />
+          </Form.Item>
+
+          <Form.Item name="password" label="Temporary Password" rules={[{ required: true, min: 6 }]}>
+            <Input.Password placeholder="Min. 6 characters" />
+          </Form.Item>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Form.Item name="role" label="Account Role" rules={[{ required: true }]}>
+              <Select>
+                <Select.Option value="student">Student</Select.Option>
+                <Select.Option value="lecturer">Lecturer</Select.Option>
+                <Select.Option value="technician">Technician</Select.Option>
+                <Select.Option value="manager">Manager / Admin</Select.Option>
+              </Select>
+            </Form.Item>
+
+            <Form.Item name="id" label="Matric / Staff ID">
+              <Input placeholder="e.g. L-1092 or AI230182" style={{ textTransform: 'uppercase' }} />
+            </Form.Item>
           </div>
 
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-purple-600"
-          >
-            <option value="All">All Roles</option>
-            <option value="student">Student</option>
-            <option value="lecturer">Lecturer</option>
-            <option value="technician">Technician</option>
-            <option value="manager">Manager / Admin</option>
-          </select>
-        </div>
+          <Form.Item name="department" label="Department / Division">
+            <Input placeholder="Department of Software Engineering" />
+          </Form.Item>
 
-        <button onClick={fetchUsers} className="p-2 text-slate-500 hover:text-purple-600 transition">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
-
-      {/* Users Table */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-100">
-              <tr>
-                <th className="p-4">Name</th>
-                <th className="p-4">Email</th>
-                <th className="p-4">ID (Matric/Staff)</th>
-                <th className="p-4">Department</th>
-                <th className="p-4">Assigned Role (RBAC)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredUsers.map(u => (
-                <tr key={u.user_id} className="hover:bg-slate-50/80 transition">
-                  <td className="p-4 font-bold text-slate-900">{u.name}</td>
-                  <td className="p-4 text-slate-600 font-mono text-[11px]">{u.email}</td>
-                  <td className="p-4 font-mono text-slate-700">{u.matric_or_staff_id || '-'}</td>
-                  <td className="p-4 text-slate-600">{u.department || 'FSKTM'}</td>
-                  <td className="p-4">
-                    <select
-                      value={u.role}
-                      onChange={(e) => handleRoleChange(u.user_id, e.target.value)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold border focus:outline-none transition ${
-                        u.role === 'manager' ? 'bg-purple-50 text-purple-800 border-purple-200' :
-                        u.role === 'technician' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-                        u.role === 'lecturer' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                        'bg-blue-50 text-blue-800 border-blue-200'
-                      }`}
-                    >
-                      <option value="student">Student</option>
-                      <option value="lecturer">Lecturer</option>
-                      <option value="technician">Technician</option>
-                      <option value="manager">Manager</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add User Modal */}
-      {isAddUserOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
-            <div className="bg-gradient-to-r from-purple-700 to-indigo-800 p-6 text-white relative">
-              <button
-                onClick={() => setIsAddUserOpen(false)}
-                className="absolute top-5 right-5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <h3 className="text-xl font-black">Register User Account</h3>
-              <p className="text-xs text-purple-200 mt-0.5">Seed new faculty member or student</p>
+          <Form.Item style={{ marginBottom: 0, marginTop: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <Button onClick={() => setIsAddUserOpen(false)}>Cancel</Button>
+              <Button type="primary" htmlType="submit">
+                Provision Account
+              </Button>
             </div>
-
-            <form onSubmit={handleCreateUser} className="p-6 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Nurul Farhana binti Roslan"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1">Faculty Email *</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="name@fsktm.um.edu.my"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1">Temporary Password *</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1">Role *</label>
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-                  >
-                    <option value="student">Student</option>
-                    <option value="lecturer">Lecturer</option>
-                    <option value="technician">Technician</option>
-                    <option value="manager">Manager</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1">Matric / Staff ID</label>
-                  <input
-                    type="text"
-                    placeholder="WIF210045"
-                    value={newId}
-                    onChange={(e) => setNewId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsAddUserOpen(false)}
-                  className="flex-1 py-2 border border-slate-200 text-slate-600 rounded-xl font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 bg-purple-600 text-white rounded-xl font-bold shadow-xs"
-                >
-                  Create User
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

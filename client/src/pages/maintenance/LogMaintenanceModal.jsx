@@ -1,51 +1,57 @@
 import React, { useState, useEffect } from 'react';
+import { Modal, Form, Select, Input, InputNumber, DatePicker, Button, Alert, message, Typography } from 'antd';
+import { ToolOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
-import { X, Wrench, DollarSign, Calendar, AlertTriangle, CheckCircle2, Link as LinkIcon } from 'lucide-react';
+import { DATE_FORMAT } from '../../utils/date';
+
+const { Text } = Typography;
 
 export default function LogMaintenanceModal({ isOpen, onClose, prefillTicket, onLogged }) {
   const { user } = useAuth();
-
+  const [form] = Form.useForm();
   const [locations, setLocations] = useState([]);
   const [devices, setDevices] = useState([]);
   const [reports, setReports] = useState([]);
-
-  const [locationId, setLocationId] = useState('');
-  const [deviceId, setDeviceId] = useState('');
-  const [description, setDescription] = useState('');
-  const [cost, setCost] = useState('0.00');
-  const [datePerformed, setDatePerformed] = useState(new Date().toISOString().split('T')[0]);
-  const [linkedReportId, setLinkedReportId] = useState('');
-  const [scheduledReminderDate, setScheduledReminderDate] = useState('');
-  const [setStatus, setSetStatus] = useState(''); // 'available', 'maintenance'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       fetchDropdowns();
-      if (prefillTicket) {
-        if (prefillTicket.location_id) setLocationId(prefillTicket.location_id);
-        if (prefillTicket.device_id) setDeviceId(prefillTicket.device_id);
-        setLinkedReportId(prefillTicket.report_id);
-        setDescription(`Repair work performed for Ticket #${prefillTicket.report_id}: ${prefillTicket.description}`);
-        setSetStatus('available'); // default resolve
-      }
+      form.resetFields();
       setError('');
-      setSuccess('');
+
+      if (prefillTicket) {
+        form.setFieldsValue({
+          location_id: prefillTicket.location_id ? String(prefillTicket.location_id) : undefined,
+          device_id: prefillTicket.device_id ? String(prefillTicket.device_id) : undefined,
+          linked_report_id: String(prefillTicket.report_id),
+          description: `Repair service for Ticket #${prefillTicket.report_id}: ${prefillTicket.description}`,
+          date_performed: dayjs(),
+          cost: 0,
+          set_status: 'available',
+        });
+      } else {
+        form.setFieldsValue({
+          date_performed: dayjs(),
+          cost: 0,
+        });
+      }
     }
-  }, [isOpen, prefillTicket]);
+  }, [isOpen, prefillTicket, form]);
 
   async function fetchDropdowns() {
     try {
       const [locRes, devRes, repRes] = await Promise.all([
         fetch('/api/locations'),
         fetch('/api/devices'),
-        fetch('/api/issues')
+        fetch('/api/issues'),
       ]);
       const locData = await locRes.json();
       const devData = await devRes.json();
       const repData = await repRes.json();
+
       if (locData.success) setLocations(locData.locations);
       if (devData.success) setDevices(devData.devices);
       if (repData.success) setReports(repData.reports);
@@ -54,256 +60,161 @@ export default function LogMaintenanceModal({ isOpen, onClose, prefillTicket, on
     }
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  const handleFinish = async (values) => {
     setError('');
-    setSuccess('');
     setLoading(true);
 
     try {
       const payload = {
-        location_id: locationId || null,
-        device_id: deviceId || null,
-        description,
-        cost: parseFloat(cost) || 0.0,
-        date_performed: datePerformed,
-        linked_report_id: linkedReportId || null,
-        scheduled_reminder_date: scheduledReminderDate || null,
-        set_status: setStatus || null
+        location_id: values.location_id ? parseInt(values.location_id, 10) : null,
+        device_id: values.device_id ? parseInt(values.device_id, 10) : null,
+        description: values.description,
+        cost: values.cost || 0.0,
+        date_performed: values.date_performed.format('YYYY-MM-DD'),
+        linked_report_id: values.linked_report_id ? parseInt(values.linked_report_id, 10) : null,
+        scheduled_reminder_date: values.scheduled_reminder_date ? values.scheduled_reminder_date.format('YYYY-MM-DD') : null,
+        set_status: values.set_status || null,
       };
 
       const res = await fetch('/api/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to record maintenance');
 
-      setSuccess('Maintenance job recorded successfully!');
+      message.success('Maintenance job logged successfully!');
       if (onLogged) onLogged();
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      onClose();
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }
-
-  if (!isOpen) return null;
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
-        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-6 text-white relative">
-          <button
-            onClick={onClose}
-            className="absolute top-5 right-5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-white/20">
-              Operations & Servicing
-            </span>
-          </div>
-          <h2 className="text-xl font-black">Log Maintenance Record</h2>
-          <p className="text-xs text-indigo-200 mt-1">
-            Record maintenance work, parts cost, service history, and link with breakdown tickets.
-          </p>
+    <Modal
+      open={isOpen}
+      onCancel={onClose}
+      footer={null}
+      destroyOnClose
+      centered
+      width={560}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ToolOutlined style={{ color: '#1E3A8A' }} />
+          <span>Log Facility / Hardware Servicing Job</span>
         </div>
+      }
+    >
+      <div style={{ marginTop: 12 }}>
+        {error && (
+          <Alert
+            type="error"
+            message={error}
+            showIcon
+            closable
+            onClose={() => setError('')}
+            style={{ marginBottom: 16 }}
+          />
+        )}
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {success && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>{success}</span>
-            </div>
-          )}
-
-          {/* Location & Device */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Target Facility
-              </label>
-              <select
-                value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600"
-              >
-                <option value="">-- None / Device Specific --</option>
-                {locations.map(l => (
-                  <option key={l.location_id} value={l.location_id}>
-                    {l.code} - {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Target Device
-              </label>
-              <select
-                value={deviceId}
-                onChange={(e) => setDeviceId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600"
-              >
-                <option value="">-- None / Room Facility --</option>
-                {devices.map(d => (
-                  <option key={d.device_id} value={d.device_id}>
-                    {d.name} ({d.serial_number})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Link to Issue Ticket */}
-          <div>
-            <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1">
-              <LinkIcon className="w-3 h-3 text-blue-600" />
-              Link to Breakdown Ticket (Optional)
-            </label>
-            <select
-              value={linkedReportId}
-              onChange={(e) => setLinkedReportId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600"
-            >
-              <option value="">-- Unlinked Maintenance Job --</option>
-              {reports.map(r => (
-                <option key={r.report_id} value={r.report_id}>
-                  Ticket #{r.report_id} - {r.description.slice(0, 45)}... [{r.status}]
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-              Work Performed / Diagnostic Summary *
-            </label>
-            <textarea
-              required
-              rows="3"
-              placeholder="e.g. Replaced optical lenses, cleaned thermal paste, patched switch firmware, fixed projector cabling..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600"
+        <Form form={form} layout="vertical" onFinish={handleFinish} requiredMark="optional">
+          <Form.Item name="location_id" label="Facility Location">
+            <Select
+              placeholder="Select lab or classroom"
+              allowClear
+              showSearch
+              filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              options={locations.map(loc => ({
+                value: String(loc.location_id),
+                label: `${loc.name} (${loc.code}) — Floor ${loc.floor}`,
+              }))}
             />
-          </div>
+          </Form.Item>
 
-          {/* Cost & Date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Cost (MYR)
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-            <div>
-              <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Date Completed
-              </label>
-              <input
-                type="date"
-                required
-                value={datePerformed}
-                onChange={(e) => setDatePerformed(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600"
-              />
-            </div>
-          </div>
-
-          {/* Scheduled Maintenance Reminder */}
-          <div>
-            <label className="block font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-              Next Scheduled Maintenance / Calibration Date
-            </label>
-            <input
-              type="date"
-              value={scheduledReminderDate}
-              onChange={(e) => setScheduledReminderDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600"
+          <Form.Item name="device_id" label="Equipment / Device Asset">
+            <Select
+              placeholder="Select hardware item (if applicable)"
+              allowClear
+              showSearch
+              filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              options={devices.map(dev => ({
+                value: String(dev.device_id),
+                label: `${dev.name} (SN: ${dev.serial_number})`,
+              }))}
             />
+          </Form.Item>
+
+          <Form.Item name="linked_report_id" label="Linked Breakdown Ticket (Optional)">
+            <Select
+              placeholder="Link to an open issue report"
+              allowClear
+              options={reports.map(r => ({
+                value: String(r.report_id),
+                label: `Ticket #${r.report_id} — ${r.description.slice(0, 50)}...`,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="description"
+            label="Service Work Details & Actions Taken"
+            rules={[{ required: true, message: 'Please describe the maintenance work performed' }]}
+          >
+            <Input.TextArea rows={3} placeholder="e.g. Replaced optical lamp, cleaned cooling exhaust, recalibrated projector lens." />
+          </Form.Item>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Form.Item
+              name="cost"
+              label="Cost Incurred (MYR)"
+              rules={[{ required: true, message: 'Cost is required' }]}
+            >
+              <InputNumber
+                style={{ width: '100%' }}
+                min={0}
+                precision={2}
+                prefix="MYR"
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="date_performed"
+              label="Date Performed"
+              rules={[{ required: true }]}
+            >
+              <DatePicker style={{ width: '100%' }} format={DATE_FORMAT} />
+            </Form.Item>
           </div>
 
-          {/* Facility Status Update Trigger */}
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-            <label className="block font-bold uppercase tracking-wider text-slate-600 text-[10px]">
-              Post-Maintenance Operational State
-            </label>
-            <div className="flex gap-2">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="setStatus"
-                  value=""
-                  checked={setStatus === ''}
-                  onChange={() => setSetStatus('')}
-                />
-                <span>Leave Unchanged</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="setStatus"
-                  value="available"
-                  checked={setStatus === 'available'}
-                  onChange={() => setSetStatus('available')}
-                />
-                <span className="text-emerald-700 font-bold">Mark Available</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="setStatus"
-                  value="maintenance"
-                  checked={setStatus === 'maintenance'}
-                  onChange={() => setSetStatus('maintenance')}
-                />
-                <span className="text-amber-700 font-bold">Flag Under Maintenance</span>
-              </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Form.Item name="scheduled_reminder_date" label="Next Calibration / Check-up Reminder">
+              <DatePicker style={{ width: '100%' }} format={DATE_FORMAT} />
+            </Form.Item>
+
+            <Form.Item name="set_status" label="Update Target Operational Status">
+              <Select placeholder="Keep current status" allowClear>
+                <Select.Option value="available">Set to Available / Resolved</Select.Option>
+                <Select.Option value="maintenance">Keep Under Maintenance</Select.Option>
+              </Select>
+            </Form.Item>
+          </div>
+
+          <Form.Item style={{ marginBottom: 0, marginTop: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <Button onClick={onClose}>Cancel</Button>
+              <Button type="primary" htmlType="submit" loading={loading} style={{ fontWeight: 600 }}>
+                Record Maintenance Log
+              </Button>
             </div>
-          </div>
-
-          <div className="flex gap-3 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
-            >
-              {loading ? 'Saving...' : 'Save Maintenance Log'}
-            </button>
-          </div>
-        </form>
+          </Form.Item>
+        </Form>
       </div>
-    </div>
+    </Modal>
   );
 }

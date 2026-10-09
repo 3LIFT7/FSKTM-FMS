@@ -1,26 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, Table, Button, Input, Select, Tag, Row, Col, Statistic, Space, Typography, Empty, Drawer, Descriptions, Timeline, message } from 'antd';
+import {
+  ToolOutlined,
+  PlusOutlined,
+  SearchOutlined,
+  DollarOutlined,
+  CalendarOutlined,
+  ReloadOutlined,
+  ClockCircleOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
 import LogMaintenanceModal from './LogMaintenanceModal';
-import { 
-  Wrench, 
-  Plus, 
-  Calendar, 
-  DollarSign, 
-  MapPin, 
-  Laptop, 
-  Link as LinkIcon, 
-  Bell, 
-  RefreshCw,
-  CheckCircle2,
-  Clock
-} from 'lucide-react';
+import StatusTag from '../../components/StatusTag';
+import PageHeader from '../../components/PageHeader';
+import { formatDate } from '../../utils/date';
+
+const { Text, Paragraph } = Typography;
 
 export default function MaintenanceList() {
   const { isStaff } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewFilter, setViewFilter] = useState('all'); // 'all' or 'reminders'
+  const [viewFilter, setViewFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [selectedLogForDetails, setSelectedLogForDetails] = useState(null);
 
   useEffect(() => {
     fetchLogs();
@@ -29,180 +34,291 @@ export default function MaintenanceList() {
   async function fetchLogs() {
     setLoading(true);
     try {
-      const url = viewFilter === 'reminders' 
-        ? '/api/maintenance?upcoming_reminders=true' 
+      const url = viewFilter === 'reminders'
+        ? '/api/maintenance?upcoming_reminders=true'
         : '/api/maintenance';
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) setLogs(data.logs);
     } catch (err) {
       console.error('Error fetching maintenance records:', err);
+      message.error('Failed to load maintenance records');
     } finally {
       setLoading(false);
     }
   }
 
-  const totalCost = logs.reduce((sum, l) => sum + (parseFloat(l.cost) || 0), 0);
+  const totalCost = useMemo(() => {
+    return logs.reduce((sum, l) => sum + (parseFloat(l.cost) || 0), 0);
+  }, [logs]);
+
+  const upcomingCount = useMemo(() => {
+    return logs.filter(l => l.scheduled_reminder_date).length;
+  }, [logs]);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(l => {
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          (l.description && l.description.toLowerCase().includes(q)) ||
+          (l.location_name && l.location_name.toLowerCase().includes(q)) ||
+          (l.device_name && l.device_name.toLowerCase().includes(q)) ||
+          (l.performed_by_name && l.performed_by_name.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [logs, search]);
+
+  const columns = [
+    {
+      title: 'Service Date',
+      dataIndex: 'date_performed',
+      key: 'date_performed',
+      width: 120,
+      render: (d) => formatDate(d),
+    },
+    {
+      title: 'Location / Equipment',
+      key: 'target',
+      render: (_, record) => (
+        <div>
+          <Text strong>{record.location_name || record.device_name || 'Faculty Facility'}</Text>
+          {record.device_name && record.location_name && (
+            <div style={{ fontSize: 11, color: '#64748B' }}>
+              Device: {record.device_name}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: 'Work Summary',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true,
+      render: (desc) => desc || '-',
+    },
+    {
+      title: 'Expenditure',
+      dataIndex: 'cost',
+      key: 'cost',
+      width: 130,
+      render: (cost) => (
+        <span style={{ fontWeight: 700, color: '#16A34A', fontFamily: 'monospace' }}>
+          MYR {parseFloat(cost || 0).toFixed(2)}
+        </span>
+      ),
+    },
+    {
+      title: 'Logged By',
+      dataIndex: 'performed_by_name',
+      key: 'performed_by_name',
+      render: (name) => name || 'Technician Desk',
+    },
+    {
+      title: 'Next Reminder',
+      dataIndex: 'scheduled_reminder_date',
+      key: 'scheduled_reminder_date',
+      render: (d) => {
+        if (!d) return <Text type="secondary" style={{ fontSize: 12 }}>None</Text>;
+        const isUpcoming = dayjs(d).isAfter(dayjs());
+        return <Tag color={isUpcoming ? 'processing' : 'warning'}>{formatDate(d)}</Tag>;
+      },
+    },
+    {
+      title: 'Linked Ticket',
+      dataIndex: 'linked_report_id',
+      key: 'linked_report_id',
+      width: 110,
+      render: (id) => (id ? <Text code>#{id}</Text> : '-'),
+    },
+    {
+      title: 'Details',
+      key: 'view',
+      width: 90,
+      render: (_, record) => (
+        <Button size="small" type="link" onClick={() => setSelectedLogForDetails(record)}>
+          View
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-              <Wrench className="w-5 h-5" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Maintenance Records & Calibration Logs"
+        subtitle="Historical repair records, scheduled calibrations, servicing costs, and breakdown links."
+        extra={
+          isStaff && (
+            <Space>
+              <Button icon={<ReloadOutlined />} onClick={fetchLogs}>
+                Refresh
+              </Button>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => setIsLogModalOpen(true)}
+                style={{ fontWeight: 600 }}
+              >
+                Log Maintenance
+              </Button>
+            </Space>
+          )
+        }
+      />
+
+      {/* KPI Statistic Cards */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={8}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <Statistic
+              title={<span style={{ fontWeight: 600, color: '#64748B' }}>Total Servicing Jobs</span>}
+              value={logs.length}
+              prefix={<ToolOutlined style={{ color: '#1E3A8A' }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <Statistic
+              title={<span style={{ fontWeight: 600, color: '#64748B' }}>Expenditure Incurred</span>}
+              value={totalCost}
+              precision={2}
+              prefix="MYR "
+              valueStyle={{ color: '#16A34A', fontWeight: 800 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <Statistic
+              title={<span style={{ fontWeight: 600, color: '#64748B' }}>Upcoming Check-ups</span>}
+              value={upcomingCount}
+              prefix={<ClockCircleOutlined style={{ color: '#F59E0B' }} />}
+              valueStyle={{ color: '#F59E0B', fontWeight: 800 }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Main Table Card */}
+      <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} md={12}>
+              <Input
+                prefix={<SearchOutlined style={{ color: '#94A3B8' }} />}
+                placeholder="Search maintenance logs by description, location, or technician..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                allowClear
+              />
+            </Col>
+            <Col xs={12} md={6}>
+              <Select
+                style={{ width: '100%' }}
+                value={viewFilter}
+                onChange={setViewFilter}
+                options={[
+                  { value: 'all', label: 'All Maintenance Logs' },
+                  { value: 'reminders', label: 'Upcoming Check-ups Only' },
+                ]}
+              />
+            </Col>
+            <Col xs={12} md={6} style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                Showing <strong>{filteredLogs.length}</strong> records
+              </Text>
+            </Col>
+          </Row>
+
+          <Table
+            dataSource={filteredLogs}
+            columns={columns}
+            rowKey="log_id"
+            loading={loading}
+            pagination={{ pageSize: 8 }}
+            locale={{ emptyText: <Empty description="No maintenance records found" /> }}
+            size="small"
+            scroll={{ x: 'max-content' }}
+          />
+        </div>
+      </Card>
+
+      {/* Details Drawer with Descriptions & Timeline (Section 7 Detail View) */}
+      <Drawer
+        title="Maintenance Job Record Details"
+        placement="right"
+        width={typeof window !== 'undefined' && window.innerWidth < 480 ? '100%' : 480}
+        open={Boolean(selectedLogForDetails)}
+        onClose={() => setSelectedLogForDetails(null)}
+      >
+        {selectedLogForDetails && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="Log ID">#{selectedLogForDetails.log_id}</Descriptions.Item>
+              <Descriptions.Item label="Service Date">
+                {formatDate(selectedLogForDetails.date_performed)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Location">
+                {selectedLogForDetails.location_name || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Device / Asset">
+                {selectedLogForDetails.device_name || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Cost Incurred">
+                <Text strong style={{ color: '#16A34A' }}>
+                  MYR {parseFloat(selectedLogForDetails.cost || 0).toFixed(2)}
+                </Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Technician">
+                {selectedLogForDetails.performed_by_name || 'Staff'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Linked Ticket">
+                {selectedLogForDetails.linked_report_id ? (
+                  <Text code>#{selectedLogForDetails.linked_report_id}</Text>
+                ) : (
+                  'Direct Service Work'
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                Work Actions & Notes:
+              </Text>
+              <Paragraph style={{ background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                {selectedLogForDetails.description}
+              </Paragraph>
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Maintenance Logs & Servicing
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500">
-            Historical repair records, scheduled calibrations, servicing costs, and breakdown links.
-          </p>
-        </div>
 
-        {isStaff && (
-          <button
-            onClick={() => setIsLogModalOpen(true)}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-600/20 flex items-center gap-2 transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Log Maintenance</span>
-          </button>
-        )}
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Servicing Jobs</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{logs.length}</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Expenditure Incurred</div>
-          <div className="text-2xl font-black text-emerald-600 mt-1">
-            MYR {totalCost.toFixed(2)}
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Upcoming Check-ups</div>
-          <div className="text-2xl font-black text-blue-600 mt-1">
-            {logs.filter(l => l.scheduled_reminder_date).length}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setViewFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              viewFilter === 'all'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            All Work History
-          </button>
-          <button
-            onClick={() => setViewFilter('reminders')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-              viewFilter === 'reminders'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Bell className="w-3.5 h-3.5" />
-            <span>Scheduled Routine Reminders</span>
-          </button>
-        </div>
-
-        <button
-          onClick={fetchLogs}
-          className="p-1.5 text-slate-500 hover:text-slate-900 transition"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
-
-      {/* Log List */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="py-16 text-center text-slate-400">
-            <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm">Retrieving maintenance records...</p>
-          </div>
-        ) : logs.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <Wrench className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-slate-700">No maintenance records found.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {logs.map(log => (
-              <div key={log.log_id} className="p-5 hover:bg-slate-50/80 transition flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1.5 max-w-2xl">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs font-bold text-slate-500">
-                      LOG #{log.log_id}
-                    </span>
-                    <span className="text-slate-300">•</span>
-                    <span className="font-bold text-slate-900 text-sm">
-                      {log.location_name || log.device_name || 'General Servicing'}
-                    </span>
-                    {log.location_code && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-800">
-                        {log.location_code} ({log.location_floor} Flr)
-                      </span>
-                    )}
-                    {log.device_serial && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-slate-100 text-slate-700">
-                        SN: {log.device_serial}
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    {log.description}
-                  </p>
-
-                  <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap pt-1">
-                    <span>
-                      Performed by <strong className="text-slate-700">{log.technician_name}</strong> on{' '}
-                      {new Date(log.date_performed).toLocaleDateString('en-MY', { dateStyle: 'medium' })}
-                    </span>
-
-                    {log.linked_report_id && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 font-bold text-[10px]">
-                        <LinkIcon className="w-3 h-3 text-amber-600" />
-                        Linked Breakdown Ticket #{log.linked_report_id}
-                      </span>
-                    )}
-
-                    {log.scheduled_reminder_date && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-900 font-bold text-[10px]">
-                        <Calendar className="w-3 h-3 text-blue-600" />
-                        Next Servicing: {new Date(log.scheduled_reminder_date).toLocaleDateString('en-MY', { dateStyle: 'medium' })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Job Cost</div>
-                  <div className="text-lg font-black text-slate-900 font-mono">
-                    MYR {parseFloat(log.cost).toFixed(2)}
-                  </div>
-                </div>
-              </div>
-            ))}
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 12 }}>
+                Service Milestones:
+              </Text>
+              <Timeline
+                items={[
+                  {
+                    color: 'green',
+                    children: `Servicing performed on ${formatDate(selectedLogForDetails.date_performed)}`,
+                  },
+                  ...(selectedLogForDetails.scheduled_reminder_date
+                    ? [
+                        {
+                          color: 'blue',
+                          children: `Next calibration check-up scheduled for ${formatDate(selectedLogForDetails.scheduled_reminder_date)}`,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </div>
           </div>
         )}
-      </div>
+      </Drawer>
 
       <LogMaintenanceModal
         isOpen={isLogModalOpen}

@@ -1,39 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Switch, Modal, Row, Col, Empty, message } from 'antd';
+import {
+  AppstoreOutlined,
+  CalendarOutlined,
+  ToolOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  EditOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  Layers, 
-  Wrench, 
-  CheckCircle2, 
-  AlertTriangle, 
-  RefreshCw, 
-  Search, 
-  Filter,
-  Calendar,
-  Clock,
-  User,
-  XCircle,
-  Check,
-  Edit2,
-  Monitor,
-  Plus
-} from 'lucide-react';
 import EditRoomModal from '../../components/EditRoomModal';
+import StatusTag from '../../components/StatusTag';
+import PageHeader from '../../components/PageHeader';
+import { formatDateTime } from '../../utils/date';
+
+const { Text } = Typography;
 
 export default function RoomsControl() {
-  const [activeTab, setActiveTab] = useState('approvals'); // 'approvals' or 'facilities'
-  
-  // Facilities state
+  const [activeTab, setActiveTab] = useState('approvals');
   const [locations, setLocations] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [floorFilter, setFloorFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
   const [editingLocation, setEditingLocation] = useState(null);
 
-  // Bookings approvals state
-  const [bookings, setBookings] = useState([]);
-  const [bookingStatusFilter, setBookingStatusFilter] = useState('pending'); // 'all', 'pending', 'approved', 'rejected'
+  // Booking filters
+  const [bookingStatusFilter, setBookingStatusFilter] = useState('pending');
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [rejectingBookingId, setRejectingBookingId] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -44,7 +44,7 @@ export default function RoomsControl() {
     try {
       const [locRes, bookRes] = await Promise.all([
         fetch('/api/locations'),
-        fetch('/api/bookings')
+        fetch('/api/bookings'),
       ]);
       const locData = await locRes.json();
       const bookData = await bookRes.json();
@@ -52,6 +52,7 @@ export default function RoomsControl() {
       if (bookData.success) setBookings(bookData.bookings);
     } catch (err) {
       console.error(err);
+      message.error('Failed to load facilities data');
     } finally {
       setLoading(false);
     }
@@ -67,8 +68,8 @@ export default function RoomsControl() {
         credentials: 'include',
         body: JSON.stringify({
           status: nextStatus,
-          reason: `Admin toggle status from Rooms Control console.`
-        })
+          reason: `Admin toggle status from Rooms Control console.`,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -78,457 +79,379 @@ export default function RoomsControl() {
           item.location_id === loc.location_id ? { ...item, status: nextStatus } : item
         )
       );
+      message.success(`${loc.name} marked as ${nextStatus}`);
     } catch (err) {
-      alert(err.message);
+      message.error(err.message);
     } finally {
       setUpdatingId(null);
     }
   }
 
-  async function handleApproveBooking(bookingId) {
+  async function handleApprove(bookingId) {
     setActionLoadingId(bookingId);
     try {
       const res = await fetch(`/api/bookings/${bookingId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ action: 'approve' })
+        body: JSON.stringify({ action: 'approve' }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to approve booking.');
+      if (!res.ok) throw new Error(data.error);
+      message.success('Booking approved successfully');
       fetchData();
     } catch (err) {
-      alert(err.message);
+      message.error(err.message);
     } finally {
       setActionLoadingId(null);
     }
   }
 
-  async function handleRejectBooking(bookingId) {
-    const reason = prompt('Please enter rejection reason (optional):', 'Schedule conflict or administrative review.');
-    if (reason === null) return;
-    setActionLoadingId(bookingId);
+  async function handleRejectConfirm() {
+    if (!rejectingBookingId) return;
+    setActionLoadingId(rejectingBookingId);
     try {
-      const res = await fetch(`/api/bookings/${bookingId}/status`, {
+      const res = await fetch(`/api/bookings/${rejectingBookingId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ action: 'reject', reason })
+        body: JSON.stringify({
+          action: 'reject',
+          reason: rejectReason || 'Administrative schedule review.',
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to reject booking.');
+      if (!res.ok) throw new Error(data.error);
+      message.success('Booking rejected');
+      setRejectingBookingId(null);
+      setRejectReason('');
       fetchData();
     } catch (err) {
-      alert(err.message);
+      message.error(err.message);
     } finally {
       setActionLoadingId(null);
     }
   }
 
-  async function handleCancelBooking(bookingId) {
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
-    setActionLoadingId(bookingId);
-    try {
-      const res = await fetch(`/api/bookings/${bookingId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ action: 'cancel' })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to cancel booking.');
-      fetchData();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
+  const filteredLocations = useMemo(() => {
+    return locations.filter(l => {
+      if (floorFilter !== 'All' && l.floor !== floorFilter) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          l.name.toLowerCase().includes(q) ||
+          l.code.toLowerCase().includes(q) ||
+          (l.category && l.category.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+  }, [locations, floorFilter, search]);
 
-  const filteredLocations = locations.filter(l => {
-    if (floorFilter !== 'All' && l.floor !== floorFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q);
-    }
-    return true;
-  });
+  const filteredBookings = useMemo(() => {
+    return bookings.filter(b => {
+      if (bookingStatusFilter !== 'all' && b.status !== bookingStatusFilter) return false;
+      return true;
+    });
+  }, [bookings, bookingStatusFilter]);
 
-  const filteredBookings = bookings.filter(b => {
-    if (bookingStatusFilter !== 'all' && b.status !== bookingStatusFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        b.location_name?.toLowerCase().includes(q) ||
-        b.location_code?.toLowerCase().includes(q) ||
-        b.user_name?.toLowerCase().includes(q) ||
-        b.purpose?.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  const approvalColumns = [
+    {
+      title: 'Facility',
+      dataIndex: 'location_name',
+      key: 'location_name',
+      render: (name, r) => (
+        <div>
+          <Text strong>{name}</Text>
+          <div style={{ fontSize: 11, color: '#64748B' }}>
+            {r.location_code} • Floor {r.location_floor}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Requester',
+      key: 'user',
+      render: (_, r) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{r.user_name}</div>
+          <div style={{ fontSize: 11, color: '#64748B' }}>
+            {r.matric_or_staff_id} • {r.user_role}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Purpose / Course',
+      key: 'purpose',
+      render: (_, r) => (
+        <div>
+          {r.course_id && <Tag color="cyan">{r.course_id}</Tag>}
+          <div style={{ fontSize: 12 }}>{r.purpose}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Time Window',
+      key: 'time',
+      render: (_, r) => (
+        <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
+          {formatDateTime(r.start_time)} &rarr; {formatDateTime(r.end_time)}
+        </span>
+      ),
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (s) => <StatusTag status={s} />,
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      render: (_, r) => (
+        <Space size="small">
+          {r.status === 'pending' && (
+            <>
+              <Button
+                size="small"
+                type="primary"
+                icon={<CheckOutlined />}
+                loading={actionLoadingId === r.booking_id}
+                onClick={() => handleApprove(r.booking_id)}
+                style={{ background: '#16A34A', borderColor: '#16A34A' }}
+              >
+                Approve
+              </Button>
+              <Button
+                size="small"
+                danger
+                icon={<CloseOutlined />}
+                onClick={() => {
+                  setRejectingBookingId(r.booking_id);
+                  setRejectReason('');
+                }}
+              >
+                Reject
+              </Button>
+            </>
+          )}
+        </Space>
+      ),
+    },
+  ];
 
-  const maintenanceCount = locations.filter(l => l.status === 'maintenance').length;
-  const pendingCount = bookings.filter(b => b.status === 'pending').length;
+  const facilityColumns = [
+    {
+      title: 'Facility Name',
+      key: 'name',
+      render: (_, loc) => (
+        <div>
+          <Text strong>{loc.name}</Text>
+          <div style={{ fontSize: 11, color: '#64748B' }}>{loc.category}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Code',
+      dataIndex: 'code',
+      key: 'code',
+      render: (c) => <Text code>{c}</Text>,
+    },
+    {
+      title: 'Floor',
+      dataIndex: 'floor',
+      key: 'floor',
+    },
+    {
+      title: 'Capacity',
+      dataIndex: 'capacity',
+      key: 'capacity',
+      render: (cap) => `${cap} seats`,
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (s) => <StatusTag status={s} />,
+    },
+    {
+      title: 'Maintenance Toggle',
+      key: 'toggle',
+      render: (_, loc) => {
+        const isMaint = loc.status === 'maintenance';
+        return (
+          <Popconfirm
+            title="Toggle Status"
+            description={`Set facility to ${isMaint ? 'Available' : 'Maintenance'}?`}
+            onConfirm={() => toggleRoomStatus(loc)}
+            okText="Confirm"
+            cancelText="Cancel"
+          >
+            <Button
+              size="small"
+              loading={updatingId === loc.location_id}
+              style={{
+                background: isMaint ? '#16A34A' : '#F59E0B',
+                borderColor: isMaint ? '#16A34A' : '#F59E0B',
+                color: '#fff',
+              }}
+            >
+              {isMaint ? 'Restore Available' : 'Set Maintenance'}
+            </Button>
+          </Popconfirm>
+        );
+      },
+    },
+    {
+      title: 'Edit',
+      key: 'edit',
+      render: (_, loc) => (
+        <Button
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => setEditingLocation(loc)}
+        />
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
-              <Layers className="w-5 h-5" />
-            </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Facility Control & Booking Approvals
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500">
-            Comprehensive administrative console for facility maintenance overrides and student/lecturer reservation approvals.
-          </p>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Room Facilities & Reservation Control"
+        subtitle="Operational authority over booking approvals, emergency maintenance toggles, and facility specifications."
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={fetchData}>
+            Refresh
+          </Button>
+        }
+      />
 
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={fetchData} 
-            title="Refresh"
-            className="p-2.5 text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition border border-slate-200 flex items-center gap-1.5 text-xs font-semibold"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
-            <span>Refresh</span>
-          </button>
-        </div>
-      </div>
+      <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'approvals',
+              label: (
+                <span>
+                  <CalendarOutlined style={{ marginRight: 6 }} />
+                  Booking Requests Queue ({bookings.filter(b => b.status === 'pending').length})
+                </span>
+              ),
+              children: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <Row gutter={[16, 16]} align="middle">
+                    <Col xs={24} sm={12}>
+                      <Select
+                        style={{ width: 220 }}
+                        value={bookingStatusFilter}
+                        onChange={setBookingStatusFilter}
+                        options={[
+                          { value: 'all', label: 'All Booking Requests' },
+                          { value: 'pending', label: 'Pending Approval Only' },
+                          { value: 'approved', label: 'Approved Only' },
+                          { value: 'rejected', label: 'Rejected Only' },
+                        ]}
+                      />
+                    </Col>
+                  </Row>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200">
-        <button
-          onClick={() => setActiveTab('approvals')}
-          className={`pb-3 px-5 text-xs font-bold transition border-b-2 flex items-center gap-2 ${
-            activeTab === 'approvals' 
-              ? 'border-purple-600 text-purple-700' 
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Room Booking Approvals</span>
-          {pendingCount > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
-              {pendingCount} Pending
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('facilities')}
-          className={`pb-3 px-5 text-xs font-bold transition border-b-2 flex items-center gap-2 ${
-            activeTab === 'facilities' 
-              ? 'border-blue-600 text-blue-700' 
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <Wrench className="w-4 h-4" />
-          <span>Room Maintenance Switch ({maintenanceCount} Offline)</span>
-        </button>
-      </div>
-
-      {/* ================= TAB 1: BOOKING APPROVALS ================= */}
-      {activeTab === 'approvals' && (
-        <div className="space-y-4">
-          {/* Filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Status:</span>
-              <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                {[
-                  { id: 'pending', label: `Pending (${pendingCount})` },
-                  { id: 'approved', label: 'Approved & Booked' },
-                  { id: 'rejected', label: 'Rejected' },
-                  { id: 'all', label: 'All Bookings' }
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setBookingStatusFilter(tab.id)}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                      bookingStatusFilter === tab.id
-                        ? 'bg-white text-purple-700 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="relative min-w-[240px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search requester, room, or event..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-600"
-              />
-            </div>
-          </div>
-
-          {/* Bookings Table / List */}
-          {filteredBookings.length === 0 ? (
-            <div className="bg-white p-12 text-center rounded-3xl border border-slate-200 text-slate-400 text-xs">
-              No bookings match the selected status filter.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredBookings.map(b => {
-                const isPending = b.status === 'pending';
-                const isApproved = b.status === 'approved';
-                const isRejected = b.status === 'rejected';
-
-                return (
-                  <div 
-                    key={b.booking_id}
-                    className="p-5 bg-white rounded-3xl border border-slate-200 shadow-xs hover:border-slate-300 transition flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs"
-                  >
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-black bg-blue-50 text-blue-900 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                          {b.location_code}
-                        </span>
-                        <span className="font-bold text-slate-900 text-sm">
-                          {b.location_name}
-                        </span>
-                        <span className="text-slate-400 text-[11px]">
-                          ({b.location_floor} Floor)
-                        </span>
-
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          isPending ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                          isApproved ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                          'bg-red-100 text-red-800 border border-red-200'
-                        }`}>
-                          {isPending ? 'Pending Approval' : isApproved ? 'Confirmed / Booked' : 'Rejected'}
-                        </span>
-
-                        {b.is_recurring && (
-                          <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-100 text-indigo-800">
-                            Weekly Recurring
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="font-semibold text-slate-800 text-xs">
-                        {b.purpose}
-                        {b.course_id && <span className="ml-2 font-mono text-purple-700 font-bold">[{b.course_id}]</span>}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-slate-500 text-[11px] pt-1">
-                        <div className="flex items-center gap-1.5 text-blue-700 font-mono">
-                          <Clock className="w-3.5 h-3.5 text-blue-500" />
-                          <span>
-                            {new Date(b.start_time).toLocaleString('en-MY', { dateStyle: 'medium', timeStyle: 'short' })}
-                            {' '}&rarr;{' '}
-                            {new Date(b.end_time).toLocaleTimeString('en-MY', { timeStyle: 'short' })}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-slate-400" />
-                          <span>
-                            Requester: <strong className="text-slate-700">{b.user_name}</strong> ({b.user_role}) • <span className="font-mono">{b.matric_or_staff_id || b.user_email}</span>
-                          </span>
-                        </div>
-
-                        {b.approver_name && (
-                          <div className="text-emerald-700 font-medium">
-                            Approved by: {b.approver_name}
-                          </div>
-                        )}
-
-                        {b.rejection_reason && (
-                          <div className="text-red-600 font-medium">
-                            Reason: {b.rejection_reason}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      {isPending && (
-                        <>
-                          <button
-                            disabled={actionLoadingId === b.booking_id}
-                            onClick={() => handleRejectBooking(b.booking_id)}
-                            className="px-3.5 py-2 rounded-xl border border-red-200 text-red-700 font-bold hover:bg-red-50 transition text-xs disabled:opacity-50"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            disabled={actionLoadingId === b.booking_id}
-                            onClick={() => handleApproveBooking(b.booking_id)}
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-xs text-xs flex items-center gap-1.5 disabled:opacity-50"
-                          >
-                            <Check className="w-4 h-4" />
-                            <span>{actionLoadingId === b.booking_id ? 'Approving...' : 'Approve Request'}</span>
-                          </button>
-                        </>
-                      )}
-
-                      {isApproved && (
-                        <button
-                          disabled={actionLoadingId === b.booking_id}
-                          onClick={() => handleCancelBooking(b.booking_id)}
-                          className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 font-medium hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition text-xs disabled:opacity-50"
-                        >
-                          Revoke / Cancel
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ================= TAB 2: FACILITIES MAINTENANCE SWITCH ================= */}
-      {activeTab === 'facilities' && (
-        <div className="space-y-4">
-          {/* CORE RULE BANNER */}
-          <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between gap-4 text-xs">
-            <div className="flex items-center gap-3">
-              <Wrench className="w-5 h-5 text-amber-400 shrink-0" />
-              <div>
-                <div className="font-bold text-amber-300">
-                  Auto-Hide Sync Engine: {maintenanceCount} {maintenanceCount === 1 ? 'room is' : 'rooms are'} Under Maintenance
+                  <Table
+                    dataSource={filteredBookings}
+                    columns={approvalColumns}
+                    rowKey="booking_id"
+                    loading={loading}
+                    pagination={{ pageSize: 8 }}
+                    locale={{ emptyText: <Empty description="No bookings match filter" /> }}
+                    size="small"
+                    scroll={{ x: 'max-content' }}
+                  />
                 </div>
-                <p className="text-slate-300 text-[11px] mt-0.5">
-                  Toggle any room below to observe immediate auto-hiding on the Calendar and Interactive Floor Map!
-                </p>
-              </div>
-            </div>
-          </div>
+              ),
+            },
+            {
+              key: 'facilities',
+              label: (
+                <span>
+                  <AppstoreOutlined style={{ marginRight: 6 }} />
+                  Facilities & Maintenance State ({locations.length})
+                </span>
+              ),
+              children: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} md={12}>
+                      <Input
+                        prefix={<SearchOutlined style={{ color: '#94A3B8' }} />}
+                        placeholder="Search rooms by name, code, category..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        allowClear
+                      />
+                    </Col>
+                    <Col xs={12} md={6}>
+                      <Select
+                        style={{ width: '100%' }}
+                        value={floorFilter}
+                        onChange={setFloorFilter}
+                        options={[
+                          { value: 'All', label: 'All Floors' },
+                          { value: 'Ground', label: 'Ground Floor' },
+                          { value: 'Level 1', label: 'Level 1' },
+                          { value: 'Level 2', label: 'Level 2' },
+                          { value: 'Level 3', label: 'Level 3' },
+                        ]}
+                      />
+                    </Col>
+                  </Row>
 
-          {/* Filter bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-            <div className="flex flex-wrap items-center gap-3 flex-1">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search room name or code..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
-
-              <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-                {['All', 'Ground', 'First', 'Second', 'Third'].map(floor => (
-                  <button
-                    key={floor}
-                    onClick={() => setFloorFilter(floor)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      floorFilter === floor
-                        ? 'bg-white text-blue-700 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {floor === 'All' ? 'All Floors' : `${floor} Flr`}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Room Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredLocations.map(loc => {
-              const isMaintenance = loc.status === 'maintenance';
-              return (
-                <div
-                  key={loc.location_id}
-                  className={`p-5 rounded-3xl border transition flex flex-col justify-between ${
-                    isMaintenance
-                      ? 'maintenance-stripe bg-amber-50/90 border-amber-300'
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <span className="font-mono text-xs font-extrabold text-blue-900 bg-blue-50 px-2 py-0.5 rounded">
-                        {loc.code}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        isMaintenance ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        {isMaintenance ? 'Under Maintenance' : 'Available'}
-                      </span>
-                    </div>
-
-                    <h3 className="text-base font-bold text-slate-900 leading-snug">
-                      {loc.name}
-                    </h3>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
-                      <span>{loc.floor} Floor • Capacity: {loc.capacity} • {loc.category || 'Lab'}</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1 text-slate-700 font-semibold bg-slate-100 px-2 py-0.5 rounded-md">
-                        <Monitor className="w-3.5 h-3.5 text-slate-500" />
-                        {loc.device_count || 0} Devices
-                      </span>
-                    </div>
-
-                    {loc.description && (
-                      <p className="text-[11px] text-slate-600 mt-2 line-clamp-2">
-                        {loc.description}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Actions: Edit Room Details & Toggle Maintenance */}
-                  <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => setEditingLocation(loc)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 transition flex items-center gap-1.5 border border-slate-200"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Edit Details</span>
-                    </button>
-
-                    <button
-                      disabled={updatingId === loc.location_id}
-                      onClick={() => toggleRoomStatus(loc)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
-                        isMaintenance
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'bg-amber-600 hover:bg-amber-700 text-white'
-                      }`}
-                    >
-                      {updatingId === loc.location_id
-                        ? 'Updating...'
-                        : isMaintenance ? 'Restore Available' : 'Set to Maintenance'}
-                    </button>
-                  </div>
+                  <Table
+                    dataSource={filteredLocations}
+                    columns={facilityColumns}
+                    rowKey="location_id"
+                    loading={loading}
+                    pagination={{ pageSize: 8 }}
+                    locale={{ emptyText: <Empty description="No facilities found" /> }}
+                    size="small"
+                    scroll={{ x: 'max-content' }}
+                  />
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              ),
+            },
+          ]}
+        />
+      </Card>
+
+      {/* Reject Modal */}
+      <Modal
+        open={Boolean(rejectingBookingId)}
+        title="Reject Room Booking Request"
+        onOk={handleRejectConfirm}
+        onCancel={() => setRejectingBookingId(null)}
+        okText="Confirm Rejection"
+        okButtonProps={{ danger: true, loading: Boolean(actionLoadingId) }}
+      >
+        <p style={{ color: '#64748B', fontSize: 13 }}>
+          Specify rejection reason:
+        </p>
+        <Input.TextArea
+          rows={3}
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          placeholder="e.g. Schedule conflict with faculty seminar."
+        />
+      </Modal>
 
       {/* Edit Room Modal */}
       {editingLocation && (
         <EditRoomModal
-          isOpen={!!editingLocation}
+          isOpen={Boolean(editingLocation)}
           location={editingLocation}
           onClose={() => setEditingLocation(null)}
-          onSaved={() => {
-            setEditingLocation(null);
-            fetchData();
-          }}
+          onSaved={() => fetchData()}
         />
       )}
     </div>
