@@ -61,8 +61,31 @@ function requireRole(allowedRoles = []) {
   };
 }
 
+function optionalAuth(req, res, next) {
+  let token = null;
+  if (req.cookies && req.cookies.fsktm_auth_token) {
+    token = req.cookies.fsktm_auth_token;
+  } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.user = decoded;
+    } catch (_) {
+      req.user = null;
+    }
+  } else {
+    req.user = null;
+  }
+  next();
+}
+
 module.exports = {
   authenticateToken,
+  optionalAuth,
   requireRole,
   JWT_SECRET
 };
+

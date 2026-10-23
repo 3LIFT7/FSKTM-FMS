@@ -16,6 +16,7 @@ const maintenanceRoutes = require('./routes/maintenance');
 const scheduleRoutes = require('./routes/schedule');
 const adminRoutes = require('./routes/admin');
 const settingsRoutes = require('./routes/settings');
+const feedbackRoutes = require('./routes/feedback');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,6 +50,7 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -227,7 +227,7 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, onBook
               filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
               options={selectableRooms.map(loc => ({
                 value: loc.location_id,
-                label: `${loc.name} (${loc.code}) — Floor ${loc.floor} • Capacity: ${loc.capacity}`,
+                label: `${loc.name} (${loc.code}) — ${loc.floor?.startsWith('Blok') ? loc.floor : `Floor ${loc.floor}`} • Capacity: ${loc.capacity}`,
               }))}
             />
           </Form.Item>

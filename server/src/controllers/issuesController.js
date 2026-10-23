@@ -17,9 +17,12 @@ async function getIssues(req, res) {
         ir.status,
         ir.created_at,
         ir.updated_at,
-        u.name AS reporter_name,
-        u.email AS reporter_email,
-        u.role AS reporter_role,
+        ir.guest_name,
+        ir.guest_email,
+        ir.category,
+        COALESCE(u.name, ir.guest_name, 'Classroom Reporter') AS reporter_name,
+        COALESCE(u.email, ir.guest_email, '') AS reporter_email,
+        COALESCE(u.role, 'guest') AS reporter_role,
         l.name AS location_name,
         l.code AS location_code,
         l.floor AS location_floor,
@@ -27,7 +30,7 @@ async function getIssues(req, res) {
         d.serial_number AS device_serial,
         (SELECT COUNT(*) FROM maintenance_logs m WHERE m.linked_report_id = ir.report_id) AS maintenance_count
       FROM issue_reports ir
-      JOIN users u ON ir.reported_by = u.user_id
+      LEFT JOIN users u ON ir.reported_by = u.user_id
       LEFT JOIN locations l ON ir.location_id = l.location_id
       LEFT JOIN devices d ON ir.device_id = d.device_id
       WHERE 1=1
@@ -68,8 +71,8 @@ async function getIssues(req, res) {
 // POST /api/issues
 async function createIssue(req, res) {
   try {
-    const { location_id, device_id, description, photo_url } = req.body;
-    const reported_by = req.user.user_id;
+    const { location_id, device_id, description, photo_url, guest_name, guest_email, category } = req.body;
+    const reported_by = req.user ? req.user.user_id : null;
 
     if (!description || description.trim().length === 0) {
       return res.status(400).json({ error: 'Problem description is required.' });
@@ -84,11 +87,15 @@ async function createIssue(req, res) {
       photo = `/uploads/${req.file.filename}`;
     }
 
+    const gName = req.user ? req.user.name : (guest_name || 'Classroom Reporter');
+    const gEmail = req.user ? req.user.email : (guest_email || null);
+    const cat = category || 'General';
+
     const result = await query(
-      `INSERT INTO issue_reports (reported_by, location_id, device_id, description, photo_url, status)
-       VALUES ($1, $2, $3, $4, $5, 'open')
+      `INSERT INTO issue_reports (reported_by, location_id, device_id, description, photo_url, status, guest_name, guest_email, category)
+       VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8)
        RETURNING *`,
-      [reported_by, location_id || null, device_id || null, description.trim(), photo]
+      [reported_by, location_id || null, device_id || null, description.trim(), photo, gName, gEmail, cat]
     );
 
     return res.status(201).json({

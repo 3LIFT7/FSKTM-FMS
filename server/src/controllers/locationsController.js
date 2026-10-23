@@ -47,28 +47,33 @@ async function getAllLocations(req, res) {
   }
 }
 
-// GET /api/locations/:id
+// GET /api/locations/:id (supports numeric location_id OR room code e.g. DT2)
 async function getLocationById(req, res) {
   try {
     const { id } = req.params;
-    const locResult = await query(
-      `SELECT location_id, code, name, floor, capacity, category, description, status, created_at
-       FROM locations WHERE location_id = $1`,
-      [id]
-    );
+
+    let locSql = 'SELECT * FROM locations WHERE code = $1';
+    let locParams = [id];
+    if (!isNaN(parseInt(id, 10)) && String(parseInt(id, 10)) === String(id)) {
+      locSql = 'SELECT * FROM locations WHERE location_id = $1 OR code = $2';
+      locParams = [parseInt(id, 10), id];
+    }
+
+    const locResult = await query(locSql, locParams);
 
     if (locResult.rows.length === 0) {
       return res.status(404).json({ error: 'Location not found.' });
     }
 
     const location = locResult.rows[0];
+    const locId = location.location_id;
 
     // Fetch devices in this room
     const devResult = await query(
       `SELECT device_id, name, category, serial_number, specs, status,
               COALESCE(is_loanable, FALSE) AS is_loanable
        FROM devices WHERE location_id = $1 ORDER BY name ASC`,
-      [id]
+      [locId]
     );
 
     // Fetch upcoming bookings
@@ -79,7 +84,7 @@ async function getLocationById(req, res) {
        JOIN users u ON b.user_id = u.user_id
        WHERE b.location_id = $1 AND b.end_time >= CURRENT_TIMESTAMP AND b.status IN ('pending', 'approved')
        ORDER BY b.start_time ASC LIMIT 10`,
-      [id]
+      [locId]
     );
 
     // Fetch recent maintenance logs
@@ -90,8 +95,51 @@ async function getLocationById(req, res) {
        JOIN users u ON m.technician_id = u.user_id
        WHERE m.location_id = $1
        ORDER BY m.date_performed DESC LIMIT 5`,
-      [id]
+      [locId]
     );
+
+    // Fetch feedback metrics
+    let feedbackStats = {
+      feedback_count: 0,
+      average_rating: 5.0,
+      average_cleanliness: 5.0,
+      average_equipment: 5.0,
+      average_ac: 5.0
+    };
+    try {
+      const fbRes = await query(
+        `SELECT COUNT(*) as feedback_count, 
+                COALESCE(AVG(rating), 5.0) as average_rating,
+                COALESCE(AVG(cleanliness_rating), 5.0) as average_cleanliness,
+                COALESCE(AVG(equipment_rating), 5.0) as average_equipment,
+                COALESCE(AVG(ac_rating), 5.0) as average_ac
+         FROM room_feedback WHERE location_id = $1`,
+        [locId]
+      );
+      if (fbRes.rows.length > 0 && parseInt(fbRes.rows[0].feedback_count, 10) > 0) {
+        const row = fbRes.rows[0];
+        feedbackStats = {
+          feedback_count: parseInt(row.feedback_count, 10),
+          average_rating: Number(parseFloat(row.average_rating).toFixed(1)),
+          average_cleanliness: Number(parseFloat(row.average_cleanliness).toFixed(1)),
+          average_equipment: Number(parseFloat(row.average_equipment).toFixed(1)),
+          average_ac: Number(parseFloat(row.average_ac).toFixed(1)),
+        };
+      }
+    } catch (_) {}
+
+    // Fetch active unresolved reports for this classroom
+    let activeIssues = [];
+    try {
+      const issuesRes = await query(
+        `SELECT report_id, description, status, photo_url, category, created_at
+         FROM issue_reports
+         WHERE location_id = $1 AND status IN ('open', 'in_progress')
+         ORDER BY created_at DESC LIMIT 5`,
+        [locId]
+      );
+      activeIssues = issuesRes.rows;
+    } catch (_) {}
 
     return res.json({
       success: true,
@@ -99,7 +147,9 @@ async function getLocationById(req, res) {
         ...location,
         devices: devResult.rows,
         upcoming_bookings: bookingsResult.rows,
-        recent_maintenance: maintenanceResult.rows
+        recent_maintenance: maintenanceResult.rows,
+        feedback_stats: feedbackStats,
+        active_issues: activeIssues
       }
     });
   } catch (err) {

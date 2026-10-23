@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Switch, Modal, Row, Col, Empty, message } from 'antd';
+import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Switch, Modal, Row, Col, Empty, message, Rate, Statistic } from 'antd';
 import {
   AppstoreOutlined,
   CalendarOutlined,
@@ -9,25 +9,38 @@ import {
   EditOutlined,
   SearchOutlined,
   ReloadOutlined,
+  QrcodeOutlined,
+  StarOutlined,
+  AlertOutlined,
+  DeleteOutlined,
+  MessageOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
 import EditRoomModal from '../../components/EditRoomModal';
+import ClassroomQRPlacard from '../../components/ClassroomQRPlacard';
+import BatchPlacardsModal from '../../components/BatchPlacardsModal';
 import StatusTag from '../../components/StatusTag';
 import PageHeader from '../../components/PageHeader';
 import { formatDateTime } from '../../utils/date';
 
-const { Text } = Typography;
+const { Text, Title, Paragraph } = Typography;
 
 export default function RoomsControl() {
   const [activeTab, setActiveTab] = useState('approvals');
   const [locations, setLocations] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [floorFilter, setFloorFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
   const [editingLocation, setEditingLocation] = useState(null);
+
+  // QR Placard state
+  const [selectedPlacardLocation, setSelectedPlacardLocation] = useState(null);
+  const [isBatchPlacardsOpen, setIsBatchPlacardsOpen] = useState(false);
+  const [roomFeedbackFilter, setRoomFeedbackFilter] = useState('all');
 
   // Booking filters
   const [bookingStatusFilter, setBookingStatusFilter] = useState('pending');
@@ -42,19 +55,37 @@ export default function RoomsControl() {
   async function fetchData() {
     setLoading(true);
     try {
-      const [locRes, bookRes] = await Promise.all([
+      const [locRes, bookRes, fbRes] = await Promise.all([
         fetch('/api/locations'),
         fetch('/api/bookings'),
+        fetch('/api/feedback', { credentials: 'include' }).catch(() => ({ json: () => ({ feedbacks: [] }) }))
       ]);
       const locData = await locRes.json();
       const bookData = await bookRes.json();
+      const fbData = await fbRes.json();
       if (locData.success) setLocations(locData.locations);
       if (bookData.success) setBookings(bookData.bookings);
+      if (fbData.success) setFeedbacks(fbData.feedbacks || []);
     } catch (err) {
       console.error(err);
       message.error('Failed to load facilities data');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteFeedback(feedbackId) {
+    try {
+      const res = await fetch(`/api/feedback/${feedbackId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      message.success('Feedback removed.');
+      setFeedbacks(prev => prev.filter(f => f.feedback_id !== feedbackId));
+    } catch (err) {
+      message.error(err.message);
     }
   }
 
@@ -149,10 +180,42 @@ export default function RoomsControl() {
   }, [locations, floorFilter, search]);
 
   const filteredBookings = useMemo(() => {
-    return bookings.filter(b => {
+    const list = bookings.filter(b => {
       if (bookingStatusFilter !== 'all' && b.status !== bookingStatusFilter) return false;
       return true;
     });
+
+    // Group recurring series so that a 14-week request appears as ONE single entry in the approval queue
+    const groupMap = new Map();
+    const result = [];
+
+    list.forEach(b => {
+      const gId = b.recurrence_group_id;
+      if (gId) {
+        if (!groupMap.has(gId)) {
+          const item = {
+            ...b,
+            allSessions: [b],
+            is_recurring_series: true,
+            total_weeks: 1,
+            first_date: b.start_time,
+            last_date: b.start_time,
+          };
+          groupMap.set(gId, item);
+          result.push(item);
+        } else {
+          const item = groupMap.get(gId);
+          item.allSessions.push(b);
+          item.total_weeks += 1;
+          if (new Date(b.start_time) < new Date(item.first_date)) item.first_date = b.start_time;
+          if (new Date(b.start_time) > new Date(item.last_date)) item.last_date = b.start_time;
+        }
+      } else {
+        result.push({ ...b, is_recurring_series: false });
+      }
+    });
+
+    return result;
   }, [bookings, bookingStatusFilter]);
 
   const approvalColumns = [
@@ -164,7 +227,7 @@ export default function RoomsControl() {
         <div>
           <Text strong>{name}</Text>
           <div style={{ fontSize: 11, color: '#64748B' }}>
-            {r.location_code} • Floor {r.location_floor}
+            {r.location_code} • {r.location_floor?.startsWith('Blok') ? r.location_floor : `Floor ${r.location_floor}`}
           </div>
         </div>
       ),
@@ -186,19 +249,41 @@ export default function RoomsControl() {
       key: 'purpose',
       render: (_, r) => (
         <div>
-          {r.course_id && <Tag color="cyan">{r.course_id}</Tag>}
+          {r.course_id && <Tag color="cyan" style={{ fontWeight: 700, marginBottom: 2 }}>{r.course_id}</Tag>}
           <div style={{ fontSize: 12 }}>{r.purpose}</div>
+          {r.is_recurring_series && (
+            <Tag color="purple" style={{ fontWeight: 700, marginTop: 4, borderRadius: 6 }}>
+              📅 Entire Semester ({r.total_weeks} Weeks)
+            </Tag>
+          )}
         </div>
       ),
     },
     {
       title: 'Time Window',
       key: 'time',
-      render: (_, r) => (
-        <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
-          {formatDateTime(r.start_time)} &rarr; {formatDateTime(r.end_time)}
-        </span>
-      ),
+      render: (_, r) => {
+        if (r.is_recurring_series) {
+          const dayName = dayjs(r.start_time).format('dddd');
+          const timeRange = `${dayjs(r.start_time).format('HH:mm')} – ${dayjs(r.end_time).format('HH:mm')}`;
+          const dateSpan = `${dayjs(r.first_date).format('DD/MM/YYYY')} → ${dayjs(r.last_date).format('DD/MM/YYYY')}`;
+          return (
+            <div>
+              <div style={{ fontWeight: 700, color: '#1E3A8A' }}>
+                Every {dayName} • {timeRange}
+              </div>
+              <div style={{ fontSize: 11, color: '#64748B' }}>
+                {dateSpan} ({r.total_weeks} weekly sessions)
+              </div>
+            </div>
+          );
+        }
+        return (
+          <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
+            {formatDateTime(r.start_time)} &rarr; {formatDateTime(r.end_time)}
+          </span>
+        );
+      },
     },
     {
       title: 'Status',
@@ -219,9 +304,9 @@ export default function RoomsControl() {
                 icon={<CheckOutlined />}
                 loading={actionLoadingId === r.booking_id}
                 onClick={() => handleApprove(r.booking_id)}
-                style={{ background: '#16A34A', borderColor: '#16A34A' }}
+                style={{ background: '#16A34A', borderColor: '#16A34A', fontWeight: 600 }}
               >
-                Approve
+                {r.is_recurring_series ? `Approve Series (${r.total_weeks} Wks)` : 'Approve'}
               </Button>
               <Button
                 size="small"
@@ -232,7 +317,7 @@ export default function RoomsControl() {
                   setRejectReason('');
                 }}
               >
-                Reject
+                {r.is_recurring_series ? 'Reject Series' : 'Reject'}
               </Button>
             </>
           )}
@@ -304,6 +389,20 @@ export default function RoomsControl() {
       },
     },
     {
+      title: 'QR Placard',
+      key: 'qr',
+      render: (_, loc) => (
+        <Button
+          size="small"
+          icon={<QrcodeOutlined />}
+          onClick={() => setSelectedPlacardLocation(loc)}
+          style={{ fontWeight: 600, color: '#1E3A8A', borderColor: '#93C5FD' }}
+        >
+          QR Placard
+        </Button>
+      ),
+    },
+    {
       title: 'Edit',
       key: 'edit',
       render: (_, loc) => (
@@ -320,11 +419,21 @@ export default function RoomsControl() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="Room Facilities & Reservation Control"
-        subtitle="Operational authority over booking approvals, emergency maintenance toggles, and facility specifications."
+        subtitle="Operational authority over booking approvals, emergency maintenance toggles, QR code placards, and classroom feedback."
         extra={
-          <Button icon={<ReloadOutlined />} onClick={fetchData}>
-            Refresh
-          </Button>
+          <Space>
+            <Button
+              type="primary"
+              icon={<QrcodeOutlined />}
+              onClick={() => setIsBatchPlacardsOpen(true)}
+              style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 700 }}
+            >
+              Print QR Placards
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={fetchData}>
+              Refresh
+            </Button>
+          </Space>
         }
       />
 
@@ -398,11 +507,14 @@ export default function RoomsControl() {
                         value={floorFilter}
                         onChange={setFloorFilter}
                         options={[
-                          { value: 'All', label: 'All Floors' },
+                          { value: 'All', label: 'All Floors & Blocks' },
                           { value: 'Ground', label: 'Ground Floor' },
-                          { value: 'Level 1', label: 'Level 1' },
-                          { value: 'Level 2', label: 'Level 2' },
-                          { value: 'Level 3', label: 'Level 3' },
+                          { value: 'First', label: 'First Floor' },
+                          { value: 'Second', label: 'Second Floor' },
+                          { value: 'Third', label: 'Third Floor' },
+                          { value: 'Blok B8', label: 'Blok B8' },
+                          { value: 'Blok C12', label: 'Blok C12' },
+                          { value: 'Blok L Perpustakaan', label: 'Blok L Perpustakaan' },
                         ]}
                       />
                     </Col>
@@ -417,6 +529,182 @@ export default function RoomsControl() {
                     locale={{ emptyText: <Empty description="No facilities found" /> }}
                     size="small"
                     scroll={{ x: 'max-content' }}
+                  />
+                </div>
+              ),
+            },
+            {
+              key: 'feedback',
+              label: (
+                <span>
+                  <StarOutlined style={{ marginRight: 6, color: '#D97706' }} />
+                  Classroom Feedback & Reports ({feedbacks.length})
+                </span>
+              ),
+              children: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* Summary Metric Cards */}
+                  <Row gutter={[16, 16]}>
+                    <Col xs={12} sm={6}>
+                      <Card bordered={false} style={{ background: '#F8FAFC', borderRadius: 12 }}>
+                        <Statistic
+                          title="Total Reviews"
+                          value={feedbacks.length}
+                          prefix={<MessageOutlined style={{ color: '#2563EB' }} />}
+                          valueStyle={{ fontWeight: 800, color: '#1E3A8A' }}
+                        />
+                      </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                      <Card bordered={false} style={{ background: '#F8FAFC', borderRadius: 12 }}>
+                        <Statistic
+                          title="Avg Overall Score"
+                          value={
+                            feedbacks.length > 0
+                              ? (feedbacks.reduce((acc, f) => acc + (f.rating || 5), 0) / feedbacks.length).toFixed(1)
+                              : '5.0'
+                          }
+                          suffix="/ 5.0"
+                          prefix={<StarOutlined style={{ color: '#F59E0B' }} />}
+                          valueStyle={{ fontWeight: 800, color: '#D97706' }}
+                        />
+                      </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                      <Card bordered={false} style={{ background: '#F8FAFC', borderRadius: 12 }}>
+                        <Statistic
+                          title="Avg AC Comfort"
+                          value={
+                            feedbacks.length > 0
+                              ? (feedbacks.reduce((acc, f) => acc + (f.ac_rating || 5), 0) / feedbacks.length).toFixed(1)
+                              : '5.0'
+                          }
+                          suffix="/ 5.0"
+                          valueStyle={{ fontWeight: 800, color: '#0284C7' }}
+                        />
+                      </Card>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                      <Card bordered={false} style={{ background: '#F8FAFC', borderRadius: 12 }}>
+                        <Statistic
+                          title="Avg Cleanliness"
+                          value={
+                            feedbacks.length > 0
+                              ? (feedbacks.reduce((acc, f) => acc + (f.cleanliness_rating || 5), 0) / feedbacks.length).toFixed(1)
+                              : '5.0'
+                          }
+                          suffix="/ 5.0"
+                          valueStyle={{ fontWeight: 800, color: '#059669' }}
+                        />
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  {/* Room Filter Dropdown */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Text strong>Filter by Classroom:</Text>
+                      <Select
+                        style={{ width: 260 }}
+                        value={roomFeedbackFilter}
+                        onChange={setRoomFeedbackFilter}
+                        options={[
+                          { value: 'all', label: 'All Classrooms & Facilities' },
+                          ...locations.map(loc => ({
+                            value: String(loc.location_id),
+                            label: `${loc.code} — ${loc.name}`
+                          }))
+                        ]}
+                      />
+                    </div>
+                    <Button
+                      type="primary"
+                      icon={<QrcodeOutlined />}
+                      onClick={() => setIsBatchPlacardsOpen(true)}
+                      style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 600 }}
+                    >
+                      Print Room QR Placards
+                    </Button>
+                  </div>
+
+                  {/* Feedback Table */}
+                  <Table
+                    dataSource={feedbacks.filter(f =>
+                      roomFeedbackFilter === 'all' ? true : String(f.location_id) === String(roomFeedbackFilter)
+                    )}
+                    rowKey="feedback_id"
+                    pagination={{ pageSize: 8 }}
+                    size="small"
+                    locale={{ emptyText: <Empty description="No classroom feedback reviews submitted yet" /> }}
+                    columns={[
+                      {
+                        title: 'Classroom',
+                        key: 'room',
+                        render: (_, record) => (
+                          <div>
+                            <Tag color="navy" style={{ fontWeight: 800 }}>{record.location_code}</Tag>
+                            <span style={{ fontWeight: 600 }}>{record.location_name}</span>
+                            <div style={{ fontSize: 11, color: '#64748B' }}>{record.location_floor}</div>
+                          </div>
+                        )
+                      },
+                      {
+                        title: 'Reporter',
+                        key: 'reporter',
+                        render: (_, record) => (
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{record.reporter_name || 'Anonymous Student'}</div>
+                            <div style={{ fontSize: 11, color: '#64748B' }}>
+                              {record.matric_or_staff_id ? `${record.matric_or_staff_id} • ` : ''}{record.reporter_role || 'student'}
+                            </div>
+                          </div>
+                        )
+                      },
+                      {
+                        title: 'Overall Score',
+                        dataIndex: 'rating',
+                        key: 'rating',
+                        render: (r) => <Rate disabled value={r || 5} style={{ fontSize: 13 }} />
+                      },
+                      {
+                        title: 'AC / Clean / Tech',
+                        key: 'scores',
+                        render: (_, record) => (
+                          <div style={{ fontSize: 11, color: '#475569' }}>
+                            <span>❄️ {record.ac_rating || 5}/5</span> •{' '}
+                            <span>🧹 {record.cleanliness_rating || 5}/5</span> •{' '}
+                            <span>📽️ {record.equipment_rating || 5}/5</span>
+                          </div>
+                        )
+                      },
+                      {
+                        title: 'Comments & Suggestions',
+                        dataIndex: 'comments',
+                        key: 'comments',
+                        ellipsis: true
+                      },
+                      {
+                        title: 'Date Submitted',
+                        dataIndex: 'created_at',
+                        key: 'created_at',
+                        render: (dt) => formatDateTime(dt)
+                      },
+                      {
+                        title: 'Action',
+                        key: 'action',
+                        render: (_, record) => (
+                          <Popconfirm
+                            title="Delete Feedback"
+                            description="Remove this feedback record?"
+                            onConfirm={() => handleDeleteFeedback(record.feedback_id)}
+                            okText="Delete"
+                            cancelText="Cancel"
+                          >
+                            <Button size="small" danger icon={<DeleteOutlined />} />
+                          </Popconfirm>
+                        )
+                      }
+                    ]}
                   />
                 </div>
               ),
@@ -454,6 +742,27 @@ export default function RoomsControl() {
           onSaved={() => fetchData()}
         />
       )}
+
+      {/* Single Classroom QR Placard Modal */}
+      <Modal
+        open={Boolean(selectedPlacardLocation)}
+        onCancel={() => setSelectedPlacardLocation(null)}
+        footer={null}
+        width={680}
+        centered
+        destroyOnClose
+      >
+        {selectedPlacardLocation && (
+          <ClassroomQRPlacard location={selectedPlacardLocation} />
+        )}
+      </Modal>
+
+      {/* Batch Placards Modal */}
+      <BatchPlacardsModal
+        isOpen={isBatchPlacardsOpen}
+        onClose={() => setIsBatchPlacardsOpen(false)}
+        locations={locations}
+      />
     </div>
   );
 }

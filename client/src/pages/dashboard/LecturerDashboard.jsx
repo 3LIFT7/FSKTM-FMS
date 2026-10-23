@@ -73,7 +73,7 @@ export default function LecturerDashboard() {
   }
 
   const activeBookings = myBookings.filter(b => b.status === 'approved' || b.status === 'pending');
-  const recurringBookings = myBookings.filter(b => Boolean(b.recurring_group_id));
+  const recurringBookings = myBookings.filter(b => Boolean(b.recurrence_group_id || b.recurring_group_id));
 
   const columns = [
     {
@@ -90,21 +90,24 @@ export default function LecturerDashboard() {
     {
       title: 'Course / Purpose',
       key: 'purpose',
-      render: (_, record) => (
-        <div>
-          {record.course_id && (
-            <Tag color="cyan" style={{ fontWeight: 700, marginBottom: 2 }}>
-              {record.course_id}
-            </Tag>
-          )}
-          <div style={{ fontSize: 12 }}>{record.purpose}</div>
-          {record.recurring_group_id && (
-            <Tag color="purple" style={{ fontSize: 10, marginTop: 4 }}>
-              14-Wk Recurring Class
-            </Tag>
-          )}
-        </div>
-      ),
+      render: (_, record) => {
+        const hasRecurrence = Boolean(record.recurrence_group_id || record.recurring_group_id);
+        return (
+          <div>
+            {record.course_id && (
+              <Tag color="cyan" style={{ fontWeight: 700, marginBottom: 2 }}>
+                {record.course_id}
+              </Tag>
+            )}
+            <div style={{ fontSize: 12 }}>{record.purpose}</div>
+            {hasRecurrence && (
+              <Tag color="purple" style={{ fontSize: 10, marginTop: 4, fontWeight: 700, borderRadius: 6 }}>
+                📅 14-Wk Recurring Class
+              </Tag>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: 'Time Window',
@@ -125,22 +128,23 @@ export default function LecturerDashboard() {
       title: 'Action',
       key: 'action',
       render: (_, record) => {
-        if (!record.recurring_group_id) return null;
+        const gId = record.recurrence_group_id || record.recurring_group_id;
+        if (!gId) return null;
         return (
-          <Space orientation="horizontal" size="small">
+          <Space size="small">
             <Button
               size="small"
               icon={<PauseCircleOutlined />}
-              loading={togglingGroupId === record.recurring_group_id}
-              onClick={() => handleToggleSeries(record.recurring_group_id, 'pause')}
+              loading={togglingGroupId === gId}
+              onClick={() => handleToggleSeries(gId, 'pause')}
             >
               Pause
             </Button>
             <Button
               size="small"
               icon={<PlayCircleOutlined />}
-              loading={togglingGroupId === record.recurring_group_id}
-              onClick={() => handleToggleSeries(record.recurring_group_id, 'resume')}
+              loading={togglingGroupId === gId}
+              onClick={() => handleToggleSeries(gId, 'activate')}
             >
               Resume
             </Button>

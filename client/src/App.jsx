@@ -30,6 +30,7 @@ import UsersManage from './pages/admin/UsersManage';
 import Reports from './pages/admin/Reports';
 import SettingsPage from './pages/admin/SettingsPage';
 import RoomsControl from './pages/admin/RoomsControl';
+import ClassroomFeedbackPage from './pages/feedback/ClassroomFeedbackPage';
 
 import { Spin } from 'antd';
 
@@ -61,6 +62,12 @@ export default function App() {
           <Route path="/login/lecturer" element={<LecturerLogin />} />
           <Route path="/login/staff" element={<StaffLogin />} />
           <Route path="/register" element={<RegisterPage />} />
+
+          {/* Public Classroom QR Scan & Feedback Landing Portals */}
+          <Route path="/room-feedback/:codeOrId" element={<ClassroomFeedbackPage />} />
+          <Route path="/room-feedback" element={<ClassroomFeedbackPage />} />
+          <Route path="/qr/:codeOrId" element={<ClassroomFeedbackPage />} />
+
 
           {/* Protected Area wrapped in Layout */}
           <Route element={<Layout />}>

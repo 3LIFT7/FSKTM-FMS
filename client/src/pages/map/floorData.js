@@ -107,5 +107,84 @@ export const FLOOR_PLANS = {
         { code: 'MTW', name: 'Makmal Teknologi Web', capacity: 40, category: 'Computer Lab' }
       ]
     }
+  },
+
+  'Blok B8': {
+    name: 'Blok B8',
+    label: 'BLOK B8',
+    centerTitle: 'B8 FOYER & ATRIUM',
+    centerDesc: 'Auditorium Entrance & Registration Foyer',
+    westWing: {
+      title: 'Dewan Teater 1 Wing',
+      tag: 'Theater Hall 1',
+      rowTop: [
+        { code: 'DT1', name: 'Dewan Teater 1', capacity: 120, category: 'Dewan Teater', pic: 'En. Faizannizam bin Shahbudin' }
+      ],
+      rowBottom: []
+    },
+    eastWing: {
+      title: 'Dewan Teater 2 Wing',
+      tag: 'Theater Hall 2',
+      rowTop: [
+        { code: 'DT2', name: 'Dewan Teater 2', capacity: 120, category: 'Dewan Teater', pic: 'En. Faizannizam bin Shahbudin' }
+      ],
+      rowBottom: []
+    }
+  },
+
+  'Blok C12': {
+    name: 'Blok C12',
+    label: 'BLOK C12',
+    centerTitle: 'C12 ACADEMIC LOBBY',
+    centerDesc: 'Classroom & Lecture Foyer',
+    westWing: {
+      title: 'Lecture Classrooms Wing',
+      tag: 'Bilik Kuliah',
+      rowTop: [
+        { code: 'C12-BK-101', name: 'BK-101', capacity: 60, category: 'Bilik Kuliah', pic: 'En. Sahidan bin Paran' }
+      ],
+      rowBottom: []
+    },
+    eastWing: {
+      title: 'Academic Support Facilities',
+      tag: 'Services',
+      rowTop: [
+        { code: 'C12-STUDY', name: 'Ruang Perbincangan Pelajar C12', capacity: 20, category: 'Study Area' }
+      ],
+      rowBottom: []
+    }
+  },
+
+  'Blok L Perpustakaan': {
+    name: 'Blok L Perpustakaan',
+    label: 'BLOK L PERPUSTAKAAN',
+    centerTitle: 'LIBRARY ATRIUM',
+    centerDesc: 'Central Circulation Desk & Information Hub',
+    westWing: {
+      title: 'Tutorial Suites Wing A',
+      tag: 'Library Tutorials',
+      rowTop: [
+        { code: 'BT1', name: 'Bilik Tutorial 1', capacity: 35, category: 'Tutorial Room', pic: 'En. Muhammad Afiq bin Mazni' },
+        { code: 'Bt10', name: 'Bilik Tutorial 10', capacity: 35, category: 'Tutorial Room', pic: 'En. Muhammad Afiq bin Mazni' }
+      ],
+      rowBottom: [
+        { code: 'BT5', name: 'Bilik Tutorial 5', capacity: 35, category: 'Tutorial Room', pic: 'En. Mohammad Hafiz bin Mt. Saidun' }
+      ]
+    },
+    eastWing: {
+      title: 'Tutorial Suites Wing B',
+      tag: 'Library Tutorials',
+      rowTop: [
+        { code: 'BT6', name: 'Bilik Tutorial 6', capacity: 35, category: 'Tutorial Room', pic: 'En. Mohammad Hafiz bin Mt. Saidun' },
+        { code: 'BT8', name: 'Bilik Tutorial 8', capacity: 35, category: 'Tutorial Room', pic: 'En. Mohd Al Hafiz bin Nordin' }
+      ],
+      rowBottom: [
+        { code: 'BT9', name: 'Bilik Tutorial 9', capacity: 35, category: 'Tutorial Room', pic: 'En. Mohd Al Hafiz bin Nordin' }
+      ]
+    }
   }
 };
+
+// Also support alias with comma
+FLOOR_PLANS['Blok L, Perpustakaan'] = FLOOR_PLANS['Blok L Perpustakaan'];
+

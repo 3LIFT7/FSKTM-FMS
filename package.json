@@ -1,0 +1,12 @@
+{
+  "name": "fsktm-fms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FSKTM Integrated Facility Booking & Maintenance Management System",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "seed": "npm --prefix server run seed",
+    "server": "npm --prefix server start",
+    "client": "npm --prefix client run dev"
+  }
+}

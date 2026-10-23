@@ -201,7 +201,9 @@ async function createBooking(req, res) {
     }
 
     const confirmationMsg = initialStatus === 'pending'
-      ? `Room booking request submitted successfully! Your request is pending Admin approval and the slot is held.`
+      ? (is_recurring 
+          ? `Semester recurring reservation submitted (${numberOfWeeks} weeks)! Sent as 1 request pending technician approval.`
+          : `Room booking request submitted successfully! Your request is pending Admin approval and the slot is held.`)
       : (is_recurring ? `Created ${createdBookings.length} weekly recurring bookings.` : 'Booking confirmed successfully.');
 
     return res.status(201).json({
@@ -260,7 +262,54 @@ async function updateBookingStatus(req, res) {
     }
 
     if (action === 'approve') {
-      // Collision verification: Ensure no other approved booking already occupies this slot
+      if (booking.recurrence_group_id) {
+        // Fetch all pending bookings in this recurring series
+        const seriesBookings = await query(
+          `SELECT booking_id, start_time, end_time, purpose 
+           FROM location_bookings 
+           WHERE recurrence_group_id = $1`,
+          [booking.recurrence_group_id]
+        );
+
+        // Verify conflict for each session in the series against approved bookings
+        for (const sb of seriesBookings.rows) {
+          const conflictCheck = await query(
+            `SELECT booking_id, purpose, start_time, end_time 
+             FROM location_bookings
+             WHERE location_id = $1
+               AND (recurrence_group_id IS NULL OR recurrence_group_id != $2)
+               AND status = 'approved'
+               AND start_time < $3
+               AND end_time > $4`,
+            [booking.location_id, booking.recurrence_group_id, sb.end_time, sb.start_time]
+          );
+
+          if (conflictCheck.rows.length > 0) {
+            return res.status(409).json({
+              error: `Cannot approve semester series: Slot on ${new Date(sb.start_time).toLocaleDateString()} (${new Date(sb.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}) conflicts with an already approved booking ("${conflictCheck.rows[0].purpose}").`,
+              conflictingBooking: conflictCheck.rows[0]
+            });
+          }
+        }
+
+        // Approve all sessions in the recurring series at once!
+        const updateRes = await query(
+          `UPDATE location_bookings 
+           SET status = 'approved', approved_by = $1, rejection_reason = NULL 
+           WHERE recurrence_group_id = $2 
+           RETURNING *`,
+          [staffId, booking.recurrence_group_id]
+        );
+
+        return res.json({
+          success: true,
+          message: `Entire semester recurring reservation (${updateRes.rows.length} weeks) approved successfully!`,
+          count: updateRes.rows.length,
+          booking: updateRes.rows[0]
+        });
+      }
+
+      // Single booking collision verification
       const conflictCheck = await query(
         `SELECT booking_id, purpose, start_time, end_time FROM location_bookings
          WHERE location_id = $1
@@ -294,6 +343,24 @@ async function updateBookingStatus(req, res) {
     }
 
     if (action === 'reject') {
+      if (booking.recurrence_group_id) {
+        // Reject all sessions in the recurring series at once
+        const updateRes = await query(
+          `UPDATE location_bookings 
+           SET status = 'rejected', approved_by = $1, rejection_reason = $2 
+           WHERE recurrence_group_id = $3 
+           RETURNING *`,
+          [staffId, reason || 'Semester recurring request was not approved by administration.', booking.recurrence_group_id]
+        );
+
+        return res.json({
+          success: true,
+          message: `Entire semester recurring reservation (${updateRes.rows.length} weeks) rejected. The time slots are released.`,
+          count: updateRes.rows.length,
+          booking: updateRes.rows[0]
+        });
+      }
+
       const updateRes = await query(
         `UPDATE location_bookings 
          SET status = 'rejected', approved_by = $1, rejection_reason = $2 
@@ -320,11 +387,12 @@ async function updateBookingStatus(req, res) {
 async function deleteBooking(req, res) {
   try {
     const { id } = req.params;
+    const { series } = req.query;
     const userId = req.user.user_id;
     const userRole = req.user.role;
 
     // Check ownership or staff privileges
-    const existing = await query('SELECT booking_id, user_id FROM location_bookings WHERE booking_id = $1', [id]);
+    const existing = await query('SELECT booking_id, user_id, recurrence_group_id FROM location_bookings WHERE booking_id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Booking not found.' });
     }
@@ -332,6 +400,11 @@ async function deleteBooking(req, res) {
     const booking = existing.rows[0];
     if (booking.user_id !== userId && !['technician', 'manager'].includes(userRole)) {
       return res.status(403).json({ error: 'You are not authorized to cancel this booking.' });
+    }
+
+    if (series === 'true' && booking.recurrence_group_id) {
+      const delRes = await query('DELETE FROM location_bookings WHERE recurrence_group_id = $1 RETURNING booking_id', [booking.recurrence_group_id]);
+      return res.json({ success: true, message: `All ${delRes.rows.length} bookings in the recurring series deleted successfully.` });
     }
 
     await query('DELETE FROM location_bookings WHERE booking_id = $1', [id]);

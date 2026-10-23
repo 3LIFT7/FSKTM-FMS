@@ -174,9 +174,12 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
             <Form.Item name="floor" label="Floor Level" rules={[{ required: true }]}>
               <Select>
                 <Select.Option value="Ground">Ground Floor</Select.Option>
-                <Select.Option value="Level 1">Level 1</Select.Option>
-                <Select.Option value="Level 2">Level 2</Select.Option>
-                <Select.Option value="Level 3">Level 3</Select.Option>
+                <Select.Option value="First">First Floor</Select.Option>
+                <Select.Option value="Second">Second Floor</Select.Option>
+                <Select.Option value="Third">Third Floor</Select.Option>
+                <Select.Option value="Blok B8">Blok B8</Select.Option>
+                <Select.Option value="Blok C12">Blok C12</Select.Option>
+                <Select.Option value="Blok L Perpustakaan">Blok L Perpustakaan</Select.Option>
               </Select>
             </Form.Item>
 

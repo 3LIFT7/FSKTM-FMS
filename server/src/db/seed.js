@@ -22,12 +22,56 @@ async function seedDatabase() {
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS series_status VARCHAR(50) DEFAULT 'active';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS is_loanable BOOLEAN DEFAULT FALSE;
+      ALTER TABLE issue_reports ALTER COLUMN reported_by DROP NOT NULL;
+      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255);
+      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_email VARCHAR(255);
+      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'General';
+
+      CREATE TABLE IF NOT EXISTS room_feedback (
+          feedback_id SERIAL PRIMARY KEY,
+          location_id INT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+          user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+          reporter_name VARCHAR(255),
+          reporter_email VARCHAR(255),
+          reporter_role VARCHAR(50) DEFAULT 'student',
+          rating INT DEFAULT 5 CHECK (rating >= 1 AND rating <= 5),
+          category VARCHAR(100) DEFAULT 'General',
+          comments TEXT NOT NULL,
+          cleanliness_rating INT DEFAULT 5,
+          equipment_rating INT DEFAULT 5,
+          ac_rating INT DEFAULT 5,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     await exec(`UPDATE location_bookings SET status = 'approved' WHERE status IS NULL OR status = ''`);
     await exec(`UPDATE users SET specialization = 'BIW' WHERE role = 'student' AND (specialization IS NULL OR specialization = '')`);
     await exec(`UPDATE devices SET is_loanable = FALSE WHERE location_id IS NOT NULL`);
     await exec(`UPDATE devices SET is_loanable = TRUE WHERE location_id IS NULL`);
     console.log('✓ Database schema migrations applied.');
+
+    // Ensure new blocks (Blok B8, Blok C12, Blok L Perpustakaan) exist
+    const blockLocations = [
+      { code: 'DT1', name: 'Dewan Teater 1', floor: 'Blok B8', capacity: 120, category: 'Dewan Teater', desc: 'Dewan Teater 1 at Blok B8. PIC: En. Faizannizam bin Shahbudin', status: 'available' },
+      { code: 'DT2', name: 'Dewan Teater 2', floor: 'Blok B8', capacity: 120, category: 'Dewan Teater', desc: 'Dewan Teater 2 at Blok B8. PIC: En. Faizannizam bin Shahbudin', status: 'available' },
+      { code: 'C12-BK-101', name: 'BK-101', floor: 'Blok C12', capacity: 60, category: 'Bilik Kuliah', desc: 'Bilik Kuliah 101 at Blok C12. PIC: En. Sahidan bin Paran', status: 'available' },
+      { code: 'BT1', name: 'Bilik Tutorial 1', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 1 at Blok L Perpustakaan. PIC: En. Muhammad Afiq bin Mazni', status: 'available' },
+      { code: 'Bt10', name: 'Bilik Tutorial 10', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 10 at Blok L Perpustakaan. PIC: En. Muhammad Afiq bin Mazni', status: 'available' },
+      { code: 'BT5', name: 'Bilik Tutorial 5', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 5 at Blok L Perpustakaan. PIC: En. Mohammad Hafiz bin Mt. Saidun', status: 'available' },
+      { code: 'BT6', name: 'Bilik Tutorial 6', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 6 at Blok L Perpustakaan. PIC: En. Mohammad Hafiz bin Mt. Saidun', status: 'available' },
+      { code: 'BT8', name: 'Bilik Tutorial 8', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 8 at Blok L Perpustakaan. PIC: En. Mohd Al Hafiz bin Nordin', status: 'available' },
+      { code: 'BT9', name: 'Bilik Tutorial 9', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 9 at Blok L Perpustakaan. PIC: En. Mohd Al Hafiz bin Nordin', status: 'available' },
+    ];
+    for (const bLoc of blockLocations) {
+      const exists = await query('SELECT location_id FROM locations WHERE code = $1 AND floor = $2', [bLoc.code, bLoc.floor]);
+      if (exists.rows.length === 0) {
+        await query(
+          `INSERT INTO locations (code, name, floor, capacity, category, description, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [bLoc.code, bLoc.name, bLoc.floor, bLoc.capacity, bLoc.category, bLoc.desc, bLoc.status]
+        );
+      }
+    }
+    console.log('✓ Block locations (Blok B8, Blok C12, Blok L Perpustakaan) verified.');
   } catch (migErr) {
     console.warn('Migration notice:', migErr.message);
   }
@@ -112,7 +156,22 @@ async function seedDatabase() {
     { code: 'MSK', name: 'Makmal Sistem Komputer', floor: 'Third', capacity: 40, category: 'Hardware Lab', desc: 'Hardware architecture lab with Raspberry Pi and FPGA boards.', status: 'available' },
     { code: 'MTW', name: 'Makmal Teknologi Web', floor: 'Third', capacity: 40, category: 'Computer Lab', desc: 'Front-end & UX design lab with calibrated 4K displays.', status: 'available' },
     { code: 'BT-04', name: 'Bilik Tutorial 4', floor: 'Third', capacity: 35, category: 'Tutorial Room', desc: 'Tiered classroom for tutorial discussions.', status: 'available' },
-    { code: 'BAS', name: 'Bilik Aktiviti Staf', floor: 'Third', capacity: 30, category: 'Staff Lounge', desc: 'Staff recreation, wellness, and informal meeting room.', status: 'available' }
+    { code: 'BAS', name: 'Bilik Aktiviti Staf', floor: 'Third', capacity: 30, category: 'Staff Lounge', desc: 'Staff recreation, wellness, and informal meeting room.', status: 'available' },
+
+    // Blok B8
+    { code: 'DT1', name: 'Dewan Teater 1', floor: 'Blok B8', capacity: 120, category: 'Dewan Teater', desc: 'Dewan Teater 1 at Blok B8. PIC: En. Faizannizam bin Shahbudin', status: 'available' },
+    { code: 'DT2', name: 'Dewan Teater 2', floor: 'Blok B8', capacity: 120, category: 'Dewan Teater', desc: 'Dewan Teater 2 at Blok B8. PIC: En. Faizannizam bin Shahbudin', status: 'available' },
+
+    // Blok C12
+    { code: 'C12-BK-101', name: 'BK-101', floor: 'Blok C12', capacity: 60, category: 'Bilik Kuliah', desc: 'Bilik Kuliah 101 at Blok C12. PIC: En. Sahidan bin Paran', status: 'available' },
+
+    // Blok L Perpustakaan
+    { code: 'BT1', name: 'Bilik Tutorial 1', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 1 at Blok L Perpustakaan. PIC: En. Muhammad Afiq bin Mazni', status: 'available' },
+    { code: 'Bt10', name: 'Bilik Tutorial 10', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 10 at Blok L Perpustakaan. PIC: En. Muhammad Afiq bin Mazni', status: 'available' },
+    { code: 'BT5', name: 'Bilik Tutorial 5', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 5 at Blok L Perpustakaan. PIC: En. Mohammad Hafiz bin Mt. Saidun', status: 'available' },
+    { code: 'BT6', name: 'Bilik Tutorial 6', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 6 at Blok L Perpustakaan. PIC: En. Mohammad Hafiz bin Mt. Saidun', status: 'available' },
+    { code: 'BT8', name: 'Bilik Tutorial 8', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 8 at Blok L Perpustakaan. PIC: En. Mohd Al Hafiz bin Nordin', status: 'available' },
+    { code: 'BT9', name: 'Bilik Tutorial 9', floor: 'Blok L Perpustakaan', capacity: 35, category: 'Tutorial Room', desc: 'Bilik Tutorial 9 at Blok L Perpustakaan. PIC: En. Mohd Al Hafiz bin Nordin', status: 'available' }
   ];
 
   const locMap = {};

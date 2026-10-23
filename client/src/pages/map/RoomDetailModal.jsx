@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Drawer, Descriptions, Button, Space, Typography, Tag, Table, Popconfirm, Spin, Alert, message } from 'antd';
+import { Drawer, Descriptions, Button, Space, Typography, Tag, Table, Popconfirm, Spin, Alert, Modal, message } from 'antd';
 import {
   CalendarOutlined,
   ToolOutlined,
@@ -8,10 +8,12 @@ import {
   EnvironmentOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  QrcodeOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import EditRoomModal from '../../components/EditRoomModal';
 import EditDeviceModal from '../../components/EditDeviceModal';
+import ClassroomQRPlacard from '../../components/ClassroomQRPlacard';
 import StatusTag from '../../components/StatusTag';
 
 const { Text, Title, Paragraph } = Typography;
@@ -26,6 +28,7 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
   // Sub-modals
   const [isEditRoomOpen, setIsEditRoomOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
+  const [isQRPlacardOpen, setIsQRPlacardOpen] = useState(false);
 
   useEffect(() => {
     if (!locationId) return;
@@ -237,11 +240,39 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
                     </Button>
                   </Popconfirm>
                 )}
+
+                <Button
+                  block
+                  icon={<QrcodeOutlined />}
+                  onClick={() => setIsQRPlacardOpen(true)}
+                  style={{
+                    fontWeight: 600,
+                    color: '#1E3A8A',
+                    borderColor: '#93C5FD',
+                    background: '#EFF6FF'
+                  }}
+                >
+                  View / Print Classroom QR Placard
+                </Button>
               </Space>
             </div>
           </div>
         ) : null}
       </Drawer>
+
+      {/* Classroom QR Placard Modal */}
+      {isQRPlacardOpen && data && (
+        <Modal
+          open={isQRPlacardOpen}
+          onCancel={() => setIsQRPlacardOpen(false)}
+          footer={null}
+          width={680}
+          centered
+          destroyOnClose
+        >
+          <ClassroomQRPlacard location={data} />
+        </Modal>
+      )}
 
       {/* Edit Room Modal */}
       {isEditRoomOpen && data && (

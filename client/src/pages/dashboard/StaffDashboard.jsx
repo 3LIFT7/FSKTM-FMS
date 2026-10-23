@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import dayjs from 'dayjs';
 import { Row, Col, Card, Statistic, Table, Button, Popconfirm, Empty, Space, Typography, Tag, Modal, Input, message } from 'antd';
 import {
   ToolOutlined,
@@ -11,6 +12,7 @@ import {
   PlusOutlined,
   AppstoreOutlined,
   ReloadOutlined,
+  CompassOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import LogMaintenanceModal from '../maintenance/LogMaintenanceModal';
@@ -124,6 +126,40 @@ export default function StaffDashboard() {
     }
   }
 
+  // Group weekly recurring bookings by recurrence_group_id so the technician approves 1 request for the full semester
+  const groupedPendingBookings = useMemo(() => {
+    const groupMap = new Map();
+    const list = [];
+
+    pendingBookings.forEach(b => {
+      const gId = b.recurrence_group_id;
+      if (gId) {
+        if (!groupMap.has(gId)) {
+          const item = {
+            ...b,
+            allSessions: [b],
+            is_recurring_series: true,
+            total_weeks: 1,
+            first_date: b.start_time,
+            last_date: b.start_time,
+          };
+          groupMap.set(gId, item);
+          list.push(item);
+        } else {
+          const item = groupMap.get(gId);
+          item.allSessions.push(b);
+          item.total_weeks += 1;
+          if (new Date(b.start_time) < new Date(item.first_date)) item.first_date = b.start_time;
+          if (new Date(b.start_time) > new Date(item.last_date)) item.last_date = b.start_time;
+        }
+      } else {
+        list.push({ ...b, is_recurring_series: false });
+      }
+    });
+
+    return list;
+  }, [pendingBookings]);
+
   const bookingColumns = [
     {
       title: 'Facility',
@@ -148,19 +184,49 @@ export default function StaffDashboard() {
       ),
     },
     {
-      title: 'Purpose',
-      dataIndex: 'purpose',
+      title: 'Purpose / Course',
       key: 'purpose',
-      ellipsis: true,
+      render: (_, record) => (
+        <div>
+          {record.course_id && (
+            <Tag color="cyan" style={{ fontWeight: 700, marginBottom: 2 }}>
+              {record.course_id}
+            </Tag>
+          )}
+          <div style={{ fontSize: 12 }}>{record.purpose}</div>
+          {record.is_recurring_series && (
+            <Tag color="purple" style={{ fontWeight: 700, marginTop: 4, borderRadius: 6 }}>
+              📅 Entire Semester ({record.total_weeks} Weeks)
+            </Tag>
+          )}
+        </div>
+      ),
     },
     {
       title: 'Time Window',
       key: 'time',
-      render: (_, record) => (
-        <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
-          {formatDateTime(record.start_time)} &rarr; {formatDateTime(record.end_time)}
-        </span>
-      ),
+      render: (_, record) => {
+        if (record.is_recurring_series) {
+          const dayName = dayjs(record.start_time).format('dddd');
+          const timeRange = `${dayjs(record.start_time).format('HH:mm')} – ${dayjs(record.end_time).format('HH:mm')}`;
+          const dateSpan = `${dayjs(record.first_date).format('DD/MM/YYYY')} → ${dayjs(record.last_date).format('DD/MM/YYYY')}`;
+          return (
+            <div>
+              <div style={{ fontWeight: 700, color: '#1E3A8A' }}>
+                Every {dayName} • {timeRange}
+              </div>
+              <div style={{ fontSize: 11, color: '#64748B' }}>
+                {dateSpan} ({record.total_weeks} weekly sessions)
+              </div>
+            </div>
+          );
+        }
+        return (
+          <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
+            {formatDateTime(record.start_time)} &rarr; {formatDateTime(record.end_time)}
+          </span>
+        );
+      },
     },
     {
       title: 'Actions',
@@ -173,9 +239,9 @@ export default function StaffDashboard() {
             icon={<CheckOutlined />}
             loading={actionLoadingId === record.booking_id}
             onClick={() => handleApproveBooking(record.booking_id)}
-            style={{ background: '#16A34A', borderColor: '#16A34A' }}
+            style={{ background: '#16A34A', borderColor: '#16A34A', fontWeight: 600 }}
           >
-            Approve
+            {record.is_recurring_series ? `Approve Series (${record.total_weeks} Wks)` : 'Approve'}
           </Button>
           <Button
             size="small"
@@ -186,7 +252,7 @@ export default function StaffDashboard() {
               setRejectReason('');
             }}
           >
-            Reject
+            {record.is_recurring_series ? 'Reject Series' : 'Reject'}
           </Button>
         </Space>
       ),
@@ -245,6 +311,11 @@ export default function StaffDashboard() {
           </div>
 
           <Space wrap size="small">
+            <Link to="/map">
+              <Button icon={<CompassOutlined />} style={{ fontWeight: 600 }}>
+                Interactive Map
+              </Button>
+            </Link>
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -276,7 +347,7 @@ export default function StaffDashboard() {
           <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2vw, 16px)' }}>
             <Statistic
               title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Booking Approvals</span>}
-              value={pendingBookings.length}
+              value={groupedPendingBookings.length}
               valueStyle={{ color: '#1E3A8A', fontWeight: 800, fontSize: 'clamp(18px, 4vw, 24px)' }}
               prefix={<CalendarOutlined />}
             />
@@ -310,7 +381,7 @@ export default function StaffDashboard() {
           <Space>
             <CalendarOutlined style={{ color: '#1E3A8A' }} />
             <span>Pending Approvals Queue</span>
-            <Tag color="warning">{pendingBookings.length}</Tag>
+            <Tag color="warning">{groupedPendingBookings.length}</Tag>
           </Space>
         }
         extra={<Link to="/rooms">Manage Facilities &rarr;</Link>}
@@ -318,7 +389,7 @@ export default function StaffDashboard() {
         style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
       >
         <Table
-          dataSource={pendingBookings}
+          dataSource={groupedPendingBookings}
           columns={bookingColumns}
           rowKey="booking_id"
           loading={loading}
@@ -389,7 +460,7 @@ export default function StaffDashboard() {
                     <div>
                       <Text strong style={{ color: '#92400E' }}>{loc.name}</Text>
                       <div style={{ fontSize: 11, color: '#B45309' }}>
-                        Floor {loc.floor} • {loc.code}
+                        {loc.floor?.startsWith('Blok') ? loc.floor : `Floor ${loc.floor}`} • {loc.code}
                       </div>
                     </div>
                     <StatusTag status="Maintenance" />

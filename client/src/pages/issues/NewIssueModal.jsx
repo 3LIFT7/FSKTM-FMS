@@ -106,7 +106,7 @@ export default function NewIssueModal({ isOpen, onClose, onCreated }) {
               filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
               options={locations.map(loc => ({
                 value: loc.location_id,
-                label: `${loc.name} (${loc.code}) — Floor ${loc.floor}`,
+                label: `${loc.name} (${loc.code}) — ${loc.floor?.startsWith('Blok') ? loc.floor : `Floor ${loc.floor}`}`,
               }))}
             />
           </Form.Item>

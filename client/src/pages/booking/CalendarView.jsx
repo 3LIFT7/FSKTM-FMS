@@ -160,11 +160,14 @@ export default function CalendarView() {
                 setSelectedLocationId('All');
               }}
               options={[
-                { value: 'All', label: 'All Floors (Ground to Level 3)' },
+                { value: 'All', label: 'All Floors & Blocks' },
                 { value: 'Ground', label: 'Ground Floor' },
-                { value: 'Level 1', label: 'Level 1' },
-                { value: 'Level 2', label: 'Level 2' },
-                { value: 'Level 3', label: 'Level 3' },
+                { value: 'First', label: 'First Floor' },
+                { value: 'Second', label: 'Second Floor' },
+                { value: 'Third', label: 'Third Floor' },
+                { value: 'Blok B8', label: 'Blok B8' },
+                { value: 'Blok C12', label: 'Blok C12' },
+                { value: 'Blok L Perpustakaan', label: 'Blok L Perpustakaan' },
               ]}
             />
           </Col>

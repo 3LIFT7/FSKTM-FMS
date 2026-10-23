@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Segmented, DatePicker, TimePicker, Button, Radio, Space, Typography, Tag, Row, Col, Alert, Tooltip, Grid } from 'antd';
+import { Card, Segmented, DatePicker, TimePicker, Button, Space, Typography, Tag, Row, Col, Alert, Tooltip, Grid } from 'antd';
 import {
   CompassOutlined,
   CalendarOutlined,
@@ -31,10 +31,9 @@ export default function InteractiveFloorMap({ onBookRoom }) {
   const [loading, setLoading] = useState(true);
   const [selectedLocationId, setSelectedLocationId] = useState(null);
 
-  // Time-slot availability filter
-  const [viewTimeMode, setViewTimeMode] = useState('now');
+  // Time-slot availability filter (custom date and time)
   const [customDate, setCustomDate] = useState(dayjs());
-  const [customTime, setCustomTime] = useState(dayjs().hour(10).minute(0));
+  const [customTime, setCustomTime] = useState(dayjs());
 
   // Booking modal state
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -62,23 +61,25 @@ export default function InteractiveFloorMap({ onBookRoom }) {
     }
   }
 
-  // Lookup map by room code & name
+  // Lookup map by room code & name (supports floor prefix matching to avoid collisions)
   const locationLookup = useMemo(() => {
     const map = {};
     locations.forEach(loc => {
-      map[loc.code.toUpperCase()] = loc;
-      map[loc.name.toUpperCase()] = loc;
+      map[`${loc.floor}_${loc.code}`.toUpperCase()] = loc;
+      map[`${loc.floor}_${loc.name}`.toUpperCase()] = loc;
+      if (!map[loc.code.toUpperCase()]) map[loc.code.toUpperCase()] = loc;
+      if (!map[loc.name.toUpperCase()]) map[loc.name.toUpperCase()] = loc;
     });
     return map;
   }, [locations]);
 
   // Target timestamp to evaluate availability against
   const targetCheckTime = useMemo(() => {
-    if (viewTimeMode === 'now') return new Date();
+    if (!customDate || !customTime) return new Date();
     const dateStr = customDate.format('YYYY-MM-DD');
     const timeStr = customTime.format('HH:mm:00');
     return new Date(`${dateStr}T${timeStr}`);
-  }, [viewTimeMode, customDate, customTime]);
+  }, [customDate, customTime]);
 
   // Active bookings at check time
   const activeBookingsAtTime = useMemo(() => {
@@ -99,7 +100,11 @@ export default function InteractiveFloorMap({ onBookRoom }) {
 
   // Render individual architectural room box
   const renderRoomBox = (roomDef, extraClass = '') => {
-    const backendLoc = locationLookup[roomDef.code.toUpperCase()] || locationLookup[roomDef.name.toUpperCase()];
+    const backendLoc =
+      locationLookup[`${currentFloor}_${roomDef.code}`.toUpperCase()] ||
+      locationLookup[`${currentFloor}_${roomDef.name}`.toUpperCase()] ||
+      locationLookup[roomDef.code.toUpperCase()] ||
+      locationLookup[roomDef.name.toUpperCase()];
     const isMaintenance = backendLoc?.status === 'maintenance';
     const activeBooking = backendLoc ? activeBookingsAtTime[backendLoc.location_id] : null;
     const isBooked = Boolean(activeBooking);
@@ -169,6 +174,13 @@ export default function InteractiveFloorMap({ onBookRoom }) {
               {activeBooking.purpose?.slice(0, 24)}...
             </div>
           )}
+
+          {roomDef.pic && (
+            <div style={{ fontSize: 10, color: '#475569', marginTop: 6, background: '#F8FAFC', padding: '2px 6px', borderRadius: 6, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontWeight: 700, color: '#1E293B' }}>PIC:</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{roomDef.pic}</span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontSize: 10, color: '#64748B' }}>
@@ -193,54 +205,46 @@ export default function InteractiveFloorMap({ onBookRoom }) {
       {/* Control Panel: Floor & Time Switcher */}
       <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <Row gutter={[16, 16]} align="middle" justify="space-between">
-          <Col xs={24} md={12}>
+          <Col xs={24} lg={15}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
-              Select Floor Level:
+              Select Floor Level / Block:
             </div>
-            <Segmented
-              block
-              size={isPhone ? 'middle' : 'large'}
-              value={currentFloor}
-              onChange={setCurrentFloor}
-              options={
-                isPhone
-                  ? [
-                      { label: 'Ground', value: 'Ground' },
-                      { label: 'Level 1', value: 'First' },
-                      { label: 'Level 2', value: 'Second' },
-                      { label: 'Level 3', value: 'Third' },
-                    ]
-                  : [
-                      { label: 'Ground Floor', value: 'Ground' },
-                      { label: 'First Floor', value: 'First' },
-                      { label: 'Second Floor', value: 'Second' },
-                      { label: 'Third Floor', value: 'Third' },
-                    ]
-              }
-              style={{ width: '100%', maxWidth: '100%' }}
-            />
+            <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+              <Segmented
+                size={isPhone ? 'small' : 'middle'}
+                value={currentFloor}
+                onChange={setCurrentFloor}
+                options={[
+                  { label: 'Ground Floor', value: 'Ground' },
+                  { label: 'First Floor', value: 'First' },
+                  { label: 'Second Floor', value: 'Second' },
+                  { label: 'Third Floor', value: 'Third' },
+                  { label: 'Blok B8', value: 'Blok B8' },
+                  { label: 'Blok C12', value: 'Blok C12' },
+                  { label: 'Blok L Perpustakaan', value: 'Blok L Perpustakaan' },
+                ]}
+              />
+            </div>
           </Col>
 
-          <Col xs={24} md={12}>
+          <Col xs={24} lg={9}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
               Evaluate Room Availability At:
             </div>
             <Space wrap>
-              <Radio.Group
-                value={viewTimeMode}
-                onChange={(e) => setViewTimeMode(e.target.value)}
-                buttonStyle="solid"
-              >
-                <Radio.Button value="now">Live Now</Radio.Button>
-                <Radio.Button value="custom">Custom Time</Radio.Button>
-              </Radio.Group>
-
-              {viewTimeMode === 'custom' && (
-                <>
-                  <DatePicker value={customDate} onChange={setCustomDate} format={DATE_FORMAT} />
-                  <TimePicker value={customTime} onChange={setCustomTime} format={TIME_FORMAT} minuteStep={15} />
-                </>
-              )}
+              <DatePicker
+                value={customDate}
+                onChange={(val) => setCustomDate(val || dayjs())}
+                format={DATE_FORMAT}
+                allowClear={false}
+              />
+              <TimePicker
+                value={customTime}
+                onChange={(val) => setCustomTime(val || dayjs())}
+                format={TIME_FORMAT}
+                minuteStep={15}
+                allowClear={false}
+              />
             </Space>
           </Col>
         </Row>
@@ -268,10 +272,10 @@ export default function InteractiveFloorMap({ onBookRoom }) {
       {/* Main Architectural Floor Plan Visualizer */}
       <Card
         title={
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Space>
               <CompassOutlined style={{ color: '#1E3A8A' }} />
-              <span style={{ fontWeight: 800 }}>FSKTM {floorPlan.name.toUpperCase()} WING MAP</span>
+              <span style={{ fontWeight: 800 }}>FSKTM {floorPlan.name.toUpperCase()} MAP</span>
             </Space>
             <Tag color="blue">{floorPlan.label}</Tag>
           </div>
@@ -297,9 +301,9 @@ export default function InteractiveFloorMap({ onBookRoom }) {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #FEF3C7', pb: 8 }}>
                   <Text strong style={{ color: '#92400E', fontSize: 13 }}>
-                    West Wing (Tutorial Rooms & Labs)
+                    {floorPlan.westWing.title || 'West Wing (Tutorial Rooms & Labs)'}
                   </Text>
-                  <Tag color="gold" style={{ fontSize: 10 }}>Angled Wing</Tag>
+                  <Tag color="gold" style={{ fontSize: 10 }}>{floorPlan.westWing.tag || 'Wing A'}</Tag>
                 </div>
 
                 {/* West Wing Top Row */}
@@ -349,16 +353,20 @@ export default function InteractiveFloorMap({ onBookRoom }) {
             >
               <div style={{ width: '100%' }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
-                  CENTRAL CORE
+                  {floorPlan.centerTitle || 'CENTRAL CORE'}
                 </div>
 
                 {/* Lift Box */}
                 <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <div style={{ fontSize: 24, marginBottom: 4 }}>🛗</div>
+                  <div style={{ fontSize: 24, marginBottom: 4 }}>
+                    {floorPlan.centerTitle ? '🏛️' : '🛗'}
+                  </div>
                   <Text strong style={{ fontSize: 12, color: '#334155', display: 'block' }}>
-                    ELEVATOR LOBBY
+                    {floorPlan.centerTitle || 'ELEVATOR LOBBY'}
                   </Text>
-                  <Text type="secondary" style={{ fontSize: 10 }}>Core Lifts 1 & 2</Text>
+                  <Text type="secondary" style={{ fontSize: 10 }}>
+                    {floorPlan.centerDesc || 'Core Lifts 1 & 2'}
+                  </Text>
                 </div>
 
                 <div style={{ width: 10, height: 40, background: '#CBD5E1', borderRadius: 99, margin: '8px auto' }} />
@@ -367,10 +375,10 @@ export default function InteractiveFloorMap({ onBookRoom }) {
                 <div style={{ background: '#E2E8F0', borderRadius: 12, padding: 12, marginTop: 8 }}>
                   <BankOutlined style={{ fontSize: 18, color: '#64748B', marginBottom: 4 }} />
                   <div style={{ fontWeight: 800, fontSize: 11, color: '#475569' }}>
-                    Administrative Offices
+                    {floorPlan.centerTitle ? 'Administrative Desk' : 'Administrative Offices'}
                   </div>
                   <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>
-                    Dean's Office & Academic Suites
+                    {floorPlan.centerDesc ? 'Student Affairs & Support' : "Dean's Office & Academic Suites"}
                   </div>
                 </div>
               </div>
@@ -404,37 +412,43 @@ export default function InteractiveFloorMap({ onBookRoom }) {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #E0F2FE', pb: 8 }}>
                   <Text strong style={{ color: '#0369A1', fontSize: 13 }}>
-                    East Wing (Specialized Computer Labs)
+                    {floorPlan.eastWing.title || 'East Wing (Specialized Computer Labs)'}
                   </Text>
-                  <Tag color="cyan" style={{ fontSize: 10 }}>Dual Row Labs</Tag>
+                  <Tag color="cyan" style={{ fontSize: 10 }}>{floorPlan.eastWing.tag || 'Wing B'}</Tag>
                 </div>
 
                 {/* East Wing Top Row */}
-                <div style={{ marginBottom: 6 }}>
-                  <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                    North Labs Row
-                  </Text>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
-                    {floorPlan.eastWing.rowTop.map(room => renderRoomBox(room))}
+                {floorPlan.eastWing.rowTop.length > 0 && (
+                  <div style={{ marginBottom: 6 }}>
+                    <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                      {floorPlan.eastWing.rowBottom.length > 0 ? 'North Row' : 'Facility Area'}
+                    </Text>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                      {floorPlan.eastWing.rowTop.map(room => renderRoomBox(room))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Main Hallway Corridor */}
-                <div style={{ textAlign: 'center', margin: '10px 0', borderTop: '2px dashed #7DD3FC', position: 'relative' }}>
-                  <span style={{ position: 'relative', top: -10, background: '#E0F2FE', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#0369A1' }}>
-                    East Lab Corridor
-                  </span>
-                </div>
+                {floorPlan.eastWing.rowBottom.length > 0 && (
+                  <div style={{ textAlign: 'center', margin: '10px 0', borderTop: '2px dashed #7DD3FC', position: 'relative' }}>
+                    <span style={{ position: 'relative', top: -10, background: '#E0F2FE', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#0369A1' }}>
+                      Corridor
+                    </span>
+                  </div>
+                )}
 
                 {/* East Wing Bottom Row */}
-                <div>
-                  <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                    South Labs Row
-                  </Text>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
-                    {floorPlan.eastWing.rowBottom.map(room => renderRoomBox(room))}
+                {floorPlan.eastWing.rowBottom.length > 0 && (
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                      South Row
+                    </Text>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                      {floorPlan.eastWing.rowBottom.map(room => renderRoomBox(room))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               <div style={{ marginTop: 16, paddingTop: 8, borderTop: '1px solid #E0F2FE', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#0369A1', fontWeight: 600 }}>

@@ -39,7 +39,7 @@ export default function Sidebar({ isOpen, onClose }) {
       label: 'Interactive Floor Map',
       path: '/map',
       icon: MapPin,
-      badge: '4 Floors'
+      badge: '7 Levels'
     });
 
     // Facility Calendar (Available to all)

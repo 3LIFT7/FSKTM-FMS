@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const issuesController = require('../controllers/issuesController');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, optionalAuth, requireRole } = require('../middleware/auth');
 
 // Multer storage
 const storage = multer.diskStorage({
@@ -18,7 +18,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 router.get('/', authenticateToken, issuesController.getIssues);
-router.post('/', authenticateToken, upload.single('photo'), issuesController.createIssue);
+router.post('/', optionalAuth, upload.single('photo'), issuesController.createIssue);
 router.patch('/:id/status', authenticateToken, requireRole(['technician', 'manager']), issuesController.updateIssueStatus);
 
 module.exports = router;
+

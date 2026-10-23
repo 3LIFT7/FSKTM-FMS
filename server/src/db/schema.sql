@@ -93,6 +93,22 @@ CREATE TABLE IF NOT EXISTS maintenance_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS room_feedback (
+    feedback_id SERIAL PRIMARY KEY,
+    location_id INT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+    user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+    reporter_name VARCHAR(255),
+    reporter_email VARCHAR(255),
+    reporter_role VARCHAR(50) DEFAULT 'student',
+    rating INT DEFAULT 5 CHECK (rating >= 1 AND rating <= 5),
+    category VARCHAR(100) DEFAULT 'General',
+    comments TEXT NOT NULL,
+    cleanliness_rating INT DEFAULT 5,
+    equipment_rating INT DEFAULT 5,
+    ac_rating INT DEFAULT 5,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS system_settings (
     setting_key VARCHAR(100) PRIMARY KEY,
     setting_value TEXT NOT NULL,
@@ -107,3 +123,4 @@ VALUES
     ('operating_hours_end', '20:00', 'Facility booking day end time'),
     ('max_booking_duration_hours', '4', 'Maximum single booking duration in hours')
 ON CONFLICT (setting_key) DO NOTHING;
+

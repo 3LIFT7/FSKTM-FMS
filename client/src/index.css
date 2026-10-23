@@ -178,3 +178,43 @@ html, body {
   }
 }
 
+/* Print styles for classroom QR placards */
+@media print {
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .no-print,
+  .ant-layout-header,
+  .ant-layout-sider,
+  .ant-btn,
+  .ant-modal-mask,
+  .ant-modal-close,
+  .ant-modal-footer {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .placard-print-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .placard-page {
+    page-break-after: always !important;
+    break-after: page !important;
+    box-shadow: none !important;
+    border: 2px solid #0F172A !important;
+    margin: 0 auto 30px auto !important;
+    max-width: 750px !important;
+  }
+}
+
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
