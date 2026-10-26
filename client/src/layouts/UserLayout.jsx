@@ -24,8 +24,8 @@ const { useBreakpoint } = Grid;
 export const menus = {
   Student: ['dashboard', 'availability', 'devices', 'my-bookings', 'report-issue'],
   Lecturer: ['dashboard', 'availability', 'book-room', 'devices', 'my-bookings', 'report-issue'],
-  Technician: ['dashboard', 'bookings', 'devices', 'reports', 'maintenance'],
-  Manager: ['dashboard', 'bookings', 'devices', 'reports', 'maintenance', 'users', 'import', 'analytics'],
+  Technician: ['dashboard', 'bookings', 'devices', 'reports'],
+  Manager: ['dashboard', 'bookings', 'devices', 'reports', 'users', 'import', 'analytics'],
 };
 
 export default function UserLayout() {

@@ -4,6 +4,72 @@ const crypto = require('crypto');
 const { query } = require('../config/db');
 const { JWT_SECRET } = require('../middleware/auth');
 
+// University email domain validator
+// Strict University email domain validator for Students & Lecturers
+function validateUniversityEmail(email, requestedRole = null) {
+  const trimmed = (email || '').trim().toLowerCase();
+
+  if (!trimmed) {
+    return {
+      valid: false,
+      error: 'University email address is required.'
+    };
+  }
+
+  // 1. Student Siswamail domain: <matric>@student.uthm.edu.my
+  if (trimmed.endsWith('@student.uthm.edu.my')) {
+    if (requestedRole && requestedRole !== 'student') {
+      return {
+        valid: false,
+        error: `Account role mismatch: "${trimmed}" is a student Siswamail address (@student.uthm.edu.my) and cannot be used for the ${requestedRole} portal. Please sign in via the Student Portal.`
+      };
+    }
+
+    const rawMatric = trimmed.split('@')[0].toUpperCase().trim();
+    // Clean and validate matriculation number (e.g. AI230182, BI220045, CI210033)
+    const matricNumber = rawMatric.replace(/[^A-Z0-9]/g, '');
+
+    if (!matricNumber || matricNumber.length < 5) {
+      return {
+        valid: false,
+        error: `Invalid student email format. The email prefix "${rawMatric}" is not a valid UTHM student matriculation number.`
+      };
+    }
+
+    return {
+      valid: true,
+      role: 'student',
+      matricNumber: matricNumber,
+      email: trimmed
+    };
+  }
+
+  // 2. Lecturer faculty domain: <username>@uthm.edu.my (excluding @student.uthm.edu.my)
+  if (trimmed.endsWith('@uthm.edu.my')) {
+    if (requestedRole && requestedRole !== 'lecturer') {
+      return {
+        valid: false,
+        error: `Account role mismatch: "${trimmed}" is an official faculty/lecturer address (@uthm.edu.my) and cannot be used for the ${requestedRole} portal. Please sign in via the Lecturer Portal.`
+      };
+    }
+
+    const staffUsername = trimmed.split('@')[0].toUpperCase().trim();
+
+    return {
+      valid: true,
+      role: 'lecturer',
+      staffId: staffUsername,
+      email: trimmed
+    };
+  }
+
+  // 3. ANY other domain is strictly prohibited (e.g. gmail.com, yahoo.com)
+  return {
+    valid: false,
+    error: 'Access Restricted: Only official UTHM Google accounts are permitted. Students must use Siswamail (<matric>@student.uthm.edu.my) and lecturers must use faculty email (<name>@uthm.edu.my). Personal accounts (@gmail.com, etc.) are strictly prohibited.'
+  };
+}
+
 // POST /api/auth/register
 async function register(req, res) {
   try {
@@ -25,10 +91,10 @@ async function register(req, res) {
       });
     }
 
-    // 3. Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      return res.status(400).json({ error: 'Please enter a valid university email address.' });
+    // 3. Strict University Email validation
+    const emailValidation = validateUniversityEmail(trimmedEmail, selectedRole);
+    if (!emailValidation.valid) {
+      return res.status(400).json({ error: emailValidation.error });
     }
 
     // Password strength check
@@ -38,19 +104,21 @@ async function register(req, res) {
 
     let finalMatricOrStaffId = null;
     let finalSpecialization = null;
-    let finalDepartment = department ? department.trim() : 'FSKTM';
+    let finalDepartment = department ? department.trim() : 'Department of Software Engineering';
 
     // 4. Student specific validations
     if (selectedRole === 'student') {
-      if (!matric_number || !matric_number.trim()) {
+      const derivedMatric = matric_number && matric_number.trim() 
+        ? matric_number.trim().toUpperCase() 
+        : emailValidation.matricNumber;
+
+      if (!derivedMatric) {
         return res.status(400).json({ error: 'Matriculation number is required for student registration.' });
       }
 
-      const trimmedMatric = matric_number.trim().toUpperCase();
-
       // Rule: starts with "AI" or "BI" followed by 2-digit year (e.g. 21, 22, 23, 24) and digits (e.g. AI230182)
       const matricRegex = /^(AI|BI)\d{2}\d+$/;
-      if (!matricRegex.test(trimmedMatric)) {
+      if (!matricRegex.test(derivedMatric)) {
         return res.status(400).json({
           error: 'Invalid matriculation number format. Must start with "AI" or "BI" followed by the 2-digit year (e.g., AI230182, BI220045).'
         });
@@ -58,21 +126,15 @@ async function register(req, res) {
 
       // Specialization check: must be one of BIT, BIC, BIP, BIS, BIW, BIM
       const ALLOWED_SPECIALIZATIONS = ['BIT', 'BIC', 'BIP', 'BIS', 'BIW', 'BIM'];
-      if (!specialization || !specialization.trim()) {
-        return res.status(400).json({ 
-          error: 'Specialization is required for students. Choose from: BIT, BIC, BIP, BIS, BIW, BIM.' 
-        });
-      }
-
-      const trimmedSpec = specialization.trim().toUpperCase();
-      if (!ALLOWED_SPECIALIZATIONS.includes(trimmedSpec)) {
+      const chosenSpec = (specialization && specialization.trim()) ? specialization.trim().toUpperCase() : 'BIW';
+      if (!ALLOWED_SPECIALIZATIONS.includes(chosenSpec)) {
         return res.status(400).json({ 
           error: `Invalid specialization. Must be one of: ${ALLOWED_SPECIALIZATIONS.join(', ')}.` 
         });
       }
 
-      finalMatricOrStaffId = trimmedMatric;
-      finalSpecialization = trimmedSpec;
+      finalMatricOrStaffId = derivedMatric;
+      finalSpecialization = chosenSpec;
 
       const specDepartments = {
         BIT: 'Information Technology',
@@ -309,10 +371,238 @@ async function forgotPassword(req, res) {
   });
 }
 
+// Helper to verify authentic Google tokens via Google's official verification APIs
+async function verifyGoogleToken({ credential, access_token }) {
+  if (credential) {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Google ID token verification failed:', errText);
+      throw new Error('Google ID token verification failed.');
+    }
+    const data = await res.json();
+    const fullName = (data.name || '').trim() || [data.given_name, data.family_name].filter(Boolean).join(' ').trim();
+    return {
+      email: data.email,
+      name: fullName,
+      picture: data.picture,
+      sub: data.sub,
+      hd: data.hd,
+      email_verified: data.email_verified === 'true' || data.email_verified === true
+    };
+  }
+
+  if (access_token) {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${access_token}`
+      }
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Google access token verification failed:', errText);
+      throw new Error('Google OAuth access token verification failed.');
+    }
+    const data = await res.json();
+    const fullName = (data.name || '').trim() || [data.given_name, data.family_name].filter(Boolean).join(' ').trim();
+    return {
+      email: data.email,
+      name: fullName,
+      picture: data.picture,
+      sub: data.sub,
+      hd: data.hd,
+      email_verified: data.email_verified === true
+    };
+  }
+
+  return null;
+}
+
+// POST /api/auth/google
+// Universal Google Workspace SSO & Registration for Students and Lecturers
+async function googleAuth(req, res) {
+  try {
+    const { credential, access_token, email, name, role, portal, matric_number, specialization, department } = req.body;
+
+    let targetEmail = email;
+    let targetName = name;
+
+    // 1. Verify authentic Google OAuth token if provided
+    if (credential || access_token) {
+      try {
+        const verifiedGoogleUser = await verifyGoogleToken({ credential, access_token });
+        if (!verifiedGoogleUser || !verifiedGoogleUser.email) {
+          return res.status(401).json({ error: 'Failed to verify Google account credentials.' });
+        }
+        targetEmail = verifiedGoogleUser.email;
+        // Prioritize official Google profile name from the Google account
+        if (verifiedGoogleUser.name && verifiedGoogleUser.name.trim()) {
+          targetName = verifiedGoogleUser.name.trim();
+        }
+      } catch (err) {
+        return res.status(401).json({ error: 'Google verification failed: ' + (err.message || 'Invalid token') });
+      }
+    }
+
+    if (!targetEmail || !targetEmail.trim()) {
+      return res.status(400).json({ error: 'Google account email or token is required.' });
+    }
+
+    const trimmedEmail = targetEmail.trim().toLowerCase();
+    const targetRole = role || (portal && portal !== 'all' ? portal : null);
+
+    // 2. Strict domain check - Only @student.uthm.edu.my and @uthm.edu.my allowed
+    const emailValidation = validateUniversityEmail(trimmedEmail, targetRole);
+    if (!emailValidation.valid) {
+      return res.status(403).json({
+        error: emailValidation.error,
+        code: 'INVALID_UNIVERSITY_DOMAIN'
+      });
+    }
+
+    const assignedRole = emailValidation.role; // 'student' or 'lecturer'
+
+    // 3. Check if user already exists
+    const userResult = await query(
+      `SELECT user_id, name, email, role, matric_or_staff_id, department, specialization, created_at
+       FROM users
+       WHERE LOWER(email) = LOWER($1)`,
+      [trimmedEmail]
+    );
+
+    let user;
+    let isNewUser = false;
+
+    if (userResult.rows.length > 0) {
+      // Existing user: Log them in
+      user = userResult.rows[0];
+
+      // Role mismatch check against portal if specified
+      if (portal && portal !== 'all' && portal !== user.role) {
+        return res.status(403).json({
+          error: `Account role mismatch: Your Google account is registered as a ${user.role.toUpperCase()}. Please access via the ${user.role === 'student' ? 'Student' : 'Lecturer'} portal.`,
+          code: 'PORTAL_ROLE_MISMATCH',
+          actualRole: user.role
+        });
+      }
+
+      // Automatically sync authentic Google name if existing name was a placeholder or empty
+      const isPlaceholderName = !user.name || user.name.startsWith('Student (') || user.name.startsWith('Lecturer (');
+      if (targetName && targetName.trim() && (isPlaceholderName || targetName.trim() !== user.name)) {
+        await query('UPDATE users SET name = $1 WHERE user_id = $2', [targetName.trim(), user.user_id]);
+        user.name = targetName.trim();
+      }
+
+      // Ensure matric number is populated if missing
+      if (assignedRole === 'student' && (!user.matric_or_staff_id || user.matric_or_staff_id === 'UTHM') && emailValidation.matricNumber) {
+        await query('UPDATE users SET matric_or_staff_id = $1 WHERE user_id = $2', [emailValidation.matricNumber, user.user_id]);
+        user.matric_or_staff_id = emailValidation.matricNumber;
+      }
+    } else {
+      // New user registration via Google!
+      isNewUser = true;
+
+      // Authentic student or lecturer name directly from Google account
+      const fallbackName = assignedRole === 'student'
+        ? `Student (${emailValidation.matricNumber})`
+        : `Lecturer (${emailValidation.staffId || trimmedEmail.split('@')[0]})`;
+      const finalName = (targetName && targetName.trim()) 
+        ? targetName.trim() 
+        : (name && name.trim()) 
+          ? name.trim() 
+          : fallbackName;
+
+      let finalMatricOrStaffId = null;
+      let finalSpecialization = null;
+      let finalDepartment = department ? department.trim() : 'Faculty of Computer Science and Information Technology (FSKTM)';
+
+      if (assignedRole === 'student') {
+        // Automatically extracted from student's Siswamail prefix (e.g. AI230182)
+        finalMatricOrStaffId = emailValidation.matricNumber;
+
+        // Auto-detect specialization from matric prefix if possible
+        const matricUpper = finalMatricOrStaffId.toUpperCase();
+        let chosenSpec = (specialization && specialization.trim()) ? specialization.trim().toUpperCase() : 'BIW';
+        if (matricUpper.includes('BIT')) chosenSpec = 'BIT';
+        else if (matricUpper.includes('BIC')) chosenSpec = 'BIC';
+        else if (matricUpper.includes('BIP')) chosenSpec = 'BIP';
+        else if (matricUpper.includes('BIS')) chosenSpec = 'BIS';
+        else if (matricUpper.includes('BIM')) chosenSpec = 'BIM';
+
+        const specDepartments = {
+          BIT: 'Department of Information Technology',
+          BIC: 'Department of Computer Systems and Networking',
+          BIP: 'Department of Artificial Intelligence',
+          BIS: 'Department of Information Systems',
+          BIW: 'Department of Software Engineering',
+          BIM: 'Department of Multimedia Computing'
+        };
+
+        finalSpecialization = chosenSpec;
+        finalDepartment = specDepartments[chosenSpec] || 'Department of Software Engineering';
+      } else {
+        // Lecturer: Staff username from email (e.g. norasri)
+        finalMatricOrStaffId = emailValidation.staffId ? `STAFF-${emailValidation.staffId}` : (req.body.staff_id ? req.body.staff_id.trim().toUpperCase() : ('UTHM-' + Math.floor(1000 + Math.random() * 9000)));
+        finalDepartment = department && department.trim() ? department.trim() : 'Faculty of Computer Science and Information Technology (FSKTM)';
+      }
+
+      // Generate random secure password for Google users
+      const randomPassword = crypto.randomBytes(32).toString('hex');
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(randomPassword, salt);
+
+      const insertResult = await query(
+        `INSERT INTO users (name, email, password_hash, role, matric_or_staff_id, department, specialization)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING user_id, name, email, role, matric_or_staff_id, department, specialization, created_at`,
+        [finalName, trimmedEmail, passwordHash, assignedRole, finalMatricOrStaffId, finalDepartment, finalSpecialization]
+      );
+
+      user = insertResult.rows[0];
+    }
+
+    // 3. Issue JWT Token & Cookie
+    const payload = {
+      user_id: user.user_id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      matric_or_staff_id: user.matric_or_staff_id,
+      department: user.department,
+      specialization: user.specialization
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+
+    res.cookie('fsktm_auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/'
+    });
+
+    return res.status(isNewUser ? 201 : 200).json({
+      success: true,
+      message: isNewUser
+        ? `Account registered successfully via Google! Welcome to FSKTM, ${user.name}.`
+        : `Signed in successfully via Google! Welcome back, ${user.name}.`,
+      user,
+      token,
+      isNewUser
+    });
+  } catch (err) {
+    console.error('googleAuth error:', err);
+    return res.status(500).json({ error: 'Google authentication failed. Please try again.' });
+  }
+}
+
 module.exports = {
   register,
   login,
+  googleAuth,
   logout,
   getMe,
-  forgotPassword
+  forgotPassword,
+  validateUniversityEmail
 };

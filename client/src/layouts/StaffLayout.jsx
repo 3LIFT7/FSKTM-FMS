@@ -62,11 +62,6 @@ export default function StaffLayout() {
         label: 'Breakdown Tickets',
       },
       {
-        key: '/maintenance',
-        icon: <ToolOutlined />,
-        label: 'Maintenance Logs',
-      },
-      {
         key: '/devices/manage',
         icon: <LaptopOutlined />,
         label: 'Device Counter & Loans',

@@ -119,12 +119,6 @@ export default function UsersManage() {
       render: (id) => (id ? <Text code>{id}</Text> : '-'),
     },
     {
-      title: 'Department / Faculty',
-      dataIndex: 'department',
-      key: 'department',
-      render: (dept) => dept || 'FSKTM',
-    },
-    {
       title: 'Role Authorization',
       key: 'role',
       width: 170,
@@ -256,10 +250,6 @@ export default function UsersManage() {
               <Input placeholder="e.g. L-1092 or AI230182" style={{ textTransform: 'uppercase' }} />
             </Form.Item>
           </div>
-
-          <Form.Item name="department" label="Department / Division">
-            <Input placeholder="Department of Software Engineering" />
-          </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, marginTop: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>

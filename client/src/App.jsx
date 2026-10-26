@@ -22,7 +22,6 @@ import CalendarView from './pages/booking/CalendarView';
 import IssueList from './pages/issues/IssueList';
 import DeviceCatalog from './pages/devices/DeviceCatalog';
 import DeviceManage from './pages/devices/DeviceManage';
-import MaintenanceList from './pages/maintenance/MaintenanceList';
 
 // Admin Modules
 import ScheduleImport from './pages/admin/ScheduleImport';
@@ -168,15 +167,8 @@ export default function App() {
               }
             />
 
-            {/* Maintenance Records & Reminders (Staff) */}
-            <Route
-              path="/maintenance"
-              element={
-                <ProtectedRoute allowedRoles={['technician', 'manager']}>
-                  <MaintenanceList />
-                </ProtectedRoute>
-              }
-            />
+            {/* Maintenance Logs route redirect */}
+            <Route path="/maintenance" element={<Navigate to="/staff" replace />} />
 
             {/* Room Facilities Control (Staff) */}
             <Route

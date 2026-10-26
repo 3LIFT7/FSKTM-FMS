@@ -10,10 +10,14 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   ClockCircleOutlined,
+  BarcodeOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
 import EditDeviceModal from '../../components/EditDeviceModal';
+import DeviceDetailModal from '../../components/DeviceDetailModal';
+import ImageInputPreview from '../../components/ImageInputPreview';
 import StatusTag from '../../components/StatusTag';
 import PageHeader from '../../components/PageHeader';
 import { formatDateTime } from '../../utils/date';
@@ -37,6 +41,7 @@ export default function DeviceManage() {
   // Modal states
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
+  const [viewingDevice, setViewingDevice] = useState(null);
   const [addForm] = Form.useForm();
   const [addMode, setAddMode] = useState('pool');
 
@@ -115,7 +120,9 @@ export default function DeviceManage() {
           name: values.name.trim(),
           category: values.category,
           serial_number: values.serial_number.trim(),
+          barcode: values.barcode ? values.barcode.trim() : null,
           specs: values.specs || null,
+          image_url: values.image_url ? values.image_url.trim() : null,
           is_loanable: isLoanable,
           location_id: locId,
           status: 'available',
@@ -276,10 +283,39 @@ export default function DeviceManage() {
       title: 'Device Asset',
       key: 'name',
       render: (_, record) => (
-        <div>
-          <Text strong>{record.name}</Text>
-          <div style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace' }}>
-            SN: {record.serial_number}
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+          onClick={() => setViewingDevice(record)}
+          title="Click to view full specs & asset details"
+        >
+          {record.image_url ? (
+            <img
+              src={record.image_url}
+              alt={record.name}
+              referrerPolicy="no-referrer"
+              style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          ) : (
+            <div style={{ width: 40, height: 40, borderRadius: 8, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', flexShrink: 0 }}>
+              <LaptopOutlined />
+            </div>
+          )}
+          <div>
+            <Text strong style={{ fontSize: 13, color: '#1E293B', display: 'block' }}>
+              {record.name}
+            </Text>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace' }}>
+                SN: {record.serial_number}
+              </span>
+              {record.barcode && (
+                <span style={{ fontSize: 10, color: '#0369A1', background: '#E0F2FE', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace', fontWeight: 600 }}>
+                  <BarcodeOutlined style={{ marginRight: 2 }} />
+                  {record.barcode}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       ),
@@ -306,11 +342,19 @@ export default function DeviceManage() {
       ),
     },
     {
-      title: 'Specs / Notes',
-      dataIndex: 'specs',
-      key: 'specs',
-      ellipsis: true,
-      render: (specs) => specs || '-',
+      title: 'Barcode Number',
+      dataIndex: 'barcode',
+      key: 'barcode',
+      render: (barcode) => barcode ? (
+        <Tag color="cyan" style={{ fontFamily: 'monospace', fontWeight: 600, padding: '2px 8px' }}>
+          <BarcodeOutlined style={{ marginRight: 4 }} />
+          {barcode}
+        </Tag>
+      ) : (
+        <Text type="secondary" style={{ fontStyle: 'italic', fontSize: 12 }}>
+          -
+        </Text>
+      ),
     },
     {
       title: 'Status',
@@ -325,8 +369,17 @@ export default function DeviceManage() {
         <Space size="small">
           <Button
             size="small"
+            icon={<EyeOutlined />}
+            onClick={() => setViewingDevice(record)}
+            title="View Specs & Details"
+          >
+            Specs
+          </Button>
+          <Button
+            size="small"
             icon={<EditOutlined />}
             onClick={() => setEditingDevice(record)}
+            title="Edit Asset"
           />
           <Popconfirm
             title="Delete Asset"
@@ -384,7 +437,7 @@ export default function DeviceManage() {
                   columns={loanColumns}
                   rowKey="loan_id"
                   loading={loading}
-                  pagination={{ pageSize: 8 }}
+                  pagination={false}
                   locale={{ emptyText: <Empty description="No equipment loan records" /> }}
                   size="small"
                   scroll={{ x: 'max-content' }}
@@ -440,10 +493,17 @@ export default function DeviceManage() {
                     columns={inventoryColumns}
                     rowKey="device_id"
                     loading={loading}
-                    pagination={{ pageSize: 8 }}
+                    pagination={false}
                     locale={{ emptyText: <Empty description="No hardware equipment found" /> }}
                     size="small"
                     scroll={{ x: 'max-content' }}
+                    onRow={(record) => ({
+                      onClick: (e) => {
+                        if (e.target.closest('button') || e.target.closest('.ant-popover') || e.target.closest('.ant-popconfirm')) return;
+                        setViewingDevice(record);
+                      },
+                      style: { cursor: 'pointer' },
+                    })}
                   />
                 </div>
               ),
@@ -472,9 +532,15 @@ export default function DeviceManage() {
             <Input placeholder="e.g. Meta Quest 3 VR Headset" />
           </Form.Item>
 
-          <Form.Item name="serial_number" label="Serial Number" rules={[{ required: true }]}>
-            <Input placeholder="e.g. SN-VR-2024-001" style={{ textTransform: 'uppercase' }} />
-          </Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Form.Item name="serial_number" label="Serial Number" rules={[{ required: true, message: 'Please enter serial number' }]}>
+              <Input placeholder="e.g. SN-VR-2024-001" style={{ textTransform: 'uppercase' }} />
+            </Form.Item>
+
+            <Form.Item name="barcode" label="Barcode Number (optional)" extra="Asset tag / barcode">
+              <Input placeholder="e.g. BC-VR-2024-001" prefix={<BarcodeOutlined style={{ color: '#64748B' }} />} allowClear />
+            </Form.Item>
+          </div>
 
           <Form.Item name="category" label="Category" rules={[{ required: true }]}>
             <Select>
@@ -518,6 +584,21 @@ export default function DeviceManage() {
             <Input.TextArea rows={2} placeholder="Optional hardware specs" />
           </Form.Item>
 
+          <ImageInputPreview
+            form={addForm}
+            fieldName="image_url"
+            label="Device Display Image URL"
+            extra="Provide a product image URL or click 'Upload File' to select a photo from your computer."
+            placeholder="https://... or /uploads/..."
+            presets={[
+              { label: 'Laptop', url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800' },
+              { label: 'VR Headset', url: 'https://images.unsplash.com/photo-1622979135225-d2ba269bc1df?w=800' },
+              { label: 'Projector', url: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=800' },
+              { label: 'Tablet / iPad', url: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=800' },
+            ]}
+            saveReminder="Click 'Register Device' below to finish registering this asset."
+          />
+
           <Form.Item style={{ marginBottom: 0, marginTop: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
               <Button onClick={() => setIsAddDeviceOpen(false)}>Cancel</Button>
@@ -528,6 +609,19 @@ export default function DeviceManage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Device Detail Modal */}
+      {viewingDevice && (
+        <DeviceDetailModal
+          isOpen={Boolean(viewingDevice)}
+          device={viewingDevice}
+          onClose={() => setViewingDevice(null)}
+          onEdit={(dev) => {
+            setViewingDevice(null);
+            setEditingDevice(dev);
+          }}
+        />
+      )}
 
       {/* Edit Device Modal */}
       {editingDevice && (

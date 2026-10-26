@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS locations (
     capacity INT DEFAULT 30,
     description TEXT,
     category VARCHAR(50) DEFAULT 'Lab',
+    image_url TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'maintenance')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -30,9 +31,11 @@ CREATE TABLE IF NOT EXISTS devices (
     name VARCHAR(255) NOT NULL,
     category VARCHAR(100) DEFAULT 'General',
     serial_number VARCHAR(100) UNIQUE NOT NULL,
+    barcode VARCHAR(100),
     location_id INT REFERENCES locations(location_id) ON DELETE SET NULL,
     is_loanable BOOLEAN DEFAULT FALSE,
     specs TEXT,
+    image_url TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'checked_out', 'maintenance', 'broken')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

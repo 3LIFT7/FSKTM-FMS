@@ -11,7 +11,9 @@ async function getAllDevices(req, res) {
         d.name,
         d.category,
         d.serial_number,
+        d.barcode,
         d.specs,
+        d.image_url,
         d.status,
         d.location_id,
         COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
@@ -50,7 +52,7 @@ async function getAllDevices(req, res) {
 
     if (search) {
       params.push(`%${search.toLowerCase()}%`);
-      sql += ` AND (LOWER(d.name) LIKE $${params.length} OR LOWER(d.serial_number) LIKE $${params.length} OR LOWER(d.category) LIKE $${params.length})`;
+      sql += ` AND (LOWER(d.name) LIKE $${params.length} OR LOWER(d.serial_number) LIKE $${params.length} OR LOWER(COALESCE(d.barcode, '')) LIKE $${params.length} OR LOWER(d.category) LIKE $${params.length})`;
     }
 
     sql += ' ORDER BY d.category, d.name ASC';
@@ -119,7 +121,7 @@ async function getDeviceById(req, res) {
 // POST /api/devices
 async function createDevice(req, res) {
   try {
-    const { name, category, serial_number, location_id, is_loanable, specs, status } = req.body;
+    const { name, category, serial_number, barcode, location_id, is_loanable, specs, status, image_url } = req.body;
     if (!name || !serial_number) {
       return res.status(400).json({ error: 'Device name and serial number are required.' });
     }
@@ -136,10 +138,20 @@ async function createDevice(req, res) {
       : (is_loanable !== undefined ? (is_loanable === true || is_loanable === 'true') : true);
 
     const result = await query(
-      `INSERT INTO devices (name, category, serial_number, location_id, is_loanable, specs, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO devices (name, category, serial_number, barcode, location_id, is_loanable, specs, status, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [name, category || 'General', serial_number.trim(), targetLocationId, targetIsLoanable, specs || '', status || 'available']
+      [
+        name,
+        category || 'General',
+        serial_number.trim(),
+        barcode ? barcode.trim() : null,
+        targetLocationId,
+        targetIsLoanable,
+        specs || '',
+        status || 'available',
+        image_url || null
+      ]
     );
 
     return res.status(201).json({ success: true, device: result.rows[0] });
@@ -153,7 +165,7 @@ async function createDevice(req, res) {
 async function updateDevice(req, res) {
   try {
     const { id } = req.params;
-    const { name, category, serial_number, location_id, is_loanable, specs, status } = req.body;
+    const { name, category, serial_number, barcode, location_id, is_loanable, specs, status, image_url } = req.body;
 
     const existingRes = await query('SELECT * FROM devices WHERE device_id = $1', [id]);
     if (existingRes.rows.length === 0) {
@@ -175,6 +187,7 @@ async function updateDevice(req, res) {
     const updatedName = name !== undefined ? name.trim() : current.name;
     const updatedCategory = category !== undefined ? category : current.category;
     const updatedSerial = serial_number !== undefined ? serial_number.trim() : current.serial_number;
+    const updatedBarcode = barcode !== undefined ? (barcode ? barcode.trim() : null) : current.barcode;
     
     // Allow explicitly setting location_id to null / General Pool
     const updatedLocationId =
@@ -196,18 +209,21 @@ async function updateDevice(req, res) {
 
     const updatedSpecs = specs !== undefined ? specs : current.specs;
     const updatedStatus = status !== undefined ? status : current.status;
+    const updatedImageUrl = image_url !== undefined ? (image_url ? image_url.trim() : null) : current.image_url;
 
     await query(
       `UPDATE devices
        SET name = $1,
            category = $2,
            serial_number = $3,
-           location_id = $4,
-           is_loanable = $5,
-           specs = $6,
-           status = $7
-       WHERE device_id = $8`,
-      [updatedName, updatedCategory, updatedSerial, updatedLocationId, updatedIsLoanable, updatedSpecs, updatedStatus, id]
+           barcode = $4,
+           location_id = $5,
+           is_loanable = $6,
+           specs = $7,
+           status = $8,
+           image_url = $9
+       WHERE device_id = $10`,
+      [updatedName, updatedCategory, updatedSerial, updatedBarcode, updatedLocationId, updatedIsLoanable, updatedSpecs, updatedStatus, updatedImageUrl, id]
     );
 
     const devWithLoc = await query(

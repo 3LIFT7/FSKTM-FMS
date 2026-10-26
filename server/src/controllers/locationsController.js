@@ -13,6 +13,7 @@ async function getAllLocations(req, res) {
         l.capacity,
         l.category,
         l.description,
+        l.image_url,
         l.status,
         l.created_at,
         (SELECT COUNT(*) FROM devices d WHERE d.location_id = l.location_id) AS device_count,
@@ -70,7 +71,7 @@ async function getLocationById(req, res) {
 
     // Fetch devices in this room
     const devResult = await query(
-      `SELECT device_id, name, category, serial_number, specs, status,
+      `SELECT device_id, name, category, serial_number, barcode, specs, status, image_url,
               COALESCE(is_loanable, FALSE) AS is_loanable
        FROM devices WHERE location_id = $1 ORDER BY name ASC`,
       [locId]
@@ -203,16 +204,16 @@ async function updateLocationStatus(req, res) {
 // POST /api/locations
 async function createLocation(req, res) {
   try {
-    const { code, name, floor, capacity, category, description, status } = req.body;
+    const { code, name, floor, capacity, category, description, status, image_url } = req.body;
     if (!code || !name || !floor) {
       return res.status(400).json({ error: 'Code, name, and floor are required.' });
     }
 
     const result = await query(
-      `INSERT INTO locations (code, name, floor, capacity, category, description, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO locations (code, name, floor, capacity, category, description, status, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [code, name, floor, capacity || 30, category || 'Lab', description || '', status || 'available']
+      [code, name, floor, capacity || 30, category || 'Lab', description || '', status || 'available', image_url || null]
     );
 
     return res.status(201).json({ success: true, location: result.rows[0] });
@@ -226,7 +227,7 @@ async function createLocation(req, res) {
 async function updateLocation(req, res) {
   try {
     const { id } = req.params;
-    const { code, name, floor, capacity, category, description, status, device_ids } = req.body;
+    const { code, name, floor, capacity, category, description, status, image_url, device_ids } = req.body;
 
     const existingRes = await query('SELECT * FROM locations WHERE location_id = $1', [id]);
     if (existingRes.rows.length === 0) {
@@ -241,6 +242,7 @@ async function updateLocation(req, res) {
     const updatedCategory = category !== undefined ? category : current.category;
     const updatedDescription = description !== undefined ? description : current.description;
     const updatedStatus = status !== undefined ? status : current.status;
+    const updatedImageUrl = image_url !== undefined ? (image_url ? image_url.trim() : null) : current.image_url;
 
     const result = await query(
       `UPDATE locations
@@ -250,10 +252,11 @@ async function updateLocation(req, res) {
            capacity = $4,
            category = $5,
            description = $6,
-           status = $7
-       WHERE location_id = $8
+           status = $7,
+           image_url = $8
+       WHERE location_id = $9
        RETURNING *`,
-      [updatedCode, updatedName, updatedFloor, updatedCapacity, updatedCategory, updatedDescription, updatedStatus, id]
+      [updatedCode, updatedName, updatedFloor, updatedCapacity, updatedCategory, updatedDescription, updatedStatus, updatedImageUrl, id]
     );
 
     // If device_ids array is provided, synchronize equipment inside this room
@@ -273,7 +276,7 @@ async function updateLocation(req, res) {
 
     // Fetch refreshed equipment in this room
     const devResult = await query(
-      `SELECT device_id, name, category, serial_number, specs, status
+      `SELECT device_id, name, category, serial_number, barcode, specs, status, image_url
        FROM devices WHERE location_id = $1 ORDER BY name ASC`,
       [id]
     );

@@ -331,9 +331,24 @@ export default function RoomsControl() {
       title: 'Facility Name',
       key: 'name',
       render: (_, loc) => (
-        <div>
-          <Text strong>{loc.name}</Text>
-          <div style={{ fontSize: 11, color: '#64748B' }}>{loc.category}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {loc.image_url ? (
+            <img
+              src={loc.image_url}
+              alt={loc.name}
+              referrerPolicy="no-referrer"
+              style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', border: '1px solid #E2E8F0' }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          ) : (
+            <div style={{ width: 40, height: 40, borderRadius: 8, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1E3A8A' }}>
+              <AppstoreOutlined />
+            </div>
+          )}
+          <div>
+            <Text strong>{loc.name}</Text>
+            <div style={{ fontSize: 11, color: '#64748B' }}>{loc.category}</div>
+          </div>
         </div>
       ),
     },
@@ -525,7 +540,7 @@ export default function RoomsControl() {
                     columns={facilityColumns}
                     rowKey="location_id"
                     loading={loading}
-                    pagination={{ pageSize: 8 }}
+                    pagination={false}
                     locale={{ emptyText: <Empty description="No facilities found" /> }}
                     size="small"
                     scroll={{ x: 'max-content' }}

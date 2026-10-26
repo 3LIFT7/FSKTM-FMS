@@ -20,9 +20,9 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
 
   if (!location) return null;
 
-  // The live scanning URL that students/lecturers open when scanning the QR code in class
+  // The live scanning URL that students/lecturers open when scanning the QR code to book this room
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-  const qrUrl = `${baseUrl}/room-feedback/${encodeURIComponent(location.code || location.location_id)}`;
+  const qrUrl = `${baseUrl}/booking/new?code=${encodeURIComponent(location.code || location.location_id)}&book=true`;
 
   const handlePrint = () => {
     window.print();
@@ -31,9 +31,9 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(qrUrl);
-      message.success(`Copied QR scan URL for ${location.name} to clipboard!`);
+      message.success(`Copied room booking link for ${location.name} to clipboard!`);
     } catch {
-      message.info(`Scan URL: ${qrUrl}`);
+      message.info(`Booking URL: ${qrUrl}`);
     }
   };
 
@@ -42,12 +42,12 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
     if (canvas) {
       const url = canvas.toDataURL('image/png');
       const a = document.createElement('a');
-      a.download = `FSKTM-QR-${location.code || 'Room'}.png`;
+      a.download = `FSKTM-Booking-QR-${location.code || 'Room'}.png`;
       a.href = url;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      message.success(`Downloaded QR code for ${location.name}`);
+      message.success(`Downloaded Booking QR code for ${location.name}`);
     } else {
       message.error('Could not extract QR canvas.');
     }
@@ -71,74 +71,9 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
         overflow: 'hidden'
       }}
     >
-      {/* Top Universiti Malaya & FSKTM Crest Banner */}
-      <div
-        style={{
-          borderBottom: '2px solid #E2E8F0',
-          paddingBottom: 16,
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, #0F172A 0%, #1E3A8A 100%)',
-              color: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 900,
-              fontSize: 16,
-              letterSpacing: 0.5,
-              boxShadow: '0 4px 10px rgba(30, 58, 138, 0.3)'
-            }}
-          >
-            FSKTM
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: '#1E3A8A',
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase'
-              }}
-            >
-              Universiti Malaya
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>
-              Fakulti Sains Komputer & Teknologi Maklumat
-            </div>
-          </div>
-        </div>
-
-        <Tag
-          color="blue"
-          style={{
-            borderRadius: 20,
-            padding: '4px 12px',
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.03em',
-            margin: 0,
-            border: '1px solid #93C5FD'
-          }}
-        >
-          SMART CLASSROOM
-        </Tag>
-      </div>
-
-      {/* Classroom Identification */}
+      {/* Classroom Identification & Booking Title */}
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Tag
             color="navy"
             style={{
@@ -155,7 +90,7 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
             {location.code}
           </Tag>
           <Tag
-            color="cyan"
+            color="blue"
             style={{
               fontWeight: 700,
               padding: '4px 10px',
@@ -163,7 +98,18 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
               fontSize: 12
             }}
           >
-            {location.category || 'Classroom'}
+            {location.category || 'Facility'}
+          </Tag>
+          <Tag
+            color="green"
+            style={{
+              fontWeight: 700,
+              padding: '4px 10px',
+              borderRadius: 8,
+              fontSize: 12
+            }}
+          >
+            INSTANT BOOKING
           </Tag>
         </div>
 
@@ -219,7 +165,7 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
         >
           <QRCode
             value={qrUrl}
-            size={190}
+            size={200}
             bordered={false}
             errorLevel="M"
           />
@@ -232,73 +178,15 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
             alignItems: 'center',
             gap: 6,
             fontWeight: 800,
-            fontSize: 14,
+            fontSize: 15,
             color: '#1E3A8A'
           }}
         >
-          <MobileOutlined style={{ fontSize: 16 }} />
-          <span>SCAN WITH MOBILE CAMERA</span>
+          <MobileOutlined style={{ fontSize: 18 }} />
+          <span>SCAN TO BOOK THIS ROOM</span>
         </div>
-        <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-          Instant room feedback & defect reporting • No app installation needed
-        </div>
-      </div>
-
-      {/* What You Can Do (Scan Features) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          gap: 10,
-          marginBottom: 20
-        }}
-      >
-        <div
-          style={{
-            background: '#FEF2F2',
-            border: '1px solid #FECACA',
-            borderRadius: 10,
-            padding: '10px 8px',
-            textAlign: 'center'
-          }}
-        >
-          <AlertOutlined style={{ color: '#DC2626', fontSize: 18, marginBottom: 4 }} />
-          <div style={{ fontWeight: 800, fontSize: 11, color: '#991B1B' }}>Report Issue</div>
-          <div style={{ fontSize: 10, color: '#7F1D1D', lineHeight: 1.2, marginTop: 2 }}>
-            AC, Projector, Socket, PC
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: '#FEFCE8',
-            border: '1px solid #FEF08A',
-            borderRadius: 10,
-            padding: '10px 8px',
-            textAlign: 'center'
-          }}
-        >
-          <StarOutlined style={{ color: '#D97706', fontSize: 18, marginBottom: 4 }} />
-          <div style={{ fontWeight: 800, fontSize: 11, color: '#92400E' }}>Class Feedback</div>
-          <div style={{ fontSize: 10, color: '#78350F', lineHeight: 1.2, marginTop: 2 }}>
-            Cleanliness & Comfort Rating
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: '#EFF6FF',
-            border: '1px solid #BFDBFE',
-            borderRadius: 10,
-            padding: '10px 8px',
-            textAlign: 'center'
-          }}
-        >
-          <CalendarOutlined style={{ color: '#2563EB', fontSize: 18, marginBottom: 4 }} />
-          <div style={{ fontWeight: 800, fontSize: 11, color: '#1E40AF' }}>Room Timetable</div>
-          <div style={{ fontSize: 10, color: '#1E3A8A', lineHeight: 1.2, marginTop: 2 }}>
-            Today's Scheduled Classes
-          </div>
+        <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
+          Scan with your mobile camera to check schedule and reserve instantly
         </div>
       </div>
 
@@ -315,13 +203,13 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
         }}
       >
         <div>
-          <span>URL: </span>
+          <span>Booking Link: </span>
           <code style={{ background: '#F1F5F9', padding: '2px 6px', borderRadius: 4, color: '#334155' }}>
             {qrUrl.replace(/^https?:\/\//, '')}
           </code>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <span>FSKTM Facilities & Maintenance Management</span>
+          <span>FSKTM Facility Reservation System</span>
         </div>
       </div>
 
@@ -373,7 +261,7 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
             rel="noopener noreferrer"
             style={{ fontWeight: 700, color: '#2563EB', padding: 0 }}
           >
-            Open Live Report Page &rarr;
+            Open Booking Page &rarr;
           </Button>
         </div>
       )}

@@ -89,12 +89,6 @@ export default function Sidebar({ isOpen, onClose }) {
       });
 
       items.push({
-        label: 'Maintenance Records',
-        path: '/maintenance',
-        icon: Wrench
-      });
-
-      items.push({
         label: 'Device Inventory & Loans',
         path: '/devices/manage',
         icon: Laptop

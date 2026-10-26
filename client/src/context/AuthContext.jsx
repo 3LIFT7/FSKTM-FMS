@@ -40,10 +40,46 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password, portal })
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (_) {
+      data = { error: res.statusText || 'Unexpected server response' };
+    }
 
     if (!res.ok) {
       const errorMsg = data.error || 'Login failed. Please check your credentials.';
+      const err = new Error(errorMsg);
+      err.code = data.code;
+      err.actualRole = data.actualRole;
+      throw err;
+    }
+
+    setUser(data.user);
+    return data.user;
+  }
+
+  async function googleAuth(authData) {
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify(authData)
+    });
+
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (_) {
+      data = { error: res.statusText || 'Unexpected server response' };
+    }
+
+    if (!res.ok) {
+      const errorMsg = data.error || 'Google authentication failed. Please try again.';
       const err = new Error(errorMsg);
       err.code = data.code;
       err.actualRole = data.actualRole;
@@ -64,7 +100,13 @@ export function AuthProvider({ children }) {
       body: JSON.stringify(registrationData)
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (_) {
+      data = { error: res.statusText || 'Unexpected server response' };
+    }
 
     if (!res.ok) {
       throw new Error(data.error || 'Registration failed.');
@@ -91,6 +133,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    googleAuth,
     register,
     logout,
     checkSession,

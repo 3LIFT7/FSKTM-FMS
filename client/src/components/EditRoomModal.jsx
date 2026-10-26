@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, InputNumber, Select, Button, Space, Table, Popconfirm, Alert, Typography, message } from 'antd';
 import { AppstoreOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import StatusTag from './StatusTag';
+import ImageInputPreview from './ImageInputPreview';
 
 const { Text } = Typography;
 
@@ -26,6 +27,7 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
         capacity: location.capacity || 30,
         category: location.category || 'Computer Lab',
         description: location.description || '',
+        image_url: location.image_url || '',
         status: location.status || 'available',
       });
     }
@@ -106,10 +108,14 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
       key: 'name',
     },
     {
-      title: 'Serial Number',
-      dataIndex: 'serial_number',
-      key: 'serial_number',
-      render: (sn) => <Text code>{sn}</Text>,
+      title: 'Identifiers',
+      key: 'identifiers',
+      render: (_, r) => (
+        <div>
+          <div><Text code>{r.serial_number}</Text></div>
+          {r.barcode && <div style={{ fontSize: 11, color: '#0369A1', marginTop: 2 }}>Barcode: {r.barcode}</div>}
+        </div>
+      ),
     },
     {
       title: 'Status',
@@ -209,6 +215,21 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
             <Input.TextArea rows={2} placeholder="Projector, Whiteboard, 40 PC Terminals, Air conditioned" />
           </Form.Item>
 
+          <ImageInputPreview
+            form={form}
+            fieldName="image_url"
+            label="Facility Display Image URL"
+            extra="Provide an image URL or click 'Upload File' to select a photo from your computer."
+            placeholder="https://... or /uploads/..."
+            presets={[
+              { label: 'FSKTM DK2 Lab', url: 'https://fsktm.um.edu.my/fsktm/images/DEV/DK2.jpg' },
+              { label: 'Computer Lab', url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800' },
+              { label: 'Lecture Theatre', url: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?w=800' },
+              { label: 'Seminar Room', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800' },
+            ]}
+            saveReminder="Click 'Save Facility Changes' below to apply this image to the facility."
+          />
+
           {/* Assigned In-Room Equipment Section */}
           <div style={{ marginTop: 20, marginBottom: 20 }}>
             <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>
@@ -227,7 +248,7 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
                   .filter(d => !assignedDevices.some(ad => ad.device_id === d.device_id))
                   .map(d => ({
                     value: String(d.device_id),
-                    label: `${d.name} (${d.serial_number})`,
+                    label: `${d.name} (${d.serial_number}${d.barcode ? ` • ${d.barcode}` : ''})`,
                   }))}
               />
               <Button icon={<PlusOutlined />} onClick={handleAssignDevice}>

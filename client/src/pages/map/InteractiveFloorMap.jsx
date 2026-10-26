@@ -26,6 +26,7 @@ export default function InteractiveFloorMap({ onBookRoom }) {
   const screens = useBreakpoint();
   const isPhone = screens.md === false;
   const [currentFloor, setCurrentFloor] = useState('Ground');
+  const [lastFsktmFloor, setLastFsktmFloor] = useState('Ground');
   const [locations, setLocations] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -97,12 +98,17 @@ export default function InteractiveFloorMap({ onBookRoom }) {
   }, [bookings, targetCheckTime]);
 
   const floorPlan = FLOOR_PLANS[currentFloor] || FLOOR_PLANS.Ground;
+  const isFsktmFloor = ['Ground', 'First', 'Second', 'Third'].includes(currentFloor);
+  const selectedBuilding = isFsktmFloor ? 'FSKTM' : currentFloor;
 
   // Render individual architectural room box
   const renderRoomBox = (roomDef, extraClass = '') => {
+    const floorKey = currentFloor === 'Library' ? 'BLOK L PERPUSTAKAAN' : currentFloor;
     const backendLoc =
       locationLookup[`${currentFloor}_${roomDef.code}`.toUpperCase()] ||
       locationLookup[`${currentFloor}_${roomDef.name}`.toUpperCase()] ||
+      locationLookup[`${floorKey}_${roomDef.code}`.toUpperCase()] ||
+      locationLookup[`${floorKey}_${roomDef.name}`.toUpperCase()] ||
       locationLookup[roomDef.code.toUpperCase()] ||
       locationLookup[roomDef.name.toUpperCase()];
     const isMaintenance = backendLoc?.status === 'maintenance';
@@ -202,32 +208,63 @@ export default function InteractiveFloorMap({ onBookRoom }) {
         subtitle="Architectural kiosk map of FSKTM featuring 4 floor plans with live room availability and maintenance indicators."
       />
 
-      {/* Control Panel: Floor & Time Switcher */}
+      {/* Control Panel: Building & Time Switcher */}
       <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <Row gutter={[16, 16]} align="middle" justify="space-between">
-          <Col xs={24} lg={15}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
-              Select Floor Level / Block:
+          <Col xs={24} xl={16} lg={15}>
+            {/* Select Building */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
+                Select Building:
+              </div>
+              <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
+                <Segmented
+                  size={isPhone ? 'small' : 'middle'}
+                  value={selectedBuilding}
+                  onChange={(val) => {
+                    if (val === 'FSKTM') {
+                      setCurrentFloor(lastFsktmFloor || 'Ground');
+                    } else {
+                      setCurrentFloor(val);
+                    }
+                  }}
+                  options={[
+                    { label: 'FSKTM', value: 'FSKTM' },
+                    { label: 'Blok B8', value: 'Blok B8' },
+                    { label: 'Blok C12', value: 'Blok C12' },
+                    { label: 'Library', value: 'Library' },
+                  ]}
+                />
+              </div>
             </div>
-            <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
-              <Segmented
-                size={isPhone ? 'small' : 'middle'}
-                value={currentFloor}
-                onChange={setCurrentFloor}
-                options={[
-                  { label: 'Ground Floor', value: 'Ground' },
-                  { label: 'First Floor', value: 'First' },
-                  { label: 'Second Floor', value: 'Second' },
-                  { label: 'Third Floor', value: 'Third' },
-                  { label: 'Blok B8', value: 'Blok B8' },
-                  { label: 'Blok C12', value: 'Blok C12' },
-                  { label: 'Blok L Perpustakaan', value: 'Blok L Perpustakaan' },
-                ]}
-              />
-            </div>
+
+            {/* Floor Selection (when FSKTM building is selected) */}
+            {isFsktmFloor && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
+                  Select Floor Level:
+                </div>
+                <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
+                  <Segmented
+                    size={isPhone ? 'small' : 'middle'}
+                    value={currentFloor}
+                    onChange={(val) => {
+                      setCurrentFloor(val);
+                      setLastFsktmFloor(val);
+                    }}
+                    options={[
+                      { label: 'Ground Floor', value: 'Ground' },
+                      { label: 'First Floor', value: 'First' },
+                      { label: 'Second Floor', value: 'Second' },
+                      { label: 'Third Floor', value: 'Third' },
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
           </Col>
 
-          <Col xs={24} lg={9}>
+          <Col xs={24} xl={7} lg={8}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>
               Evaluate Room Availability At:
             </div>
@@ -275,7 +312,9 @@ export default function InteractiveFloorMap({ onBookRoom }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <Space>
               <CompassOutlined style={{ color: '#1E3A8A' }} />
-              <span style={{ fontWeight: 800 }}>FSKTM {floorPlan.name.toUpperCase()} MAP</span>
+              <span style={{ fontWeight: 800 }}>
+                {isFsktmFloor ? `FSKTM ${floorPlan.name.toUpperCase()} MAP` : `${floorPlan.name.toUpperCase()} MAP`}
+              </span>
             </Space>
             <Tag color="blue">{floorPlan.label}</Tag>
           </div>
@@ -283,181 +322,222 @@ export default function InteractiveFloorMap({ onBookRoom }) {
         bordered={false}
         style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
       >
-        <Row gutter={[16, 16]} align="stretch">
-          {/* ================= WEST WING ================= */}
-          <Col xs={24} lg={10}>
-            <div
-              style={{
-                height: '100%',
-                background: '#FFFBEB',
-                border: '2px dashed #FDE68A',
-                borderRadius: 16,
-                padding: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #FEF3C7', pb: 8 }}>
-                  <Text strong style={{ color: '#92400E', fontSize: 13 }}>
-                    {floorPlan.westWing.title || 'West Wing (Tutorial Rooms & Labs)'}
-                  </Text>
-                  <Tag color="gold" style={{ fontSize: 10 }}>{floorPlan.westWing.tag || 'Wing A'}</Tag>
-                </div>
-
-                {/* West Wing Top Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: floorPlan.westWing.rowTop.length > 2 ? 'repeat(2, 1fr)' : '1fr', gap: 10, marginBottom: 12 }}>
-                  {floorPlan.westWing.rowTop.map(room => renderRoomBox(room))}
-                </div>
-
-                {/* Corridor Line */}
-                {floorPlan.westWing.rowBottom.length > 0 && (
-                  <div style={{ textAlign: 'center', margin: '8px 0', borderTop: '2px dashed #FCD34D', position: 'relative' }}>
-                    <span style={{ position: 'relative', top: -10, background: '#FEF3C7', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#92400E' }}>
-                      West Corridor
-                    </span>
-                  </div>
-                )}
-
-                {/* West Wing Bottom Row */}
-                {floorPlan.westWing.rowBottom.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
-                    {floorPlan.westWing.rowBottom.map(room => renderRoomBox(room))}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginTop: 16, paddingTop: 8, borderTop: '1px solid #FEF3C7', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#B45309', fontWeight: 600 }}>
-                <span>Restrooms & Water Station</span>
-                <span>Staircase A</span>
-              </div>
+        {/* If building is a single unit (Blok B8, Blok C12, Library) */}
+        {floorPlan.isSingleUnit ? (
+          <div
+            style={{
+              background: '#F8FAFC',
+              border: '2px solid #E2E8F0',
+              borderRadius: 16,
+              padding: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: 10 }}>
+              <Text strong style={{ color: '#1E293B', fontSize: 15 }}>
+                {floorPlan.facilityTitle || `${floorPlan.name} Facilities`}
+              </Text>
+              <Tag color="blue" style={{ fontSize: 11, padding: '2px 8px' }}>
+                {floorPlan.facilityTag || 'Single Unit Facility'}
+              </Tag>
             </div>
-          </Col>
 
-          {/* ================= CENTRAL CORE (Elevator Lobby & Offices) ================= */}
-          <Col xs={24} lg={4}>
             <div
               style={{
-                height: '100%',
-                background: '#F1F5F9',
-                border: '2px solid #E2E8F0',
-                borderRadius: 16,
-                padding: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                textAlign: 'center',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: 16,
               }}
             >
-              <div style={{ width: '100%' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
-                  {floorPlan.centerTitle || 'CENTRAL CORE'}
-                </div>
-
-                {/* Lift Box */}
-                <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <div style={{ fontSize: 24, marginBottom: 4 }}>
-                    {floorPlan.centerTitle ? '🏛️' : '🛗'}
-                  </div>
-                  <Text strong style={{ fontSize: 12, color: '#334155', display: 'block' }}>
-                    {floorPlan.centerTitle || 'ELEVATOR LOBBY'}
-                  </Text>
-                  <Text type="secondary" style={{ fontSize: 10 }}>
-                    {floorPlan.centerDesc || 'Core Lifts 1 & 2'}
-                  </Text>
-                </div>
-
-                <div style={{ width: 10, height: 40, background: '#CBD5E1', borderRadius: 99, margin: '8px auto' }} />
-
-                {/* Office Suite area */}
-                <div style={{ background: '#E2E8F0', borderRadius: 12, padding: 12, marginTop: 8 }}>
-                  <BankOutlined style={{ fontSize: 18, color: '#64748B', marginBottom: 4 }} />
-                  <div style={{ fontWeight: 800, fontSize: 11, color: '#475569' }}>
-                    {floorPlan.centerTitle ? 'Administrative Desk' : 'Administrative Offices'}
-                  </div>
-                  <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>
-                    {floorPlan.centerDesc ? 'Student Affairs & Support' : "Dean's Office & Academic Suites"}
-                  </div>
-                </div>
-              </div>
-
-              {currentFloor === 'Ground' && (
-                <div style={{ marginTop: 12, background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#1E3A8A' }}>
-                  <EnvironmentOutlined style={{ marginRight: 4 }} /> Kiosk Terminal
-                </div>
-              )}
-
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginTop: 12 }}>
-                Central Spine
-              </div>
+              {floorPlan.allRooms.map((room) => renderRoomBox(room))}
             </div>
-          </Col>
 
-          {/* ================= EAST WING (Dual Row Labs) ================= */}
-          <Col xs={24} lg={10}>
-            <div
-              style={{
-                height: '100%',
-                background: '#F0F9FF',
-                border: '2px dashed #BAE6FD',
-                borderRadius: 16,
-                padding: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #E0F2FE', pb: 8 }}>
-                  <Text strong style={{ color: '#0369A1', fontSize: 13 }}>
-                    {floorPlan.eastWing.title || 'East Wing (Specialized Computer Labs)'}
-                  </Text>
-                  <Tag color="cyan" style={{ fontSize: 10 }}>{floorPlan.eastWing.tag || 'Wing B'}</Tag>
-                </div>
-
-                {/* East Wing Top Row */}
-                {floorPlan.eastWing.rowTop.length > 0 && (
-                  <div style={{ marginBottom: 6 }}>
-                    <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                      {floorPlan.eastWing.rowBottom.length > 0 ? 'North Row' : 'Facility Area'}
-                    </Text>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
-                      {floorPlan.eastWing.rowTop.map(room => renderRoomBox(room))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Main Hallway Corridor */}
-                {floorPlan.eastWing.rowBottom.length > 0 && (
-                  <div style={{ textAlign: 'center', margin: '10px 0', borderTop: '2px dashed #7DD3FC', position: 'relative' }}>
-                    <span style={{ position: 'relative', top: -10, background: '#E0F2FE', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#0369A1' }}>
-                      Corridor
-                    </span>
-                  </div>
-                )}
-
-                {/* East Wing Bottom Row */}
-                {floorPlan.eastWing.rowBottom.length > 0 && (
+            <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748B', fontWeight: 600 }}>
+              <span>Restrooms & Facilities Access</span>
+              <span>Main Entrance & Circulation</span>
+            </div>
+          </div>
+        ) : (
+          <Row gutter={[16, 16]} align="stretch">
+            {/* ================= WEST WING ================= */}
+            {currentFloor !== 'Ground' && floorPlan.westWing && (
+              <Col xs={24} lg={10}>
+                <div
+                  style={{
+                    height: '100%',
+                    background: '#FFFBEB',
+                    border: '2px dashed #FDE68A',
+                    borderRadius: 16,
+                    padding: 16,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
                   <div>
-                    <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                      South Row
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #FEF3C7', pb: 8 }}>
+                      <Text strong style={{ color: '#92400E', fontSize: 13 }}>
+                        {floorPlan.westWing.title || 'West Wing (Tutorial Rooms & Labs)'}
+                      </Text>
+                      <Tag color="gold" style={{ fontSize: 10 }}>{floorPlan.westWing.tag || 'Wing A'}</Tag>
+                    </div>
+
+                    {/* West Wing Top Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: floorPlan.westWing.rowTop.length > 2 ? 'repeat(2, 1fr)' : '1fr', gap: 10, marginBottom: 12 }}>
+                      {floorPlan.westWing.rowTop.map(room => renderRoomBox(room))}
+                    </div>
+
+                    {/* Corridor Line */}
+                    {floorPlan.westWing.rowBottom.length > 0 && (
+                      <div style={{ textAlign: 'center', margin: '8px 0', borderTop: '2px dashed #FCD34D', position: 'relative' }}>
+                        <span style={{ position: 'relative', top: -10, background: '#FEF3C7', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#92400E' }}>
+                          West Corridor
+                        </span>
+                      </div>
+                    )}
+
+                    {/* West Wing Bottom Row */}
+                    {floorPlan.westWing.rowBottom.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
+                        {floorPlan.westWing.rowBottom.map(room => renderRoomBox(room))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: 16, paddingTop: 8, borderTop: '1px solid #FEF3C7', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#B45309', fontWeight: 600 }}>
+                    <span>Restrooms & Water Station</span>
+                    <span>Staircase A</span>
+                  </div>
+                </div>
+              </Col>
+            )}
+
+            {/* ================= CENTRAL CORE (Elevator Lobby & Offices) - FSKTM floors ================= */}
+            <Col xs={24} lg={currentFloor === 'Ground' ? 8 : 4}>
+              <div
+                style={{
+                  height: '100%',
+                  background: '#F1F5F9',
+                  border: '2px solid #E2E8F0',
+                  borderRadius: 16,
+                  padding: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ width: '100%' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
+                    CENTRAL CORE
+                  </div>
+
+                  {/* Lift Box */}
+                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>
+                      🛗
+                    </div>
+                    <Text strong style={{ fontSize: 12, color: '#334155', display: 'block' }}>
+                      ELEVATOR LOBBY
                     </Text>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
-                      {floorPlan.eastWing.rowBottom.map(room => renderRoomBox(room))}
+                    <Text type="secondary" style={{ fontSize: 10 }}>
+                      Core Lifts 1 & 2
+                    </Text>
+                  </div>
+
+                  <div style={{ width: 10, height: 40, background: '#CBD5E1', borderRadius: 99, margin: '8px auto' }} />
+
+                  {/* Office Suite area */}
+                  <div style={{ background: '#E2E8F0', borderRadius: 12, padding: 12, marginTop: 8 }}>
+                    <BankOutlined style={{ fontSize: 18, color: '#64748B', marginBottom: 4 }} />
+                    <div style={{ fontWeight: 800, fontSize: 11, color: '#475569' }}>
+                      Administrative Offices
+                    </div>
+                    <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>
+                      Dean's Office & Academic Suites
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div style={{ marginTop: 16, paddingTop: 8, borderTop: '1px solid #E0F2FE', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#0369A1', fontWeight: 600 }}>
-                <span>Surau (Musalla)</span>
-                <span>Restrooms & Staircase B</span>
+                {currentFloor === 'Ground' && (
+                  <div style={{ marginTop: 12, background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#1E3A8A' }}>
+                    <EnvironmentOutlined style={{ marginRight: 4 }} /> Kiosk Terminal
+                  </div>
+                )}
+
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginTop: 12 }}>
+                  Central Spine
+                </div>
               </div>
-            </div>
-          </Col>
-        </Row>
+            </Col>
+
+            {/* ================= EAST WING (Dual Row Labs / Main Facilities) ================= */}
+            <Col xs={24} lg={currentFloor === 'Ground' ? 16 : 10}>
+              <div
+                style={{
+                  height: '100%',
+                  background: '#F0F9FF',
+                  border: '2px dashed #BAE6FD',
+                  borderRadius: 16,
+                  padding: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #E0F2FE', pb: 8 }}>
+                    <Text strong style={{ color: '#0369A1', fontSize: 13 }}>
+                      {floorPlan.eastWing.title || 'East Wing (Specialized Computer Labs)'}
+                    </Text>
+                    <Tag color="cyan" style={{ fontSize: 10 }}>{floorPlan.eastWing.tag || 'Wing B'}</Tag>
+                  </div>
+
+                  {/* East Wing Top Row */}
+                  {floorPlan.eastWing.rowTop.length > 0 && (
+                    <div style={{ marginBottom: 6 }}>
+                      <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                        {floorPlan.eastWing.rowBottom.length > 0 ? 'North Row' : 'Facility Area'}
+                      </Text>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                        {floorPlan.eastWing.rowTop.map(room => renderRoomBox(room))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Main Hallway Corridor */}
+                  {floorPlan.eastWing.rowBottom.length > 0 && (
+                    <div style={{ textAlign: 'center', margin: '10px 0', borderTop: '2px dashed #7DD3FC', position: 'relative' }}>
+                      <span style={{ position: 'relative', top: -10, background: '#E0F2FE', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, color: '#0369A1' }}>
+                        Corridor
+                      </span>
+                    </div>
+                  )}
+
+                  {/* East Wing Bottom Row */}
+                  {floorPlan.eastWing.rowBottom.length > 0 && (
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                        South Row
+                      </Text>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                        {floorPlan.eastWing.rowBottom.map(room => renderRoomBox(room))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 16, paddingTop: 8, borderTop: '1px solid #E0F2FE', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#0369A1', fontWeight: 600 }}>
+                  <span>Surau (Musalla)</span>
+                  <span>Restrooms & Staircase B</span>
+                </div>
+              </div>
+            </Col>
+          </Row>
+        )}
       </Card>
 
       {/* Room Detail Drawer (Section 6: Floor map side panel) */}

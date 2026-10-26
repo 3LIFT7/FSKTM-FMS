@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, Select, Radio, Button, Alert, message, Typography } from 'antd';
-import { LaptopOutlined } from '@ant-design/icons';
+import { LaptopOutlined, BarcodeOutlined } from '@ant-design/icons';
+import ImageInputPreview from './ImageInputPreview';
 
 const { Text } = Typography;
 
@@ -22,9 +23,11 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
         name: device.name || '',
         category: device.category || 'General',
         serial_number: device.serial_number || '',
+        barcode: device.barcode || '',
         location_id: device.location_id ? String(device.location_id) : undefined,
         status: device.status || 'available',
         specs: device.specs || '',
+        image_url: device.image_url || '',
         allocationMode: isRoom ? 'room' : 'pool',
       });
     }
@@ -64,10 +67,12 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
           name: values.name.trim(),
           category: values.category.trim(),
           serial_number: values.serial_number.trim(),
+          barcode: values.barcode ? values.barcode.trim() : null,
           location_id: locId,
           is_loanable: isLoanable,
           status: values.status,
           specs: values.specs ? values.specs.trim() : null,
+          image_url: values.image_url ? values.image_url.trim() : null,
         }),
       });
 
@@ -119,13 +124,27 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
             <Input placeholder="e.g. Meta Quest 3 VR Headset" />
           </Form.Item>
 
-          <Form.Item
-            name="serial_number"
-            label="Serial / Asset Number"
-            rules={[{ required: true, message: 'Please enter serial number' }]}
-          >
-            <Input placeholder="e.g. SN-VR-2024-001" style={{ textTransform: 'uppercase' }} />
-          </Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Form.Item
+              name="serial_number"
+              label="Serial / Asset Number"
+              rules={[{ required: true, message: 'Please enter serial number' }]}
+            >
+              <Input placeholder="e.g. SN-VR-2024-001" style={{ textTransform: 'uppercase' }} />
+            </Form.Item>
+
+            <Form.Item
+              name="barcode"
+              label="Barcode Number"
+              extra="Asset tag / barcode"
+            >
+              <Input
+                placeholder="e.g. BC-VR-2024-001"
+                prefix={<BarcodeOutlined style={{ color: '#64748B' }} />}
+                allowClear
+              />
+            </Form.Item>
+          </div>
 
           <Form.Item name="category" label="Equipment Category" rules={[{ required: true }]}>
             <Select>
@@ -182,6 +201,21 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
           <Form.Item name="specs" label="Technical Specifications & Notes">
             <Input.TextArea rows={2} placeholder="e.g. 512GB Storage, 2 Controllers, USB-C Cable included" />
           </Form.Item>
+
+          <ImageInputPreview
+            form={form}
+            fieldName="image_url"
+            label="Device Display Image URL"
+            extra="Provide a product image URL or click 'Upload File' to select a photo from your computer."
+            placeholder="https://... or /uploads/..."
+            presets={[
+              { label: 'Laptop', url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800' },
+              { label: 'VR Headset', url: 'https://images.unsplash.com/photo-1622979135225-d2ba269bc1df?w=800' },
+              { label: 'Projector', url: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=800' },
+              { label: 'Tablet / iPad', url: 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=800' },
+            ]}
+            saveReminder="Click 'Save Changes' below to apply this image to the hardware asset."
+          />
 
           <Form.Item style={{ marginBottom: 0, marginTop: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>

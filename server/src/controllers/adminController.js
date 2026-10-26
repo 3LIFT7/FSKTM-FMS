@@ -106,7 +106,7 @@ async function deleteUser(req, res) {
 // GET /api/admin/reports/summary
 async function getReportsSummary(req, res) {
   try {
-    const [locationsStats, devicesStats, bookingsStats, issuesStats, maintenanceStats] = await Promise.all([
+    const [locationsStats, devicesStats, bookingsStats, issuesStats, deviceLoansStats] = await Promise.all([
       query(`SELECT 
               COUNT(*) AS total_locations,
               COUNT(CASE WHEN status = 'available' THEN 1 END) AS available_locations,
@@ -121,6 +121,9 @@ async function getReportsSummary(req, res) {
              FROM devices`),
       query(`SELECT 
               COUNT(*) AS total_bookings,
+              COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_bookings,
+              COUNT(CASE WHEN status = 'approved' THEN 1 END) AS approved_bookings,
+              COUNT(CASE WHEN status = 'rejected' THEN 1 END) AS rejected_bookings,
               COUNT(CASE WHEN end_time > CURRENT_TIMESTAMP AND status IN ('pending', 'approved') THEN 1 END) AS upcoming_bookings
              FROM location_bookings WHERE status != 'cancelled'`),
       query(`SELECT 
@@ -130,31 +133,63 @@ async function getReportsSummary(req, res) {
               COUNT(CASE WHEN status = 'resolved' THEN 1 END) AS resolved_reports
              FROM issue_reports`),
       query(`SELECT 
-              COUNT(*) AS total_maintenance_jobs,
-              COALESCE(SUM(cost), 0) AS total_maintenance_expenditure
-             FROM maintenance_logs`)
+              COUNT(*) AS total_loans,
+              COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_loans,
+              COUNT(CASE WHEN status = 'checked_out' THEN 1 END) AS checked_out_loans,
+              COUNT(CASE WHEN status = 'returned' THEN 1 END) AS returned_loans,
+              COUNT(CASE WHEN status = 'rejected' THEN 1 END) AS rejected_loans
+             FROM device_bookings`)
     ]);
 
     // Top utilized facilities
     const topFacilities = await query(`
-      SELECT l.name, l.code, l.floor, COUNT(b.booking_id) as booking_count
+      SELECT l.location_id, l.name, l.code, l.floor, l.capacity, l.status,
+             COUNT(b.booking_id) as booking_count
       FROM locations l
-      LEFT JOIN location_bookings b ON l.location_id = b.location_id AND b.status = 'approved'
-      GROUP BY l.location_id, l.name, l.code, l.floor
-      ORDER BY booking_count DESC LIMIT 5
+      LEFT JOIN location_bookings b ON l.location_id = b.location_id AND b.status != 'cancelled'
+      GROUP BY l.location_id, l.name, l.code, l.floor, l.capacity, l.status
+      ORDER BY booking_count DESC, l.name ASC LIMIT 10
+    `);
+
+    // Most common / popular equipment by loan frequency
+    const topEquipment = await query(`
+      SELECT d.device_id, d.name, d.category, d.serial_number, d.status,
+             COUNT(db.loan_id) as loan_count
+      FROM devices d
+      LEFT JOIN device_bookings db ON d.device_id = db.device_id
+      GROUP BY d.device_id, d.name, d.category, d.serial_number, d.status
+      ORDER BY loan_count DESC, d.name ASC LIMIT 10
     `);
 
     // Most frequently broken items / locations
     const frequentBreakdowns = await query(`
       SELECT 
-        COALESCE(l.name, 'Device Loan Issue') as facility_name,
-        COALESCE(d.name, 'General Room Issue') as device_name,
+        COALESCE(l.name, 'Equipment Loan Issue') as facility_name,
+        COALESCE(d.name, 'General Infrastructure') as device_name,
         COUNT(ir.report_id) as report_count
       FROM issue_reports ir
       LEFT JOIN locations l ON ir.location_id = l.location_id
       LEFT JOIN devices d ON ir.device_id = d.device_id
       GROUP BY l.name, d.name
-      ORDER BY report_count DESC LIMIT 5
+      ORDER BY report_count DESC LIMIT 8
+    `);
+
+    // Recent breakdown issues
+    const recentIssues = await query(`
+      SELECT 
+        ir.report_id,
+        ir.description,
+        ir.status,
+        ir.category,
+        ir.created_at,
+        l.name as location_name,
+        d.name as device_name,
+        COALESCE(u.name, ir.guest_name, 'Reporter') as reporter_name
+      FROM issue_reports ir
+      LEFT JOIN locations l ON ir.location_id = l.location_id
+      LEFT JOIN devices d ON ir.device_id = d.device_id
+      LEFT JOIN users u ON ir.reported_by = u.user_id
+      ORDER BY ir.created_at DESC LIMIT 10
     `);
 
     return res.json({
@@ -164,9 +199,12 @@ async function getReportsSummary(req, res) {
         devices: devicesStats.rows[0],
         bookings: bookingsStats.rows[0],
         issues: issuesStats.rows[0],
-        maintenance: maintenanceStats.rows[0],
+        device_loans: deviceLoansStats.rows[0],
         top_facilities: topFacilities.rows,
-        frequent_breakdowns: frequentBreakdowns.rows
+        top_rooms: topFacilities.rows,
+        top_equipment: topEquipment.rows,
+        frequent_breakdowns: frequentBreakdowns.rows,
+        recent_issues: recentIssues.rows
       }
     });
   } catch (err) {

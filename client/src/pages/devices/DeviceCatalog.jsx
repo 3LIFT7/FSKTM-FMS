@@ -145,21 +145,40 @@ export default function DeviceCatalog() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                    <div
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 12,
-                        background: '#EFF6FF',
-                        color: '#1E3A8A',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 22,
-                      }}
-                    >
-                      <LaptopOutlined />
-                    </div>
+                    {d.image_url ? (
+                      <img
+                        src={d.image_url}
+                        alt={d.name}
+                        referrerPolicy="no-referrer"
+                        style={{
+                          width: 56,
+                          height: 56,
+                          objectFit: 'cover',
+                          borderRadius: 12,
+                          border: '1px solid #E2E8F0',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 12,
+                          background: '#EFF6FF',
+                          color: '#1E3A8A',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 22,
+                        }}
+                      >
+                        <LaptopOutlined />
+                      </div>
+                    )}
                     <StatusTag status={d.status} />
                   </div>
 

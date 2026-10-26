@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Calendar, Select, Button, Tag, Space, Typography, Row, Col, Alert, Badge, Empty, Spin, Grid } from 'antd';
 import {
   CalendarOutlined,
@@ -19,6 +20,7 @@ const { useBreakpoint } = Grid;
 
 export default function CalendarView() {
   const { isStudent, isLecturer, isStaff } = useAuth();
+  const [searchParams] = useSearchParams();
   const screens = useBreakpoint();
   const isMobile = screens.md === false;
 
@@ -29,6 +31,7 @@ export default function CalendarView() {
   const [selectedLocationId, setSelectedLocationId] = useState('All');
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [modalInitialLocation, setModalInitialLocation] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -44,7 +47,29 @@ export default function CalendarView() {
       const bookData = await bookRes.json();
       const locData = await locRes.json();
       if (bookData.success) setBookings(bookData.bookings);
-      if (locData.success) setLocations(locData.locations);
+      if (locData.success) {
+        setLocations(locData.locations);
+
+        // Check if redirected from QR Code or link to book a specific room
+        const targetCode = searchParams.get('code');
+        const targetLocId = searchParams.get('location_id') || searchParams.get('room');
+        const shouldBook = searchParams.get('book') === 'true' || Boolean(targetCode || targetLocId);
+
+        if (targetCode || targetLocId) {
+          const matched = locData.locations.find(l =>
+            (targetCode && l.code.toUpperCase() === targetCode.toUpperCase()) ||
+            (targetLocId && String(l.location_id) === String(targetLocId))
+          );
+          if (matched) {
+            setSelectedLocationId(String(matched.location_id));
+            if (matched.floor) setSelectedFloor(matched.floor);
+            if (shouldBook) {
+              setModalInitialLocation(matched);
+              setIsBookModalOpen(true);
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('Error fetching calendar bookings:', err);
     } finally {
@@ -265,7 +290,11 @@ export default function CalendarView() {
 
       <BookRoomModal
         isOpen={isBookModalOpen}
-        onClose={() => setIsBookModalOpen(false)}
+        initialLocation={modalInitialLocation}
+        onClose={() => {
+          setIsBookModalOpen(false);
+          setModalInitialLocation(null);
+        }}
         onBookingCreated={() => fetchData()}
       />
     </div>

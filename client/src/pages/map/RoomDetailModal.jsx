@@ -8,7 +8,8 @@ import {
   EnvironmentOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  QrcodeOutlined
+  QrcodeOutlined,
+  PictureOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import EditRoomModal from '../../components/EditRoomModal';
@@ -85,8 +86,11 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
       render: (name, record) => (
         <div>
           <Text strong>{name}</Text>
-          <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
-            SN: {record.serial_number}
+          <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <span>SN: {record.serial_number}</span>
+            {record.barcode && (
+              <span style={{ color: '#0369A1' }}>• Barcode: {record.barcode}</span>
+            )}
           </div>
         </div>
       ),
@@ -164,6 +168,43 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
                 message="Under Active Maintenance"
                 description="This facility is currently offline for repairs and automatically hidden from booking reservation calendars."
               />
+            )}
+
+            {/* Room Display Image Banner (if added) */}
+            {data.image_url && (
+              <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #E2E8F0', maxHeight: 200, position: 'relative' }}>
+                <img
+                  src={data.image_url}
+                  alt={data.name}
+                  referrerPolicy="no-referrer"
+                  style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    const fallback = e.target.parentElement?.querySelector('.image-fallback');
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+                <div
+                  className="image-fallback"
+                  style={{
+                    display: 'none',
+                    height: 120,
+                    background: '#F8FAFC',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    gap: 6,
+                    color: '#64748B',
+                    fontSize: 12,
+                    padding: 16,
+                    textAlign: 'center',
+                  }}
+                >
+                  <PictureOutlined style={{ fontSize: 28, color: '#94A3B8' }} />
+                  <span style={{ fontWeight: 600 }}>Image link could not be loaded</span>
+                  <span style={{ fontSize: 11, color: '#94A3B8', wordBreak: 'break-all' }}>{data.image_url}</span>
+                </div>
+              </div>
             )}
 
             {/* Room Descriptions (Section 6) */}
@@ -280,7 +321,10 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
           isOpen={isEditRoomOpen}
           location={data}
           onClose={() => setIsEditRoomOpen(false)}
-          onSaved={() => {
+          onSaved={(updatedLoc) => {
+            if (updatedLoc) {
+              setData(prev => ({ ...prev, ...updatedLoc }));
+            }
             fetchDetails();
             if (onRoomUpdated) onRoomUpdated();
           }}

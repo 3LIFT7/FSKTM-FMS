@@ -21,7 +21,9 @@ async function seedDatabase() {
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS recurrence_group_id VARCHAR(100);
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS series_status VARCHAR(50) DEFAULT 'active';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
-      ALTER TABLE devices ADD COLUMN IF NOT EXISTS is_loanable BOOLEAN DEFAULT FALSE;
+      ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE devices ADD COLUMN IF NOT EXISTS image_url TEXT;
+      ALTER TABLE devices ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);
       ALTER TABLE issue_reports ALTER COLUMN reported_by DROP NOT NULL;
       ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255);
       ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_email VARCHAR(255);
@@ -47,6 +49,7 @@ async function seedDatabase() {
     await exec(`UPDATE users SET specialization = 'BIW' WHERE role = 'student' AND (specialization IS NULL OR specialization = '')`);
     await exec(`UPDATE devices SET is_loanable = FALSE WHERE location_id IS NOT NULL`);
     await exec(`UPDATE devices SET is_loanable = TRUE WHERE location_id IS NULL`);
+    await exec(`UPDATE devices SET barcode = 'BC-' || REPLACE(serial_number, ' ', '-') WHERE barcode IS NULL OR barcode = ''`);
     console.log('✓ Database schema migrations applied.');
 
     // Ensure new blocks (Blok B8, Blok C12, Blok L Perpustakaan) exist
@@ -92,16 +95,19 @@ async function seedDatabase() {
   const managerHash = await bcrypt.hash('Manager123!', salt);
 
   const usersSql = `
-    INSERT INTO users (name, email, password_hash, role, matric_or_staff_id, department)
+    INSERT INTO users (name, email, password_hash, role, matric_or_staff_id, department, specialization)
     VALUES 
-      ('Aiman Hakim bin Norazman', 'student@fsktm.um.edu.my', $1, 'student', 'WIF210045', 'Software Engineering'),
-      ('Dr. Nurul Huda binti Ahmad', 'lecturer@fsktm.um.edu.my', $2, 'lecturer', 'L-9042', 'Artificial Intelligence'),
-      ('En. Khairul Azmi bin Razak', 'technician@fsktm.um.edu.my', $3, 'technician', 'T-3011', 'IT & Facility Services'),
-      ('Prof. Madya Ts. Dr. Shamsul Bahari', 'manager@fsktm.um.edu.my', $4, 'manager', 'M-1002', 'Dean Office / Lab Management')
+      ('Aiman Hakim bin Norazman', 'student@fsktm.um.edu.my', $1, 'student', 'WIF210045', 'Software Engineering', 'BIW'),
+      ('Dr. Nurul Huda binti Ahmad', 'lecturer@fsktm.um.edu.my', $2, 'lecturer', 'L-9042', 'Artificial Intelligence', NULL),
+      ('En. Khairul Azmi bin Razak', 'technician@fsktm.um.edu.my', $3, 'technician', 'T-3011', 'IT & Facility Services', NULL),
+      ('Prof. Madya Ts. Dr. Shamsul Bahari', 'manager@fsktm.um.edu.my', $4, 'manager', 'M-1002', 'Dean Office / Lab Management', NULL),
+      ('Muhammad Faris bin Zainal', 'AI230182@student.uthm.edu.my', $1, 'student', 'AI230182', 'Department of Software Engineering', 'BIW'),
+      ('Dr. Norasri bin Ismail', 'norasri@uthm.edu.my', $2, 'lecturer', 'UTHM-7821', 'Department of Software Engineering', NULL)
+    ON CONFLICT (email) DO NOTHING
     RETURNING user_id, email, role;
   `;
   const userResults = await query(usersSql, [studentHash, lecturerHash, techHash, managerHash]);
-  console.log(`✓ Seeded ${userResults.rows.length} demo users.`);
+  console.log(`✓ Seeded demo and UTHM users.`);
 
   const studentUser = userResults.rows.find(u => u.role === 'student');
   const lecturerUser = userResults.rows.find(u => u.role === 'lecturer');
@@ -216,11 +222,12 @@ async function seedDatabase() {
   for (const dev of devices) {
     const locId = dev.locCode && locMap[dev.locCode] ? locMap[dev.locCode] : null;
     const isLoanable = dev.is_loanable !== undefined ? dev.is_loanable : (locId === null);
+    const barcodeVal = dev.barcode || `BC-${dev.serial}`;
     const res = await query(
-      `INSERT INTO devices (name, category, serial_number, location_id, is_loanable, specs, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO devices (name, category, serial_number, barcode, location_id, is_loanable, specs, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING device_id, serial_number;`,
-      [dev.name, dev.category, dev.serial, locId, isLoanable, dev.specs, dev.status]
+      [dev.name, dev.category, dev.serial, barcodeVal, locId, isLoanable, dev.specs, dev.status]
     );
     deviceMap[dev.serial] = res.rows[0].device_id;
   }

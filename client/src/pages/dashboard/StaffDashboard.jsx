@@ -15,7 +15,6 @@ import {
   CompassOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
-import LogMaintenanceModal from '../maintenance/LogMaintenanceModal';
 import StatusTag from '../../components/StatusTag';
 import { formatDateTime } from '../../utils/date';
 
@@ -30,7 +29,6 @@ export default function StaffDashboard() {
   const [pendingBookings, setPendingBookings] = useState([]);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isLogMaintOpen, setIsLogMaintOpen] = useState(false);
 
   // Reject modal state
   const [rejectingBookingId, setRejectingBookingId] = useState(null);
@@ -316,14 +314,6 @@ export default function StaffDashboard() {
                 Interactive Map
               </Button>
             </Link>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setIsLogMaintOpen(true)}
-              style={{ background: '#F59E0B', borderColor: '#F59E0B', fontWeight: 700, color: '#FFFFFF' }}
-            >
-              Log Maintenance
-            </Button>
             <Button icon={<ReloadOutlined />} onClick={fetchOperationalData}>
               Refresh Data
             </Button>
@@ -491,12 +481,6 @@ export default function StaffDashboard() {
           placeholder="e.g. Facility is reserved for departmental workshop."
         />
       </Modal>
-
-      <LogMaintenanceModal
-        isOpen={isLogMaintOpen}
-        onClose={() => setIsLogMaintOpen(false)}
-        onLogged={() => fetchOperationalData()}
-      />
     </div>
   );
 }

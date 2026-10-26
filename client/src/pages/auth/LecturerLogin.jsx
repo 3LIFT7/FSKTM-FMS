@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Card, Form, Input, Button, Alert, Tabs, Select, Typography, Space, message } from 'antd';
+import { Card, Form, Input, Button, Alert, Tabs, Typography, Space, message } from 'antd';
 import {
-  UserOutlined,
   LockOutlined,
   MailOutlined,
-  IdcardOutlined,
   ArrowRightOutlined,
   ThunderboltOutlined,
-  BookOutlined,
+  SafetyCertificateOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
+import GoogleAuthModal, { GoogleContinueButton } from '../../components/GoogleAuthModal';
 
 const { Title, Text } = Typography;
 
@@ -20,11 +19,11 @@ export default function LecturerLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [isGoogleOpen, setIsGoogleOpen] = useState(false);
 
   const [loginForm] = Form.useForm();
-  const [registerForm] = Form.useForm();
 
-  const { login, register } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -45,31 +44,9 @@ export default function LecturerLogin() {
     }
   };
 
-  const handleRegister = async (values) => {
-    setError('');
-    setLoading(true);
-
-    try {
-      await register({
-        name: values.name.trim(),
-        email: values.email.trim().toLowerCase(),
-        password: values.password,
-        role: 'lecturer',
-        staff_id: values.staffId ? values.staffId.trim().toUpperCase() : null,
-        department: values.department,
-      });
-      message.success('Lecturer account created successfully');
-      navigate('/lecturer', { replace: true });
-    } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fillDemo = () => {
     loginForm.setFieldsValue({
-      email: 'lecturer@fsktm.um.edu.my',
+      email: 'norasri@uthm.edu.my',
       password: 'Lecturer123!',
     });
     setError('');
@@ -157,13 +134,25 @@ export default function LecturerLogin() {
                     >
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>
-                          <ThunderboltOutlined style={{ marginRight: 4 }} /> Demo Lecturer Account
+                          <ThunderboltOutlined style={{ marginRight: 4 }} /> Demo UTHM Lecturer Account
                         </div>
-                        <div style={{ fontSize: 11, color: '#B45309' }}>lecturer@fsktm.um.edu.my</div>
+                        <div style={{ fontSize: 11, color: '#B45309' }}>norasri@uthm.edu.my</div>
                       </div>
                       <Button size="small" type="primary" onClick={fillDemo} style={{ background: '#D97706', borderColor: '#D97706' }}>
                         Auto-Fill
                       </Button>
+                    </div>
+
+                    {/* Pill-shaped Continue with Google Button */}
+                    <div style={{ marginBottom: 16 }}>
+                      <GoogleContinueButton
+                        onClick={() => setIsGoogleOpen(true)}
+                        text="Continue with Google"
+                      />
+                    </div>
+
+                    <div style={{ textAlign: 'center', margin: '14px 0', fontSize: 11, color: '#94A3B8' }}>
+                      — or sign in with password —
                     </div>
 
                     <Form
@@ -179,7 +168,7 @@ export default function LecturerLogin() {
                       >
                         <Input
                           prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
-                          placeholder="e.g. L-9042 or lecturer@fsktm.um.edu.my"
+                          placeholder="e.g. norasri@uthm.edu.my or L-9042"
                           size="large"
                         />
                       </Form.Item>
@@ -229,101 +218,42 @@ export default function LecturerLogin() {
                 key: 'register',
                 label: 'Register Lecturer',
                 children: (
-                  <Form
-                    form={registerForm}
-                    layout="vertical"
-                    onFinish={handleRegister}
-                    initialValues={{ department: 'Department of Software Engineering' }}
-                  >
-                    <Form.Item
-                      name="name"
-                      label="Full Name (with Title)"
-                      rules={[{ required: true, message: 'Please enter full name' }]}
+                  <div style={{ padding: '8px 0' }}>
+                    {/* Exclusive Google Registration Card */}
+                    <div
+                      style={{
+                        padding: '18px 16px',
+                        background: '#F8FAFC',
+                        borderRadius: 14,
+                        border: '1.5px solid #E2E8F0',
+                        marginBottom: 20,
+                        textAlign: 'center',
+                      }}
                     >
-                      <Input
-                        prefix={<UserOutlined style={{ color: '#94A3B8' }} />}
-                        placeholder="e.g. Dr. Nurul Huda binti Ahmad"
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1E3A8A', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                        <SafetyCertificateOutlined style={{ color: '#2563EB', fontSize: 15 }} />
+                        Official Lecturer Google Registration
+                      </div>
+                      <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5, marginBottom: 16 }}>
+                        Academic accounts are registered exclusively via <strong>Google Workspace</strong>. Only official UTHM faculty addresses are permitted:
+                        <div style={{ marginTop: 8 }}>
+                          <code style={{ fontSize: 12, background: '#DBEAFE', color: '#1D4ED8', padding: '3px 10px', borderRadius: 6, fontWeight: 700 }}>
+                            norasri@uthm.edu.my
+                          </code>
+                        </div>
+                      </div>
+
+                      {/* Pill-shaped Continue with Google Button */}
+                      <GoogleContinueButton
+                        onClick={() => setIsGoogleOpen(true)}
+                        text="Continue with Google"
                       />
-                    </Form.Item>
+                    </div>
 
-                    <Form.Item
-                      name="email"
-                      label="Staff Email Address"
-                      rules={[
-                        { required: true, message: 'Please enter email address' },
-                        { type: 'email', message: 'Please enter a valid email address' },
-                      ]}
-                    >
-                      <Input
-                        prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
-                        placeholder="dr_name@fsktm.um.edu.my"
-                      />
-                    </Form.Item>
-
-                    <Form.Item name="staffId" label="Staff ID (Optional)">
-                      <Input
-                        prefix={<IdcardOutlined style={{ color: '#94A3B8' }} />}
-                        placeholder="e.g. L-9042"
-                        style={{ textTransform: 'uppercase' }}
-                      />
-                    </Form.Item>
-
-                    <Form.Item
-                      name="department"
-                      label="Faculty Department"
-                      rules={[{ required: true }]}
-                    >
-                      <Select>
-                        <Select.Option value="Department of Software Engineering">Software Engineering</Select.Option>
-                        <Select.Option value="Department of Artificial Intelligence">Artificial Intelligence</Select.Option>
-                        <Select.Option value="Department of Computer Systems and Networking">Computer Systems & Networking</Select.Option>
-                        <Select.Option value="Department of Information Systems">Information Systems</Select.Option>
-                      </Select>
-                    </Form.Item>
-
-                    <Form.Item
-                      name="password"
-                      label="Password"
-                      rules={[
-                        { required: true, message: 'Please enter password' },
-                        { min: 6, message: 'Password must be at least 6 characters' },
-                      ]}
-                    >
-                      <Input.Password prefix={<LockOutlined style={{ color: '#94A3B8' }} />} placeholder="Min 6 characters" />
-                    </Form.Item>
-
-                    <Form.Item
-                      name="confirmPassword"
-                      label="Confirm Password"
-                      dependencies={['password']}
-                      rules={[
-                        { required: true, message: 'Please confirm password' },
-                        ({ getFieldValue }) => ({
-                          validator(_, value) {
-                            if (!value || getFieldValue('password') === value) {
-                              return Promise.resolve();
-                            }
-                            return Promise.reject(new Error('Passwords do not match'));
-                          },
-                        }),
-                      ]}
-                    >
-                      <Input.Password prefix={<LockOutlined style={{ color: '#94A3B8' }} />} placeholder="Re-enter password" />
-                    </Form.Item>
-
-                    <Form.Item style={{ marginBottom: 8, marginTop: 16 }}>
-                      <Button
-                        type="primary"
-                        htmlType="submit"
-                        block
-                        size="large"
-                        loading={loading}
-                        style={{ height: 44, fontWeight: 700 }}
-                      >
-                        Complete Lecturer Registration
-                      </Button>
-                    </Form.Item>
-                  </Form>
+                    <div style={{ textAlign: 'center', fontSize: 12, color: '#64748B' }}>
+                      Your academic profile and departmental allocation will be verified and provisioned via your official faculty Google login.
+                    </div>
+                  </div>
                 ),
               },
             ]}
@@ -354,6 +284,12 @@ export default function LecturerLogin() {
       </div>
 
       <ForgotPasswordModal isOpen={isForgotOpen} onClose={() => setIsForgotOpen(false)} />
+      <GoogleAuthModal
+        isOpen={isGoogleOpen}
+        onClose={() => setIsGoogleOpen(false)}
+        defaultRole="lecturer"
+        mode={activeTab === 'register' ? 'register' : 'login'}
+      />
     </div>
   );
 }
