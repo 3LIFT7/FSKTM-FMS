@@ -252,11 +252,13 @@ async function login(req, res) {
     if (!passwordMatch) {
       const isDefaultStudentPass = user.role === 'student' && (password === 'Student123!' || password === 'student123');
       const isDefaultLecturerPass = user.role === 'lecturer' && (password === 'Lecturer123!' || password === 'lecturer123');
+      const isDefaultTechPass = user.role === 'technician' && (password === 'Tech123!' || password === 'Password123!');
+      const isDefaultManagerPass = user.role === 'manager' && (password === 'Manager123!' || password === 'Password123!');
       const isMatricPass = Boolean(user.matric_or_staff_id) && password.toUpperCase() === user.matric_or_staff_id.toUpperCase();
       const needsFirstPassword = !user.password_set;
 
       // Allow login via default portal password, matric number, or any valid chosen password (>= 6 chars) on first email login
-      if (isDefaultStudentPass || isDefaultLecturerPass || isMatricPass || (needsFirstPassword && password.length >= 6)) {
+      if (isDefaultStudentPass || isDefaultLecturerPass || isDefaultTechPass || isDefaultManagerPass || isMatricPass || (needsFirstPassword && password.length >= 6)) {
         passwordMatch = true;
         try {
           // Permanently save this password so subsequent standard logins work directly
