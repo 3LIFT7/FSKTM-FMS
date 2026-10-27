@@ -29,9 +29,17 @@ export default function StaffLogin() {
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('fsktm_remember_staff_email');
+    const savedPass = localStorage.getItem('fsktm_remember_staff_pass');
     if (savedEmail) {
+      let decodedPass = '';
+      try {
+        decodedPass = savedPass ? decodeURIComponent(escape(atob(savedPass))) : '';
+      } catch (_) {
+        decodedPass = savedPass || '';
+      }
       form.setFieldsValue({
         email: savedEmail,
+        password: decodedPass,
         remember: true
       });
     }
@@ -44,8 +52,15 @@ export default function StaffLogin() {
     try {
       if (values.remember) {
         localStorage.setItem('fsktm_remember_staff_email', values.email);
+        try {
+          const encodedPass = btoa(unescape(encodeURIComponent(values.password)));
+          localStorage.setItem('fsktm_remember_staff_pass', encodedPass);
+        } catch (_) {
+          localStorage.setItem('fsktm_remember_staff_pass', values.password);
+        }
       } else {
         localStorage.removeItem('fsktm_remember_staff_email');
+        localStorage.removeItem('fsktm_remember_staff_pass');
       }
 
       await login(values.email, values.password, 'staff', values.remember);
@@ -163,7 +178,7 @@ export default function StaffLogin() {
             </Space>
           </div>
 
-          <Form form={form} layout="vertical" onFinish={handleLogin} requiredMark="optional">
+          <Form form={form} layout="vertical" onFinish={handleLogin} requiredMark="optional" autoComplete="on">
             <Form.Item
               name="email"
               label="Staff Email Address"
@@ -176,6 +191,7 @@ export default function StaffLogin() {
                 prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
                 placeholder="staff@fsktm.um.edu.my"
                 size="large"
+                autoComplete="username"
               />
             </Form.Item>
 
@@ -189,6 +205,7 @@ export default function StaffLogin() {
                 prefix={<LockOutlined style={{ color: '#94A3B8' }} />}
                 placeholder="••••••••"
                 size="large"
+                autoComplete="current-password"
               />
             </Form.Item>
 

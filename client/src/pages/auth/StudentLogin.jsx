@@ -32,9 +32,17 @@ export default function StudentLogin() {
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('fsktm_remember_student_email');
+    const savedPass = localStorage.getItem('fsktm_remember_student_pass');
     if (savedEmail) {
+      let decodedPass = '';
+      try {
+        decodedPass = savedPass ? decodeURIComponent(escape(atob(savedPass))) : '';
+      } catch (_) {
+        decodedPass = savedPass || '';
+      }
       loginForm.setFieldsValue({
         email: savedEmail,
+        password: decodedPass,
         remember: true
       });
     }
@@ -47,8 +55,15 @@ export default function StudentLogin() {
     try {
       if (values.remember) {
         localStorage.setItem('fsktm_remember_student_email', values.email);
+        try {
+          const encodedPass = btoa(unescape(encodeURIComponent(values.password)));
+          localStorage.setItem('fsktm_remember_student_pass', encodedPass);
+        } catch (_) {
+          localStorage.setItem('fsktm_remember_student_pass', values.password);
+        }
       } else {
         localStorage.removeItem('fsktm_remember_student_email');
+        localStorage.removeItem('fsktm_remember_student_pass');
       }
 
       await login(values.email, values.password, 'student', values.remember);
@@ -177,6 +192,7 @@ export default function StudentLogin() {
                       layout="vertical"
                       onFinish={handleLogin}
                       requiredMark="optional"
+                      autoComplete="on"
                     >
                       <Form.Item
                         name="email"
@@ -187,6 +203,7 @@ export default function StudentLogin() {
                           prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
                           placeholder="e.g. AI230182@student.uthm.edu.my"
                           size="large"
+                          autoComplete="username"
                         />
                       </Form.Item>
 
@@ -204,6 +221,7 @@ export default function StudentLogin() {
                           prefix={<LockOutlined style={{ color: '#94A3B8' }} />}
                           placeholder="••••••••"
                           size="large"
+                          autoComplete="current-password"
                         />
                       </Form.Item>
 

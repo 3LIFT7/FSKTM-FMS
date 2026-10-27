@@ -32,9 +32,17 @@ export default function LecturerLogin() {
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('fsktm_remember_lecturer_email');
+    const savedPass = localStorage.getItem('fsktm_remember_lecturer_pass');
     if (savedEmail) {
+      let decodedPass = '';
+      try {
+        decodedPass = savedPass ? decodeURIComponent(escape(atob(savedPass))) : '';
+      } catch (_) {
+        decodedPass = savedPass || '';
+      }
       loginForm.setFieldsValue({
         email: savedEmail,
+        password: decodedPass,
         remember: true
       });
     }
@@ -47,8 +55,15 @@ export default function LecturerLogin() {
     try {
       if (values.remember) {
         localStorage.setItem('fsktm_remember_lecturer_email', values.email);
+        try {
+          const encodedPass = btoa(unescape(encodeURIComponent(values.password)));
+          localStorage.setItem('fsktm_remember_lecturer_pass', encodedPass);
+        } catch (_) {
+          localStorage.setItem('fsktm_remember_lecturer_pass', values.password);
+        }
       } else {
         localStorage.removeItem('fsktm_remember_lecturer_email');
+        localStorage.removeItem('fsktm_remember_lecturer_pass');
       }
 
       await login(values.email, values.password, 'lecturer', values.remember);
@@ -177,6 +192,7 @@ export default function LecturerLogin() {
                       layout="vertical"
                       onFinish={handleLogin}
                       requiredMark="optional"
+                      autoComplete="on"
                     >
                       <Form.Item
                         name="email"
@@ -187,6 +203,7 @@ export default function LecturerLogin() {
                           prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
                           placeholder="e.g. norasri@uthm.edu.my or L-9042"
                           size="large"
+                          autoComplete="username"
                         />
                       </Form.Item>
 
@@ -200,6 +217,7 @@ export default function LecturerLogin() {
                           prefix={<LockOutlined style={{ color: '#94A3B8' }} />}
                           placeholder="••••••••"
                           size="large"
+                          autoComplete="current-password"
                         />
                       </Form.Item>
 
