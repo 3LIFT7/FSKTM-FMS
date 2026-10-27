@@ -113,7 +113,7 @@ export default function StaffLogin() {
               marginBottom: 16,
             }}
           >
-            <img src="/logo-fsktm.png" alt="FSKTM Logo" style={{ height: 42, objectFit: 'contain' }} />
+            <img src="/logo-fsktm.png" alt="UTHM Logo" style={{ height: 44, objectFit: 'contain' }} />
           </div>
           <Title level={3} style={{ color: '#FFFFFF', margin: 0, fontWeight: 800 }}>
             Staff & Technician Console

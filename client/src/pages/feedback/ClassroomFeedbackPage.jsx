@@ -327,7 +327,7 @@ export default function ClassroomFeedbackPage() {
               FSKTM SMART FACILITY
             </div>
             <div style={{ fontSize: 11, color: '#64748B' }}>
-              Universiti Malaya • Quick QR Portal
+              Universiti Tun Hussein Onn Malaysia (UTHM) • Quick QR Portal
             </div>
           </div>
         </div>

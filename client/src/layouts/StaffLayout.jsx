@@ -169,7 +169,7 @@ export default function StaffLayout() {
           >
             <img
               src="/logo-fsktm.png"
-              alt="FSKTM Logo"
+              alt="UTHM Logo"
               style={{ height: 32, objectFit: 'contain', background: '#FFFFFF', borderRadius: 6, padding: 2 }}
             />
             {!collapsed && (

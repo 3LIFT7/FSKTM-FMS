@@ -149,7 +149,7 @@ export default function UserLayout() {
           <Link to={user?.role === 'lecturer' ? '/lecturer' : '/student'} style={{ display: 'flex', alignItems: 'center', gap: 10, lineHeight: 'normal' }}>
             <img
               src="/logo-fsktm.png"
-              alt="FSKTM Logo"
+              alt="UTHM Logo"
               style={{ height: 34, objectFit: 'contain' }}
             />
             <div style={{ lineHeight: 1.2 }}>

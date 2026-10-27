@@ -54,7 +54,7 @@ export default function Navbar({ onToggleSidebar }) {
 
             <img 
               src="/logo-fsktm.png" 
-              alt="FSKTM Logo" 
+              alt="UTHM Logo" 
               className="h-8 sm:h-10 w-auto object-contain"
             />
             <div className="border-l border-slate-200 pl-2 sm:pl-3">
@@ -63,7 +63,7 @@ export default function Navbar({ onToggleSidebar }) {
                   FMS <span className="text-blue-600">Portal</span>
                 </span>
                 <span className="hidden xs:inline-block px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 rounded">
-                  UM
+                  UTHM
                 </span>
               </div>
               <p className="text-[10px] sm:text-[11px] text-slate-500 hidden md:block">
