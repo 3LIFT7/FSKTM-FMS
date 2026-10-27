@@ -69,6 +69,9 @@ async function getAllDevices(req, res) {
 async function getDeviceById(req, res) {
   try {
     const { id } = req.params;
+    if (isNaN(parseInt(id, 10))) {
+      return res.status(404).json({ error: 'Device not found.' });
+    }
     const devRes = await query(
       `SELECT d.*, 
               COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
