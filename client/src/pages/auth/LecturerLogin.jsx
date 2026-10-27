@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Card, Form, Input, Button, Alert, Tabs, Typography, Space, message } from 'antd';
+import { Card, Form, Input, Button, Alert, Tabs, Typography, Space, message, Checkbox } from 'antd';
 import {
   LockOutlined,
   MailOutlined,
@@ -30,12 +30,28 @@ export default function LecturerLogin() {
 
   const redirectUrl = getRedirectDestination(location, '/lecturer');
 
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('fsktm_remember_lecturer_email');
+    if (savedEmail) {
+      loginForm.setFieldsValue({
+        email: savedEmail,
+        remember: true
+      });
+    }
+  }, [loginForm]);
+
   const handleLogin = async (values) => {
     setError('');
     setLoading(true);
 
     try {
-      await login(values.email, values.password, 'lecturer');
+      if (values.remember) {
+        localStorage.setItem('fsktm_remember_lecturer_email', values.email);
+      } else {
+        localStorage.removeItem('fsktm_remember_lecturer_email');
+      }
+
+      await login(values.email, values.password, 'lecturer', values.remember);
       message.success('Welcome to Lecturer Portal');
       navigate(redirectUrl, { replace: true });
     } catch (err) {
@@ -187,10 +203,10 @@ export default function LecturerLogin() {
                         />
                       </Form.Item>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <span style={{ fontSize: 11, color: '#64748B' }}>
-                          💡 Google user? Default pass is <code>Lecturer123!</code>
-                        </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <Form.Item name="remember" valuePropName="checked" noStyle initialValue={true}>
+                          <Checkbox style={{ fontSize: 13, color: '#475569' }}>Remember me</Checkbox>
+                        </Form.Item>
                         <Button
                           type="link"
                           size="small"
@@ -199,6 +215,10 @@ export default function LecturerLogin() {
                         >
                           Forgot password?
                         </Button>
+                      </div>
+
+                      <div style={{ fontSize: 11, color: '#64748B', marginBottom: 18 }}>
+                        💡 Google user? Default pass is <code>Lecturer123!</code>
                       </div>
 
                       <Form.Item style={{ marginBottom: 12 }}>

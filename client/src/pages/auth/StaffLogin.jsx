@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Card, Form, Input, Button, Alert, Typography, Space, message } from 'antd';
+import { Card, Form, Input, Button, Alert, Typography, Space, message, Checkbox } from 'antd';
 import {
   LockOutlined,
   MailOutlined,
@@ -27,12 +27,28 @@ export default function StaffLogin() {
 
   const redirectUrl = getRedirectDestination(location, '/staff');
 
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('fsktm_remember_staff_email');
+    if (savedEmail) {
+      form.setFieldsValue({
+        email: savedEmail,
+        remember: true
+      });
+    }
+  }, [form]);
+
   const handleLogin = async (values) => {
     setError('');
     setLoading(true);
 
     try {
-      await login(values.email, values.password, 'staff');
+      if (values.remember) {
+        localStorage.setItem('fsktm_remember_staff_email', values.email);
+      } else {
+        localStorage.removeItem('fsktm_remember_staff_email');
+      }
+
+      await login(values.email, values.password, 'staff', values.remember);
       message.success('Authenticated to Staff Console');
       navigate(redirectUrl, { replace: true });
     } catch (err) {
@@ -176,7 +192,10 @@ export default function StaffLogin() {
               />
             </Form.Item>
 
-            <div style={{ textAlign: 'right', marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Form.Item name="remember" valuePropName="checked" noStyle initialValue={true}>
+                <Checkbox style={{ fontSize: 13, color: '#475569' }}>Remember me</Checkbox>
+              </Form.Item>
               <Button
                 type="link"
                 size="small"

@@ -218,7 +218,7 @@ async function register(req, res) {
 // POST /api/auth/login
 async function login(req, res) {
   try {
-    const { email, password, portal } = req.body;
+    const { email, password, portal, remember } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email / ID and password are required.' });
@@ -305,14 +305,18 @@ async function login(req, res) {
       specialization: user.specialization
     };
 
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+    // Generate JWT (30 days if remember me is requested, otherwise 7 days)
+    const tokenExpiry = remember ? '30d' : '7d';
+    const cookieMaxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: tokenExpiry });
 
     // Set httpOnly cookie
     res.cookie('fsktm_auth_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: cookieMaxAge,
       path: '/'
     });
 

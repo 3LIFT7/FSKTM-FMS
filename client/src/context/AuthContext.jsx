@@ -30,14 +30,14 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function login(email, password, portal) {
+  async function login(email, password, portal, remember = false) {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       credentials: 'include',
-      body: JSON.stringify({ email, password, portal })
+      body: JSON.stringify({ email, password, portal, remember })
     });
 
     const text = await res.text();
