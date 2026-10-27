@@ -3,7 +3,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fsktm_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   // Restore session on mount
@@ -19,12 +26,16 @@ export function AuthProvider({ children }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-      } else {
+        if (data.user) {
+          localStorage.setItem('fsktm_user', JSON.stringify(data.user));
+        }
+      } else if (res.status === 401) {
         setUser(null);
+        localStorage.removeItem('fsktm_auth_token');
+        localStorage.removeItem('fsktm_user');
       }
     } catch (err) {
       console.error('Session restore failed:', err);
-      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -54,6 +65,13 @@ export function AuthProvider({ children }) {
       err.code = data.code;
       err.actualRole = data.actualRole;
       throw err;
+    }
+
+    if (data.token) {
+      localStorage.setItem('fsktm_auth_token', data.token);
+    }
+    if (data.user) {
+      localStorage.setItem('fsktm_user', JSON.stringify(data.user));
     }
 
     setUser(data.user);
@@ -86,6 +104,13 @@ export function AuthProvider({ children }) {
       throw err;
     }
 
+    if (data.token) {
+      localStorage.setItem('fsktm_auth_token', data.token);
+    }
+    if (data.user) {
+      localStorage.setItem('fsktm_user', JSON.stringify(data.user));
+    }
+
     setUser(data.user);
     return data.user;
   }
@@ -112,6 +137,13 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || 'Registration failed.');
     }
 
+    if (data.token) {
+      localStorage.setItem('fsktm_auth_token', data.token);
+    }
+    if (data.user) {
+      localStorage.setItem('fsktm_user', JSON.stringify(data.user));
+    }
+
     setUser(data.user);
     return data.user;
   }
@@ -125,6 +157,8 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      localStorage.removeItem('fsktm_auth_token');
+      localStorage.removeItem('fsktm_user');
       setUser(null);
     }
   }

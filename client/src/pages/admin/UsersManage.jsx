@@ -29,7 +29,12 @@ export default function UsersManage() {
     try {
       const res = await fetch('/api/admin/users', { credentials: 'include' });
       const data = await res.json();
-      if (data.success) setUsers(data.users);
+      if (res.ok && data.success) {
+        setUsers(data.users || []);
+      } else {
+        console.error('fetchUsers failed:', data);
+        message.error(data.error || 'Failed to load user accounts');
+      }
     } catch (err) {
       console.error(err);
       message.error('Failed to load user accounts');

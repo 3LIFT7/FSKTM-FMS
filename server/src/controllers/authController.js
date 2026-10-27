@@ -4,6 +4,13 @@ const crypto = require('crypto');
 const { query } = require('../config/db');
 const { JWT_SECRET } = require('../middleware/auth');
 
+// Determine if the incoming request is HTTPS or HTTP
+function isSecureConnection(req) {
+  if (process.env.COOKIE_SECURE === 'true') return true;
+  if (process.env.COOKIE_SECURE === 'false') return false;
+  return Boolean(req.secure || req.headers['x-forwarded-proto'] === 'https');
+}
+
 // University email domain validator
 // Strict University email domain validator for Students & Lecturers
 function validateUniversityEmail(email, requestedRole = null) {
@@ -197,7 +204,7 @@ async function register(req, res) {
 
     res.cookie('fsktm_auth_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureConnection(req),
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/'
@@ -314,7 +321,7 @@ async function login(req, res) {
     // Set httpOnly cookie
     res.cookie('fsktm_auth_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureConnection(req),
       sameSite: 'lax',
       maxAge: cookieMaxAge,
       path: '/'
@@ -346,6 +353,7 @@ async function login(req, res) {
 async function logout(req, res) {
   res.clearCookie('fsktm_auth_token', {
     httpOnly: true,
+    secure: isSecureConnection(req),
     sameSite: 'lax',
     path: '/'
   });
@@ -626,7 +634,7 @@ async function googleAuth(req, res) {
 
     res.cookie('fsktm_auth_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureConnection(req),
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/'

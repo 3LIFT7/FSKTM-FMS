@@ -20,6 +20,7 @@ const feedbackRoutes = require('./routes/feedback');
 const uploadRoutes = require('./routes/upload');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 
 // Ensure upload and data directories exist
