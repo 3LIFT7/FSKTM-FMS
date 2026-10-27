@@ -20,9 +20,9 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
 
   if (!location) return null;
 
-  // The live scanning URL that students/lecturers open when scanning the QR code to book this room
+  // The live scanning URL that students/lecturers open when scanning the QR code for this specific classroom
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-  const qrUrl = `${baseUrl}/booking/new?code=${encodeURIComponent(location.code || location.location_id)}&book=true`;
+  const qrUrl = `${baseUrl}/qr/${encodeURIComponent(location.code || location.location_id)}`;
 
   const handlePrint = () => {
     window.print();
@@ -31,9 +31,9 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(qrUrl);
-      message.success(`Copied room booking link for ${location.name} to clipboard!`);
+      message.success(`Copied classroom portal link for ${location.name} to clipboard!`);
     } catch {
-      message.info(`Booking URL: ${qrUrl}`);
+      message.info(`Portal URL: ${qrUrl}`);
     }
   };
 
@@ -42,12 +42,12 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
     if (canvas) {
       const url = canvas.toDataURL('image/png');
       const a = document.createElement('a');
-      a.download = `FSKTM-Booking-QR-${location.code || 'Room'}.png`;
+      a.download = `FSKTM-QR-${location.code || 'Room'}.png`;
       a.href = url;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      message.success(`Downloaded Booking QR code for ${location.name}`);
+      message.success(`Downloaded QR code for ${location.name}`);
     } else {
       message.error('Could not extract QR canvas.');
     }
@@ -71,9 +71,9 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
         overflow: 'hidden'
       }}
     >
-      {/* Classroom Identification & Booking Title */}
+      {/* Classroom Identification & Interactive Feature Badges */}
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           <Tag
             color="navy"
             style={{
@@ -100,16 +100,17 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
           >
             {location.category || 'Facility'}
           </Tag>
-          <Tag
-            color="green"
-            style={{
-              fontWeight: 700,
-              padding: '4px 10px',
-              borderRadius: 8,
-              fontSize: 12
-            }}
-          >
-            INSTANT BOOKING
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, margin: '6px 0 10px 0', flexWrap: 'wrap' }}>
+          <Tag color="green" icon={<CalendarOutlined />} style={{ fontWeight: 700, borderRadius: 6, padding: '2px 8px' }}>
+            BOOK
+          </Tag>
+          <Tag color="red" icon={<AlertOutlined />} style={{ fontWeight: 700, borderRadius: 6, padding: '2px 8px' }}>
+            REPORT DEFECT
+          </Tag>
+          <Tag color="gold" icon={<StarOutlined />} style={{ fontWeight: 700, borderRadius: 6, padding: '2px 8px' }}>
+            FEEDBACK
           </Tag>
         </div>
 
@@ -183,10 +184,10 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
           }}
         >
           <MobileOutlined style={{ fontSize: 18 }} />
-          <span>SCAN TO BOOK THIS ROOM</span>
+          <span>SCAN TO BOOK • REPORT • FEEDBACK</span>
         </div>
-        <div style={{ fontSize: 12, color: '#64748B', marginTop: 3 }}>
-          Scan with your mobile camera to check schedule and reserve instantly
+        <div style={{ fontSize: 12, color: '#64748B', marginTop: 3, textAlign: 'center' }}>
+          Scan with your phone to reserve this room, report a broken facility, or submit feedback
         </div>
       </div>
 
@@ -203,13 +204,13 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
         }}
       >
         <div>
-          <span>Booking Link: </span>
+          <span>Portal Link: </span>
           <code style={{ background: '#F1F5F9', padding: '2px 6px', borderRadius: 4, color: '#334155' }}>
             {qrUrl.replace(/^https?:\/\//, '')}
           </code>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <span>FSKTM Facility Reservation System</span>
+          <span>FSKTM Smart Facility System</span>
         </div>
       </div>
 
@@ -261,7 +262,7 @@ export default function ClassroomQRPlacard({ location, isPrintPreview = false, o
             rel="noopener noreferrer"
             style={{ fontWeight: 700, color: '#2563EB', padding: 0 }}
           >
-            Open Booking Page &rarr;
+            Open Room Portal &rarr;
           </Button>
         </div>
       )}

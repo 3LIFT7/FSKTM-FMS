@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Card,
   Tabs,
@@ -20,7 +20,11 @@ import {
   Switch,
   Badge,
   message,
-  Timeline
+  Timeline,
+  DatePicker,
+  TimePicker,
+  Checkbox,
+  InputNumber
 } from 'antd';
 import {
   AlertOutlined,
@@ -40,9 +44,13 @@ import {
   LaptopOutlined,
   BulbOutlined,
   AppstoreOutlined,
-  QrcodeOutlined
+  QrcodeOutlined,
+  IdcardOutlined,
+  BookOutlined,
+  RightOutlined
 } from '@ant-design/icons';
 import confetti from 'canvas-confetti';
+import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
 import StatusTag from '../../components/StatusTag';
 import { formatDateTime } from '../../utils/date';
@@ -63,6 +71,8 @@ const DEFECT_CATEGORIES = [
 export default function ClassroomFeedbackPage() {
   const { codeOrId } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const locationState = useLocation();
   const targetIdOrCode = codeOrId || searchParams.get('code') || searchParams.get('location_id') || 'DT2';
 
   const { user } = useAuth();
@@ -70,7 +80,15 @@ export default function ClassroomFeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [roomData, setRoomData] = useState(null);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('report');
+  const initialTab = searchParams.get('tab') || 'book';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Room Booking Form State
+  const [bookForm] = Form.useForm();
+  const [submittingBooking, setSubmittingBooking] = useState(false);
+  const [submittedBooking, setSubmittedBooking] = useState(null);
+  const [bookingError, setBookingError] = useState('');
+  const [isRecurringBooking, setIsRecurringBooking] = useState(false);
 
   // Issue Reporting Form State
   const [issueForm] = Form.useForm();
@@ -189,6 +207,57 @@ export default function ClassroomFeedbackPage() {
     }
   };
 
+  // Handle Room Reservation Submission
+  const handleBookingSubmit = async (values) => {
+    setBookingError('');
+    setSubmittingBooking(true);
+    try {
+      const dateStr = values.date.format('YYYY-MM-DD');
+      const startStr = values.startTime.format('HH:mm:00');
+      const endStr = values.endTime.format('HH:mm:00');
+      const startDateTime = new Date(`${dateStr}T${startStr}`);
+      const endDateTime = new Date(`${dateStr}T${endStr}`);
+
+      if (endDateTime <= startDateTime) {
+        throw new Error('End time must be after start time.');
+      }
+
+      const payload = {
+        location_id: roomData.location.location_id,
+        start_time: startDateTime.toISOString(),
+        end_time: endDateTime.toISOString(),
+        purpose: values.purpose,
+        course_id: values.course_id || null,
+        is_recurring: Boolean(values.is_recurring),
+        weeks: values.weeks || 14
+      };
+
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit room reservation.');
+
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
+      setSubmittedBooking(data.booking || data.bookings?.[0] || {
+        ...payload,
+        status: user?.role === 'technician' || user?.role === 'manager' ? 'approved' : 'pending'
+      });
+      bookForm.resetFields();
+      fetchRoomDetails();
+      message.success('Classroom reservation submitted successfully!');
+    } catch (err) {
+      setBookingError(err.message);
+      message.error(err.message);
+    } finally {
+      setSubmittingBooking(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -269,11 +338,14 @@ export default function ClassroomFeedbackPage() {
             {user.name.split(' ')[0]} ({user.role})
           </Tag>
         ) : (
-          <Link to={`/login/student`}>
-            <Button size="small" style={{ fontSize: 12, borderRadius: 8, fontWeight: 600 }}>
-              Sign In
-            </Button>
-          </Link>
+          <Button
+            size="small"
+            type="primary"
+            onClick={() => navigate('/login/student', { state: { from: locationState } })}
+            style={{ fontSize: 12, borderRadius: 8, fontWeight: 700, background: '#1E3A8A' }}
+          >
+            Sign In
+          </Button>
         )}
       </div>
 
@@ -382,6 +454,282 @@ export default function ClassroomFeedbackPage() {
           padding: '12px 16px 24px 16px'
         }}
         items={[
+          {
+            key: 'book',
+            label: (
+              <span style={{ fontWeight: 700, color: activeTab === 'book' ? '#16A34A' : undefined }}>
+                <CalendarOutlined style={{ color: '#16A34A' }} />
+                <span>Book Classroom</span>
+              </span>
+            ),
+            children: (
+              <div style={{ paddingTop: 8 }}>
+                {submittedBooking ? (
+                  <Result
+                    status="success"
+                    title="Room Reservation Submitted!"
+                    subTitle={
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>
+                          {location.name} ({location.code})
+                        </div>
+                        <Space size={6} wrap style={{ marginBottom: 12 }}>
+                          <Tag color={user?.role === 'technician' || user?.role === 'manager' ? 'green' : 'gold'} style={{ fontWeight: 700 }}>
+                            {user?.role === 'technician' || user?.role === 'manager' ? '✓ CONFIRMED (STAFF)' : '⏳ PENDING ADMINISTRATIVE APPROVAL'}
+                          </Tag>
+                          {submittedBooking.is_recurring && (
+                            <Tag color="purple">Weekly Recurring ({submittedBooking.weeks || 14} Weeks)</Tag>
+                          )}
+                        </Space>
+                        <div style={{ fontSize: 13, color: '#64748B' }}>
+                          Your room reservation has been recorded in the faculty reservation system.
+                        </div>
+                      </div>
+                    }
+                    extra={[
+                      <Button
+                        key="another"
+                        type="primary"
+                        onClick={() => setSubmittedBooking(null)}
+                        style={{ fontWeight: 600, background: '#16A34A', borderColor: '#16A34A' }}
+                      >
+                        Reserve Another Slot
+                      </Button>,
+                      <Button key="schedule" onClick={() => setActiveTab('schedule')}>
+                        View Today's Schedule
+                      </Button>,
+                      <Button key="my" onClick={() => navigate('/my-activity')}>
+                        My Bookings & Activity
+                      </Button>
+                    ]}
+                  />
+                ) : location.status === 'maintenance' ? (
+                  <Alert
+                    type="error"
+                    showIcon
+                    style={{ borderRadius: 12, padding: 16 }}
+                    message={<span style={{ fontWeight: 700 }}>Reservations Temporarily Paused</span>}
+                    description={
+                      <div>
+                        {location.name} is currently undergoing technical maintenance. New reservations cannot be placed until maintenance is resolved.
+                      </div>
+                    }
+                  />
+                ) : user ? (
+                  <div>
+                    <div style={{ marginBottom: 16 }}>
+                      <Text strong style={{ fontSize: 14 }}>
+                        Instant Booking for {location.name} ({location.code})
+                      </Text>
+                      <Paragraph type="secondary" style={{ fontSize: 12, margin: '2px 0 12px 0' }}>
+                        Reserve this classroom for study sessions, club events, project presentations, or makeup lectures.
+                      </Paragraph>
+                    </div>
+
+                    {bookingError && (
+                      <Alert
+                        type="error"
+                        message={bookingError}
+                        showIcon
+                        closable
+                        onClose={() => setBookingError('')}
+                        style={{ marginBottom: 16, borderRadius: 8 }}
+                      />
+                    )}
+
+                    <Form
+                      form={bookForm}
+                      layout="vertical"
+                      onFinish={handleBookingSubmit}
+                      initialValues={{
+                        date: dayjs(),
+                        startTime: dayjs().hour(9).minute(0),
+                        endTime: dayjs().hour(11).minute(0),
+                        weeks: 14
+                      }}
+                    >
+                      <Row gutter={12}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item
+                            name="date"
+                            label={<span style={{ fontWeight: 600 }}>Booking Date</span>}
+                            rules={[{ required: true, message: 'Please select a date' }]}
+                          >
+                            <DatePicker
+                              style={{ width: '100%', borderRadius: 8 }}
+                              format="DD/MM/YYYY"
+                              disabledDate={(cur) => cur && cur < dayjs().startOf('day')}
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Form.Item
+                            name="startTime"
+                            label={<span style={{ fontWeight: 600 }}>Start Time</span>}
+                            rules={[{ required: true, message: 'Start time required' }]}
+                          >
+                            <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%', borderRadius: 8 }} />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Form.Item
+                            name="endTime"
+                            label={<span style={{ fontWeight: 600 }}>End Time</span>}
+                            rules={[{ required: true, message: 'End time required' }]}
+                          >
+                            <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%', borderRadius: 8 }} />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+
+                      <Form.Item
+                        name="purpose"
+                        label={<span style={{ fontWeight: 600 }}>Session Purpose & Event Details</span>}
+                        rules={[{ required: true, message: 'Please state the booking purpose' }]}
+                      >
+                        <Input.TextArea
+                          rows={3}
+                          placeholder="e.g. FYP project discussion, Study group, Workshop, Student society meeting"
+                          style={{ borderRadius: 8 }}
+                        />
+                      </Form.Item>
+
+                      <Row gutter={12}>
+                        <Col xs={24} sm={12}>
+                          <Form.Item name="course_id" label={<span style={{ fontWeight: 600 }}>Course / Subject Code (Optional)</span>}>
+                            <Input placeholder="e.g. WIX1002 / BIC21203" style={{ borderRadius: 8 }} />
+                          </Form.Item>
+                        </Col>
+                        {(user.role === 'lecturer' || user.role === 'manager') && (
+                          <Col xs={24} sm={12}>
+                            <Form.Item
+                              name="is_recurring"
+                              valuePropName="checked"
+                              style={{ marginTop: 28 }}
+                            >
+                              <Checkbox onChange={(e) => setIsRecurringBooking(e.target.checked)}>
+                                <span style={{ fontWeight: 600 }}>Repeat Weekly Throughout Semester</span>
+                              </Checkbox>
+                            </Form.Item>
+                          </Col>
+                        )}
+                      </Row>
+
+                      {isRecurringBooking && (user.role === 'lecturer' || user.role === 'manager') && (
+                        <Form.Item
+                          name="weeks"
+                          label={<span style={{ fontWeight: 600 }}>Number of Recurring Weeks</span>}
+                          rules={[{ required: true }]}
+                        >
+                          <InputNumber min={1} max={18} style={{ width: 140, borderRadius: 8 }} />
+                        </Form.Item>
+                      )}
+
+                      <Button
+                        type="primary"
+                        htmlType="submit"
+                        size="large"
+                        loading={submittingBooking}
+                        icon={<CalendarOutlined />}
+                        style={{
+                          width: '100%',
+                          height: 48,
+                          borderRadius: 12,
+                          background: '#16A34A',
+                          borderColor: '#16A34A',
+                          fontWeight: 700,
+                          fontSize: 15,
+                          marginTop: 8
+                        }}
+                      >
+                        Confirm Reservation for {location.code}
+                      </Button>
+                    </Form>
+                  </div>
+                ) : (
+                  <Card
+                    style={{
+                      borderRadius: 16,
+                      border: '1px solid #BFDBFE',
+                      background: 'linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%)',
+                      textAlign: 'center',
+                      padding: '24px 16px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 58,
+                        height: 58,
+                        borderRadius: '50%',
+                        background: '#DBEAFE',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 16px',
+                        color: '#1E3A8A',
+                        fontSize: 26
+                      }}
+                    >
+                      <CalendarOutlined />
+                    </div>
+
+                    <Title level={4} style={{ color: '#0F172A', marginBottom: 6 }}>
+                      Sign In to Reserve {location.name}
+                    </Title>
+                    <Paragraph type="secondary" style={{ maxWidth: 460, margin: '0 auto 20px', fontSize: 13, lineHeight: 1.6 }}>
+                      To reserve <strong>{location.name} ({location.code})</strong>, please sign in with your university account.
+                      Once logged in, you will be redirected right back to this classroom to finalize your reservation.
+                    </Paragraph>
+
+                    <Space wrap size="middle" style={{ justifyContent: 'center', marginBottom: 16 }}>
+                      <Button
+                        type="primary"
+                        size="large"
+                        icon={<UserOutlined />}
+                        onClick={() => navigate('/login/student', { state: { from: locationState } })}
+                        style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 700, borderRadius: 10 }}
+                      >
+                        Sign In as Student
+                      </Button>
+                      <Button
+                        size="large"
+                        icon={<IdcardOutlined />}
+                        onClick={() => navigate('/login/lecturer', { state: { from: locationState } })}
+                        style={{ fontWeight: 700, borderRadius: 10 }}
+                      >
+                        Sign In as Lecturer
+                      </Button>
+                      <Button
+                        size="large"
+                        onClick={() => navigate('/login/staff', { state: { from: locationState } })}
+                        style={{ fontWeight: 600, borderRadius: 10 }}
+                      >
+                        Staff Portal
+                      </Button>
+                    </Space>
+
+                    <div style={{ marginTop: 12 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        New to FSKTM?{' '}
+                        <a
+                          onClick={() => navigate('/register', { state: { from: locationState } })}
+                          style={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer' }}
+                        >
+                          Create student account &rarr;
+                        </a>
+                      </Text>
+                    </div>
+
+                    <Divider style={{ margin: '16px 0 12px 0' }} />
+
+                    <div style={{ fontSize: 12, color: '#64748B' }}>
+                      💡 <em>Tip: You do not need to sign in to report broken items or give feedback! Select the <strong>Report Breakdown</strong> or <strong>Classroom Feedback</strong> tabs above to submit freely.</em>
+                    </div>
+                  </Card>
+                )}
+              </div>
+            )
+          },
           {
             key: 'report',
             label: (

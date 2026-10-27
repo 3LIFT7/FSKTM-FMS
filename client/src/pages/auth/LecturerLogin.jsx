@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
 import GoogleAuthModal, { GoogleContinueButton } from '../../components/GoogleAuthModal';
+import { getRedirectDestination } from '../../utils/navigation';
 
 const { Title, Text } = Typography;
 
@@ -27,7 +28,7 @@ export default function LecturerLogin() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from?.pathname || '/lecturer';
+  const redirectUrl = getRedirectDestination(location, '/lecturer');
 
   const handleLogin = async (values) => {
     setError('');
@@ -36,7 +37,7 @@ export default function LecturerLogin() {
     try {
       await login(values.email, values.password, 'lecturer');
       message.success('Welcome to Lecturer Portal');
-      navigate(from, { replace: true });
+      navigate(redirectUrl, { replace: true });
     } catch (err) {
       setError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
@@ -289,6 +290,7 @@ export default function LecturerLogin() {
         onClose={() => setIsGoogleOpen(false)}
         defaultRole="lecturer"
         mode={activeTab === 'register' ? 'register' : 'login'}
+        onSuccess={(u) => navigate(redirectUrl, { replace: true })}
       />
     </div>
   );

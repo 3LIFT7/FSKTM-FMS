@@ -128,8 +128,7 @@ export const FLOOR_PLANS = {
     facilityTitle: 'Lecture & Academic Support Facilities',
     facilityTag: 'Academic Wing',
     allRooms: [
-      { code: 'C12-BK-101', name: 'BK-101', capacity: 60, category: 'Bilik Kuliah', pic: 'En. Sahidan bin Paran' },
-      { code: 'C12-STUDY', name: 'Ruang Perbincangan Pelajar C12', capacity: 20, category: 'Study Area' }
+      { code: 'C12-BK-101', name: 'BK-101', capacity: 60, category: 'Bilik Kuliah', pic: 'En. Sahidan bin Paran' }
     ]
   },
 

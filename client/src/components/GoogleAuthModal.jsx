@@ -14,8 +14,9 @@ import {
   ReadOutlined,
   SolutionOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getRedirectDestination } from '../utils/navigation';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -90,6 +91,7 @@ export default function GoogleAuthModal({
 }) {
   const { googleAuth } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Get Google Client ID from environment or local storage
   const envClientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -160,7 +162,8 @@ export default function GoogleAuthModal({
             if (onSuccess) {
               onSuccess(resultUser);
             } else {
-              navigate(resultUser.role === 'student' ? '/student' : '/lecturer', { replace: true });
+              const fallback = resultUser.role === 'student' ? '/student' : '/lecturer';
+              navigate(getRedirectDestination(location, fallback), { replace: true });
             }
             onClose();
           } catch (err) {
@@ -235,7 +238,8 @@ export default function GoogleAuthModal({
       if (onSuccess) {
         onSuccess(resultUser);
       } else {
-        navigate(resultUser.role === 'student' ? '/student' : '/lecturer', { replace: true });
+        const fallback = resultUser.role === 'student' ? '/student' : '/lecturer';
+        navigate(getRedirectDestination(location, fallback), { replace: true });
       }
       onClose();
     } catch (err) {

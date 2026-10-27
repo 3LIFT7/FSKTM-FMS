@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, Alert, Radio, Typography, Space, Tag } from 'antd';
 import {
   ReadOutlined,
@@ -7,16 +7,21 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import GoogleAuthModal, { GoogleContinueButton } from '../../components/GoogleAuthModal';
+import { getRedirectDestination } from '../../utils/navigation';
 
 const { Title, Text } = Typography;
 
 export default function RegisterPage({ initialRole = 'student' }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const roleParam = searchParams.get('role');
   const [role, setRole] = useState(roleParam === 'lecturer' ? 'lecturer' : initialRole);
   const [error, setError] = useState('');
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [googleTargetRole, setGoogleTargetRole] = useState(role);
+
+  const redirectUrl = getRedirectDestination(location, role === 'lecturer' ? '/lecturer' : '/student');
 
   const openGoogleAuth = (selectedRole) => {
     setGoogleTargetRole(selectedRole || role);
@@ -177,6 +182,7 @@ export default function RegisterPage({ initialRole = 'student' }) {
         onClose={() => setIsGoogleModalOpen(false)}
         defaultRole={googleTargetRole}
         mode="register"
+        onSuccess={(u) => navigate(redirectUrl, { replace: true })}
       />
     </div>
   );

@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
 import GoogleAuthModal, { GoogleContinueButton } from '../../components/GoogleAuthModal';
+import { getRedirectDestination } from '../../utils/navigation';
 
 const { Title, Text } = Typography;
 
@@ -27,7 +28,7 @@ export default function StudentLogin() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from?.pathname || '/student';
+  const redirectUrl = getRedirectDestination(location, '/student');
 
   const handleLogin = async (values) => {
     setError('');
@@ -36,7 +37,7 @@ export default function StudentLogin() {
     try {
       await login(values.email, values.password, 'student');
       message.success('Welcome to FSKTM Portal');
-      navigate(from, { replace: true });
+      navigate(redirectUrl, { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed. Please verify credentials.');
     } finally {
@@ -293,6 +294,7 @@ export default function StudentLogin() {
         onClose={() => setIsGoogleOpen(false)}
         defaultRole="student"
         mode={activeTab === 'register' ? 'register' : 'login'}
+        onSuccess={(u) => navigate(redirectUrl, { replace: true })}
       />
     </div>
   );

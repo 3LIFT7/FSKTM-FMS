@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
+import { getRedirectDestination } from '../../utils/navigation';
 
 const { Title, Text } = Typography;
 
@@ -24,7 +25,7 @@ export default function StaffLogin() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = location.state?.from?.pathname || '/staff';
+  const redirectUrl = getRedirectDestination(location, '/staff');
 
   const handleLogin = async (values) => {
     setError('');
@@ -33,7 +34,7 @@ export default function StaffLogin() {
     try {
       await login(values.email, values.password, 'staff');
       message.success('Authenticated to Staff Console');
-      navigate(from, { replace: true });
+      navigate(redirectUrl, { replace: true });
     } catch (err) {
       setError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
