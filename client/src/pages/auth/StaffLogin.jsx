@@ -84,7 +84,7 @@ export default function StaffLogin() {
   const fillManager = () => {
     form.setFieldsValue({
       email: 'manager@fsktm.um.edu.my',
-      password: 'Manager123!',
+      password: 'Password123!',
     });
     setError('');
   };
