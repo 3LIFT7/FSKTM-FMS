@@ -191,7 +191,10 @@ export default function StudentLogin() {
                         />
                       </Form.Item>
 
-                      <div style={{ textAlign: 'right', marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                        <span style={{ fontSize: 11, color: '#64748B' }}>
+                          💡 Google user? Use Matric Number or <code>Student123!</code>
+                        </span>
                         <Button
                           type="link"
                           size="small"

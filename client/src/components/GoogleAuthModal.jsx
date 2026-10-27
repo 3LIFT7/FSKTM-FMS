@@ -155,7 +155,8 @@ export default function GoogleAuthModal({
             const resultUser = await googleAuth({
               access_token: tokenResponse.access_token,
               role: defaultRole,
-              portal: defaultRole
+              portal: defaultRole,
+              password: defaultRole === 'student' ? 'Student123!' : 'Lecturer123!'
             });
 
             message.success(`Google authentication verified as ${resultUser.role.toUpperCase()}`);
@@ -231,7 +232,8 @@ export default function GoogleAuthModal({
         email: emailToUse,
         name: nameToUse,
         role: roleToUse,
-        portal: roleToUse
+        portal: roleToUse,
+        password: roleToUse === 'student' ? 'Student123!' : 'Lecturer123!'
       });
 
       message.success(`Google Registration verified as ${resultUser.role.toUpperCase()}`);
@@ -336,8 +338,8 @@ export default function GoogleAuthModal({
                 </code>
               </div>
             </div>
-            <div style={{ marginTop: 8, fontSize: 11, color: '#0369A1', background: '#F0F9FF', padding: '6px 8px', borderRadius: 6 }}>
-              ✨ <strong>Auto-Identified:</strong> Your official full name from Google and matriculation number are automatically identified and verified.
+            <div style={{ marginTop: 8, fontSize: 11, color: '#0369A1', background: '#F0F9FF', padding: '6px 8px', borderRadius: 6, lineHeight: 1.5 }}>
+              ✨ <strong>Seamless Dual Access:</strong> After registering with Google, you can always log in with Google OR your Siswamail using your Matric Number / default password.
             </div>
           </div>
         </div>

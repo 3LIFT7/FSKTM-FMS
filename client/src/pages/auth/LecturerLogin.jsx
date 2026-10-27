@@ -187,7 +187,10 @@ export default function LecturerLogin() {
                         />
                       </Form.Item>
 
-                      <div style={{ textAlign: 'right', marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                        <span style={{ fontSize: 11, color: '#64748B' }}>
+                          💡 Google user? Default pass is <code>Lecturer123!</code>
+                        </span>
                         <Button
                           type="link"
                           size="small"

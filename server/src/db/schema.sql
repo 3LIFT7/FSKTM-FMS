@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
     matric_or_staff_id VARCHAR(50),
     department VARCHAR(100) DEFAULT 'FSKTM',
     specialization VARCHAR(50),
+    auth_provider VARCHAR(50) DEFAULT 'local',
+    password_set BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

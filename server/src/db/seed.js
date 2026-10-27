@@ -21,6 +21,8 @@ async function seedDatabase() {
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS recurrence_group_id VARCHAR(100);
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS series_status VARCHAR(50) DEFAULT 'active';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT FALSE;
       ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);

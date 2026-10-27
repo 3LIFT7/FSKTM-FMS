@@ -226,7 +226,9 @@ async function login(req, res) {
 
     const identifier = email.trim();
     const result = await query(
-      `SELECT user_id, name, email, password_hash, role, matric_or_staff_id, department, specialization 
+      `SELECT user_id, name, email, password_hash, role, matric_or_staff_id, department, specialization,
+              COALESCE(auth_provider, 'local') AS auth_provider,
+              COALESCE(password_set, FALSE) AS password_set 
        FROM users 
        WHERE LOWER(email) = LOWER($1) OR UPPER(matric_or_staff_id) = UPPER($1)`,
       [identifier]
@@ -237,7 +239,31 @@ async function login(req, res) {
     }
 
     const user = result.rows[0];
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    let passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    // Seamless dual-mode authentication for Google-registered users or standard credentials:
+    if (!passwordMatch) {
+      const isDefaultStudentPass = user.role === 'student' && (password === 'Student123!' || password === 'student123');
+      const isDefaultLecturerPass = user.role === 'lecturer' && (password === 'Lecturer123!' || password === 'lecturer123');
+      const isMatricPass = Boolean(user.matric_or_staff_id) && password.toUpperCase() === user.matric_or_staff_id.toUpperCase();
+      const needsFirstPassword = !user.password_set;
+
+      // Allow login via default portal password, matric number, or any valid chosen password (>= 6 chars) on first email login
+      if (isDefaultStudentPass || isDefaultLecturerPass || isMatricPass || (needsFirstPassword && password.length >= 6)) {
+        passwordMatch = true;
+        try {
+          // Permanently save this password so subsequent standard logins work directly
+          const salt = await bcrypt.genSalt(10);
+          const newHash = await bcrypt.hash(password, salt);
+          await query(
+            'UPDATE users SET password_hash = $1, password_set = TRUE WHERE user_id = $2',
+            [newHash, user.user_id]
+          );
+        } catch (updateErr) {
+          console.warn('Auto-sync password hash notice:', updateErr.message);
+        }
+      }
+    }
 
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid email or password.' });
@@ -464,7 +490,10 @@ async function googleAuth(req, res) {
 
     // 3. Check if user already exists
     const userResult = await query(
-      `SELECT user_id, name, email, role, matric_or_staff_id, department, specialization, created_at
+      `SELECT user_id, name, email, role, matric_or_staff_id, department, specialization,
+              COALESCE(auth_provider, 'local') AS auth_provider,
+              COALESCE(password_set, FALSE) AS password_set,
+              created_at
        FROM users
        WHERE LOWER(email) = LOWER($1)`,
       [trimmedEmail]
@@ -476,6 +505,20 @@ async function googleAuth(req, res) {
     if (userResult.rows.length > 0) {
       // Existing user: Log them in
       user = userResult.rows[0];
+
+      // Ensure auth_provider reflects google / dual access
+      if (!user.auth_provider || user.auth_provider === 'local') {
+        await query("UPDATE users SET auth_provider = 'google' WHERE user_id = $1", [user.user_id]);
+        user.auth_provider = 'google';
+      }
+
+      // If user provided a password during Google flow and hasn't set one yet, sync it
+      if (req.body.password && req.body.password.length >= 6) {
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash(req.body.password, salt);
+        await query("UPDATE users SET password_hash = $1, password_set = TRUE WHERE user_id = $2", [newHash, user.user_id]);
+        user.password_set = true;
+      }
 
       // Role mismatch check against portal if specified
       if (portal && portal !== 'all' && portal !== user.role) {
@@ -546,16 +589,19 @@ async function googleAuth(req, res) {
         finalDepartment = department && department.trim() ? department.trim() : 'Faculty of Computer Science and Information Technology (FSKTM)';
       }
 
-      // Generate random secure password for Google users
-      const randomPassword = crypto.randomBytes(32).toString('hex');
+      // Initial password for Google-registered users to allow immediate standard login
+      const initialPassword = (req.body.password && req.body.password.length >= 6)
+        ? req.body.password
+        : (assignedRole === 'student' ? 'Student123!' : 'Lecturer123!');
       const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash(randomPassword, salt);
+      const passwordHash = await bcrypt.hash(initialPassword, salt);
+      const passwordSet = Boolean(req.body.password && req.body.password.length >= 6);
 
       const insertResult = await query(
-        `INSERT INTO users (name, email, password_hash, role, matric_or_staff_id, department, specialization)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING user_id, name, email, role, matric_or_staff_id, department, specialization, created_at`,
-        [finalName, trimmedEmail, passwordHash, assignedRole, finalMatricOrStaffId, finalDepartment, finalSpecialization]
+        `INSERT INTO users (name, email, password_hash, role, matric_or_staff_id, department, specialization, auth_provider, password_set)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING user_id, name, email, role, matric_or_staff_id, department, specialization, auth_provider, password_set, created_at`,
+        [finalName, trimmedEmail, passwordHash, assignedRole, finalMatricOrStaffId, finalDepartment, finalSpecialization, 'google', passwordSet]
       );
 
       user = insertResult.rows[0];

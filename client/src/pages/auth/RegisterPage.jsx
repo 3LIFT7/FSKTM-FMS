@@ -115,7 +115,10 @@ export default function RegisterPage({ initialRole = 'student' }) {
                 </code>
               </div>
             </div>
-            <div style={{ marginTop: 8, fontSize: 11, color: '#64748B' }}>
+            <div style={{ marginTop: 8, fontSize: 11, color: '#0369A1', background: '#F0F9FF', padding: '6px 8px', borderRadius: 6 }}>
+              ✨ <strong>Dual Login Enabled:</strong> Registering via Google automatically enables both Google login and standard email/password login.
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11, color: '#64748B' }}>
               ✕ Non-university accounts (e.g. @gmail.com) are strictly rejected.
             </div>
           </div>
