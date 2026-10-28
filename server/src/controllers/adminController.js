@@ -18,7 +18,7 @@ async function getAllUsers(req, res) {
       sql += ` AND (LOWER(name) LIKE $${params.length} OR LOWER(email) LIKE $${params.length} OR LOWER(matric_or_staff_id) LIKE $${params.length})`;
     }
 
-    sql += ' ORDER BY role, name ASC';
+    sql += ' ORDER BY created_at DESC, user_id DESC';
     const result = await query(sql, params);
     return res.json({ success: true, count: result.rows.length, users: result.rows });
   } catch (err) {

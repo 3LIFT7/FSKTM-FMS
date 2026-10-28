@@ -91,18 +91,25 @@ export default function UsersManage() {
   }
 
   const filteredUsers = useMemo(() => {
-    return users.filter(u => {
-      if (roleFilter !== 'All' && u.role !== roleFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q) ||
-          (u.matric_or_staff_id && u.matric_or_staff_id.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
+    return [...users]
+      .sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        return (b.user_id || 0) - (a.user_id || 0);
+      })
+      .filter(u => {
+        if (roleFilter !== 'All' && u.role !== roleFilter) return false;
+        if (search) {
+          const q = search.toLowerCase();
+          return (
+            u.name.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q) ||
+            (u.matric_or_staff_id && u.matric_or_staff_id.toLowerCase().includes(q))
+          );
+        }
+        return true;
+      });
   }, [users, roleFilter, search]);
 
   const columns = [
