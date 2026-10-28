@@ -17,7 +17,7 @@ export default function ImageInputPreview({
   fieldName = 'image_url',
   label = 'Facility Display Image URL',
   extra = 'Provide an image link (e.g. Unsplash, faculty asset URL, or web link) or upload a photo to showcase this facility.',
-  placeholder = 'https://... or /uploads/...',
+  placeholder = '',
   presets = [],
   saveReminder = 'Click Save Facility Changes below to apply this image.'
 }) {

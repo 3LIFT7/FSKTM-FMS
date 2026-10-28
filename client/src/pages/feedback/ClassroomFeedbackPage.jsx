@@ -824,13 +824,6 @@ export default function ClassroomFeedbackPage() {
                       >
                         <Input.TextArea
                           rows={4}
-                          placeholder={`e.g. ${
-                            selectedCategory === 'Air Conditioning'
-                              ? 'Air conditioner leaking water near door / room not cooling down'
-                              : selectedCategory === 'Projector & AV'
-                              ? 'Projector display is flickering or screen not lowering'
-                              : 'Describe the issue observed in this room...'
-                          }`}
                         />
                       </Form.Item>
 
@@ -855,7 +848,7 @@ export default function ClassroomFeedbackPage() {
                               label="Your Name (Student / Staff)"
                               rules={[{ required: true, message: 'Please enter your name' }]}
                             >
-                              <Input prefix={<UserOutlined style={{ color: '#94A3B8' }} />} placeholder="e.g. Aiman Hakim" />
+                              <Input prefix={<UserOutlined style={{ color: '#94A3B8' }} />} />
                             </Form.Item>
                           </Col>
                           <Col xs={24} sm={12}>
@@ -864,7 +857,7 @@ export default function ClassroomFeedbackPage() {
                               label="Matric / Staff Email"
                               rules={[{ required: true, message: 'Please enter your email or matric ID' }]}
                             >
-                              <Input prefix={<MailOutlined style={{ color: '#94A3B8' }} />} placeholder="e.g. WIF210045@siswa.um.edu.my" />
+                              <Input prefix={<MailOutlined style={{ color: '#94A3B8' }} />} />
                             </Form.Item>
                           </Col>
                         </Row>
@@ -987,7 +980,6 @@ export default function ClassroomFeedbackPage() {
                       >
                         <Input.TextArea
                           rows={4}
-                          placeholder="e.g. Excellent projector quality today, but chairs at row 3 need arrangement. AC temperature was comfortable."
                         />
                       </Form.Item>
 
@@ -1018,7 +1010,7 @@ export default function ClassroomFeedbackPage() {
                           </Col>
                           <Col xs={24} sm={12}>
                             <Form.Item name="reporter_email" label="Your Email (Optional)">
-                              <Input prefix={<MailOutlined />} placeholder="name@siswa.um.edu.my" />
+                              <Input prefix={<MailOutlined />} />
                             </Form.Item>
                           </Col>
                         </Row>

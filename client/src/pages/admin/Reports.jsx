@@ -760,7 +760,6 @@ export default function Reports() {
                     rowKey="booking_id"
                     pagination={{ pageSize: 8, showTotal: (t) => `Total ${t} room reservation requests` }}
                     size="small"
-                    scroll={{ x: 'max-content' }}
                     locale={{ emptyText: <Empty description="No room reservation requests found matching criteria" /> }}
                   />
                 </div>
@@ -814,7 +813,6 @@ export default function Reports() {
                     rowKey="loan_id"
                     pagination={{ pageSize: 8, showTotal: (t) => `Total ${t} equipment loan requests` }}
                     size="small"
-                    scroll={{ x: 'max-content' }}
                     locale={{ emptyText: <Empty description="No equipment loan requests found matching criteria" /> }}
                   />
                 </div>
@@ -867,7 +865,6 @@ export default function Reports() {
                     rowKey="report_id"
                     pagination={{ pageSize: 8, showTotal: (t) => `Total ${t} damage reports` }}
                     size="small"
-                    scroll={{ x: 'max-content' }}
                     locale={{ emptyText: <Empty description="No damage or breakdown reports found matching criteria" /> }}
                   />
                 </div>
@@ -901,7 +898,6 @@ export default function Reports() {
                     rowKey="device_id"
                     pagination={{ pageSize: 6 }}
                     size="small"
-                    scroll={{ x: 'max-content' }}
                     locale={{ emptyText: <Empty description="No equipment records compiled yet" /> }}
                   />
 

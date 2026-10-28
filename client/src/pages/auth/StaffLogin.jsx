@@ -189,7 +189,6 @@ export default function StaffLogin() {
             >
               <Input
                 prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
-                placeholder="staff@fsktm.um.edu.my"
                 size="large"
                 autoComplete="username"
               />
@@ -203,7 +202,6 @@ export default function StaffLogin() {
             >
               <Input.Password
                 prefix={<LockOutlined style={{ color: '#94A3B8' }} />}
-                placeholder="••••••••"
                 size="large"
                 autoComplete="current-password"
               />

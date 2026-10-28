@@ -278,7 +278,6 @@ export default function StudentDashboard() {
               pagination={{ pageSize: 4, simple: true }}
               locale={{ emptyText: <Empty description="No room reservations scheduled" /> }}
               size="small"
-              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>
@@ -303,7 +302,6 @@ export default function StudentDashboard() {
               pagination={{ pageSize: 4, simple: true }}
               locale={{ emptyText: <Empty description="No hardware loans on record" /> }}
               size="small"
-              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>

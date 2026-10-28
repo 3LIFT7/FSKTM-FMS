@@ -121,7 +121,7 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
             label="Device / Model Name"
             rules={[{ required: true, message: 'Please enter device name' }]}
           >
-            <Input placeholder="e.g. Meta Quest 3 VR Headset" />
+            <Input />
           </Form.Item>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -130,7 +130,7 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
               label="Serial / Asset Number"
               rules={[{ required: true, message: 'Please enter serial number' }]}
             >
-              <Input placeholder="e.g. SN-VR-2024-001" style={{ textTransform: 'uppercase' }} />
+              <Input style={{ textTransform: 'uppercase' }} />
             </Form.Item>
 
             <Form.Item
@@ -139,7 +139,6 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
               extra="Asset tag / barcode"
             >
               <Input
-                placeholder="e.g. BC-VR-2024-001"
                 prefix={<BarcodeOutlined style={{ color: '#64748B' }} />}
                 allowClear
               />
@@ -199,7 +198,7 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
           </Form.Item>
 
           <Form.Item name="specs" label="Technical Specifications & Notes">
-            <Input.TextArea rows={2} placeholder="e.g. 512GB Storage, 2 Controllers, USB-C Cable included" />
+            <Input.TextArea rows={2} />
           </Form.Item>
 
           <ImageInputPreview
@@ -207,7 +206,6 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
             fieldName="image_url"
             label="Device Display Image URL"
             extra="Provide a product image URL or click 'Upload File' to select a photo from your computer."
-            placeholder="https://... or /uploads/..."
             presets={[
               { label: 'Laptop', url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800' },
               { label: 'VR Headset', url: 'https://images.unsplash.com/photo-1622979135225-d2ba269bc1df?w=800' },

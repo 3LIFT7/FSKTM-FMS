@@ -215,7 +215,6 @@ export default function UsersManage() {
             pagination={{ pageSize: 8 }}
             locale={{ emptyText: <Empty description="No users found" /> }}
             size="small"
-            scroll={{ x: 'max-content' }}
           />
         </div>
       </Card>
@@ -237,11 +236,11 @@ export default function UsersManage() {
           style={{ marginTop: 16 }}
         >
           <Form.Item name="name" label="Full Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g. Dr. Ahmad Zaki" />
+            <Input />
           </Form.Item>
 
           <Form.Item name="email" label="University Email" rules={[{ required: true, type: 'email' }]}>
-            <Input placeholder="user@uthm.edu.my" />
+            <Input />
           </Form.Item>
 
           <Form.Item name="password" label="Temporary Password" rules={[{ required: true, min: 6 }]}>
@@ -259,7 +258,7 @@ export default function UsersManage() {
             </Form.Item>
 
             <Form.Item name="id" label="Matric / Staff ID">
-              <Input placeholder="e.g. L-1092 or AI230182" style={{ textTransform: 'uppercase' }} />
+              <Input style={{ textTransform: 'uppercase' }} />
             </Form.Item>
           </div>
 

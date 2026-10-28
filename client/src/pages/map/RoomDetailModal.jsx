@@ -232,7 +232,6 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
                 size="small"
                 pagination={false}
                 locale={{ emptyText: 'No dedicated equipment recorded in this room' }}
-                scroll={{ x: 'max-content' }}
               />
             </div>
 

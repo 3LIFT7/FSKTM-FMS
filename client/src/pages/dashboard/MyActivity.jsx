@@ -205,7 +205,6 @@ export default function MyActivity() {
           loading={loading}
           pagination={{ pageSize: 6 }}
           size="small"
-          scroll={{ x: 'max-content' }}
           locale={{ emptyText: <Empty description="No room reservations found" /> }}
         />
       ),
@@ -226,7 +225,6 @@ export default function MyActivity() {
           loading={loading}
           pagination={{ pageSize: 6 }}
           size="small"
-          scroll={{ x: 'max-content' }}
           locale={{ emptyText: <Empty description="No hardware loans found" /> }}
         />
       ),
@@ -247,7 +245,6 @@ export default function MyActivity() {
           loading={loading}
           pagination={{ pageSize: 6 }}
           size="small"
-          scroll={{ x: 'max-content' }}
           locale={{ emptyText: <Empty description="No damage reports submitted" /> }}
         />
       ),

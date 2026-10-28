@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS location_bookings (
     recurrence_group_id VARCHAR(100) DEFAULT NULL, -- UUID tying all recurring weeks together
     series_status VARCHAR(50) DEFAULT 'active' CHECK (series_status IN ('active', 'paused', 'cancelled')),
     course_id VARCHAR(50) DEFAULT NULL,
+    course_name VARCHAR(255) DEFAULT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
     approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     rejection_reason TEXT,

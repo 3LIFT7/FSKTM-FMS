@@ -18,6 +18,7 @@ async function getBookings(req, res) {
         b.recurrence_group_id,
         COALESCE(b.series_status, 'active') AS series_status,
         b.course_id,
+        b.course_name,
         COALESCE(b.status, 'approved') AS status,
         b.approved_by,
         b.rejection_reason,
@@ -88,7 +89,7 @@ async function getBookings(req, res) {
 // POST /api/bookings
 async function createBooking(req, res) {
   try {
-    const { location_id, start_time, end_time, purpose, is_recurring, weeks = 14, recurrence_day, course_id } = req.body;
+    const { location_id, start_time, end_time, purpose, is_recurring, weeks = 14, recurrence_day, course_id, course_name } = req.body;
     const userId = req.user.user_id;
     const userRole = req.user.role;
 
@@ -132,6 +133,10 @@ async function createBooking(req, res) {
       return res.status(403).json({ error: 'Recurring bookings are reserved for Academic Lecturers and Lab Managers.' });
     }
 
+    if (!course_id?.trim() || !course_name?.trim()) {
+      return res.status(400).json({ error: 'Course code and course name are required for all bookings.' });
+    }
+
     // Booking approval policy:
     // Staff (technicians, managers) bookings are pre-approved.
     // Student & Lecturer bookings require Administrator approval.
@@ -151,7 +156,7 @@ async function createBooking(req, res) {
       const slotEnd = new Date(end);
       slotEnd.setDate(slotEnd.getDate() + (i * 7));
 
-      // Overlap check against active pending or approved bookings
+      // 1. Room Overlap check against active pending or approved bookings
       const conflictRes = await query(
         `SELECT b.booking_id, b.start_time, b.end_time, b.purpose, b.status, u.name as booked_by
          FROM location_bookings b
@@ -167,16 +172,44 @@ async function createBooking(req, res) {
         conflicts.push({
           week: i + 1,
           date: slotStart.toISOString().split('T')[0],
+          type: 'room_clash',
           conflictingBooking: conflictRes.rows[0]
+        });
+      }
+
+      // 2. Lecturer Schedule Clash: Check if the user already has a pending or approved session at this time
+      const lecturerClashRes = await query(
+        `SELECT b.booking_id, b.start_time, b.end_time, b.purpose, b.status, l.name as loc_name
+         FROM location_bookings b
+         JOIN locations l ON b.location_id = l.location_id
+         WHERE b.user_id = $1
+           AND b.status IN ('pending', 'approved')
+           AND b.start_time < $2
+           AND b.end_time > $3`,
+        [userId, slotEnd.toISOString(), slotStart.toISOString()]
+      );
+
+      if (lecturerClashRes.rows.length > 0) {
+        conflicts.push({
+          week: i + 1,
+          date: slotStart.toISOString().split('T')[0],
+          type: 'lecturer_clash',
+          conflictingBooking: lecturerClashRes.rows[0]
         });
       }
     }
 
     if (conflicts.length > 0) {
       const c = conflicts[0].conflictingBooking;
-      const cStatusText = c.status === 'approved' ? 'already booked' : 'pending approval';
+      const isLecturerClash = conflicts[0].type === 'lecturer_clash';
+      const cStatusText = c.status === 'approved' ? 'already scheduled' : 'pending approval';
+
+      const errorMsg = isLecturerClash
+        ? `Schedule time clash detected: You already have another class or booking (${c.purpose} in ${c.loc_name}) scheduled during this time (${new Date(c.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(c.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}).`
+        : `Time slot conflict detected for ${location.name}. This time slot is ${cStatusText} (${new Date(c.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(c.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}).`;
+
       return res.status(409).json({
-        error: `Time slot conflict detected for ${location.name}. This time slot is ${cStatusText} (${new Date(c.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(c.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}).`,
+        error: errorMsg,
         code: 'SCHEDULE_CONFLICT',
         conflicts
       });
@@ -192,10 +225,10 @@ async function createBooking(req, res) {
       const pattern = is_recurring ? `WEEKLY:${recurrence_day || 'WEEKDAY'}:W${i + 1}` : null;
 
       const insertRes = await query(
-        `INSERT INTO location_bookings (location_id, user_id, start_time, end_time, purpose, is_recurring, recurrence_pattern, recurrence_group_id, series_status, course_id, status, approved_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING booking_id, start_time, end_time, purpose, status, recurrence_group_id, series_status;`,
-        [location_id, userId, slotStart.toISOString(), slotEnd.toISOString(), purpose, is_recurring || false, pattern, recurrenceGroupId, 'active', course_id || null, initialStatus, approvedBy]
+        `INSERT INTO location_bookings (location_id, user_id, start_time, end_time, purpose, is_recurring, recurrence_pattern, recurrence_group_id, series_status, course_id, course_name, status, approved_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         RETURNING booking_id, start_time, end_time, purpose, course_id, course_name, status, recurrence_group_id, series_status;`,
+        [location_id, userId, slotStart.toISOString(), slotEnd.toISOString(), purpose, is_recurring || false, pattern, recurrenceGroupId, 'active', course_id ? course_id.toUpperCase().trim() : null, course_name ? course_name.trim() : null, initialStatus, approvedBy]
       );
       createdBookings.push(insertRes.rows[0]);
     }
@@ -273,6 +306,7 @@ async function updateBookingStatus(req, res) {
 
         // Verify conflict for each session in the series against approved bookings
         for (const sb of seriesBookings.rows) {
+          // 1. Room conflict check
           const conflictCheck = await query(
             `SELECT booking_id, purpose, start_time, end_time 
              FROM location_bookings
@@ -288,6 +322,26 @@ async function updateBookingStatus(req, res) {
             return res.status(409).json({
               error: `Cannot approve semester series: Slot on ${new Date(sb.start_time).toLocaleDateString()} (${new Date(sb.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}) conflicts with an already approved booking ("${conflictCheck.rows[0].purpose}").`,
               conflictingBooking: conflictCheck.rows[0]
+            });
+          }
+
+          // 2. Lecturer time clash check
+          const lecturerConflictCheck = await query(
+            `SELECT b.booking_id, b.purpose, b.start_time, b.end_time, l.name as loc_name
+             FROM location_bookings b
+             JOIN locations l ON b.location_id = l.location_id
+             WHERE b.user_id = $1
+               AND (b.recurrence_group_id IS NULL OR b.recurrence_group_id != $2)
+               AND b.status = 'approved'
+               AND b.start_time < $3
+               AND b.end_time > $4`,
+            [booking.user_id, booking.recurrence_group_id, sb.end_time, sb.start_time]
+          );
+
+          if (lecturerConflictCheck.rows.length > 0) {
+            return res.status(409).json({
+              error: `Cannot approve semester series: Lecturer already has an approved class ("${lecturerConflictCheck.rows[0].purpose}" in ${lecturerConflictCheck.rows[0].loc_name}) on ${new Date(sb.start_time).toLocaleDateString()} at this time.`,
+              conflictingBooking: lecturerConflictCheck.rows[0]
             });
           }
         }
@@ -324,6 +378,25 @@ async function updateBookingStatus(req, res) {
         return res.status(409).json({
           error: `Cannot approve: This time slot conflicts with an already approved booking ("${conflictCheck.rows[0].purpose}").`,
           conflictingBooking: conflictCheck.rows[0]
+        });
+      }
+
+      const lecturerConflictCheck = await query(
+        `SELECT b.booking_id, b.purpose, b.start_time, b.end_time, l.name as loc_name
+         FROM location_bookings b
+         JOIN locations l ON b.location_id = l.location_id
+         WHERE b.user_id = $1
+           AND b.booking_id != $2
+           AND b.status = 'approved'
+           AND b.start_time < $3
+           AND b.end_time > $4`,
+        [booking.user_id, id, booking.end_time, booking.start_time]
+      );
+
+      if (lecturerConflictCheck.rows.length > 0) {
+        return res.status(409).json({
+          error: `Cannot approve: Lecturer already has an approved class ("${lecturerConflictCheck.rows[0].purpose}" in ${lecturerConflictCheck.rows[0].loc_name}) at this time.`,
+          conflictingBooking: lecturerConflictCheck.rows[0]
         });
       }
 
@@ -549,11 +622,64 @@ async function toggleRecurringSeries(req, res) {
   }
 }
 
+// PATCH /api/bookings/:id/cancel-week
+// Cancel one specific occurrence (week) of a recurring series.
+// Available to the booking owner, technicians, and managers.
+async function cancelOneWeek(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.user_id;
+    const userRole = req.user.role;
+
+    const existing = await query(
+      `SELECT b.*, l.name AS location_name, u.name AS user_name
+       FROM location_bookings b
+       JOIN locations l ON b.location_id = l.location_id
+       JOIN users u ON b.user_id = u.user_id
+       WHERE b.booking_id = $1`,
+      [id]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    const booking = existing.rows[0];
+
+    // Only the owner, technician, or manager may cancel
+    const isStaff = ['technician', 'manager'].includes(userRole);
+    if (booking.user_id !== userId && !isStaff) {
+      return res.status(403).json({ error: 'You are not authorised to cancel this booking.' });
+    }
+
+    // Cannot cancel a session that is already in the past
+    if (new Date(booking.start_time) < new Date()) {
+      return res.status(400).json({ error: 'Cannot cancel a session that has already started or ended.' });
+    }
+
+    await query(
+      `UPDATE location_bookings
+       SET status = 'cancelled', rejection_reason = 'Session cancelled by ${isStaff ? 'technician/manager' : 'lecturer'}'
+       WHERE booking_id = $1`,
+      [id]
+    );
+
+    return res.json({
+      success: true,
+      message: `Session on ${new Date(booking.start_time).toLocaleDateString()} for ${booking.location_name} has been cancelled.`,
+    });
+  } catch (err) {
+    console.error('cancelOneWeek error:', err);
+    return res.status(500).json({ error: 'Failed to cancel booking session.' });
+  }
+}
+
 module.exports = {
   getBookings,
   createBooking,
   updateBookingStatus,
   deleteBooking,
-  toggleRecurringSeries
+  toggleRecurringSeries,
+  cancelOneWeek,
 };
 

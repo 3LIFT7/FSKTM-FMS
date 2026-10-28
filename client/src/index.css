@@ -67,28 +67,30 @@ html, body {
   flex-direction: column;
 }
 
-/* Responsive Table container and clean modern scrollbars */
-.ant-table-wrapper {
+/* Tables fit their container, with long content wrapping within each cell. */
+.ant-table-wrapper,
+.ant-table-wrapper .ant-spin-nested-loading,
+.ant-table-wrapper .ant-spin-container,
+.ant-table-wrapper .ant-table-container,
+.ant-table-wrapper .ant-table-content {
+  min-width: 0;
   max-width: 100%;
   width: 100%;
 }
 
-.ant-table-content,
-.ant-table-body {
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+.ant-table-wrapper .ant-table {
+  table-layout: fixed;
+  width: 100%;
 }
 
-.ant-table-content::-webkit-scrollbar,
-.ant-table-body::-webkit-scrollbar {
-  height: 4px;
-  width: 4px;
+.ant-table-wrapper .ant-table-content {
+  overflow-x: hidden !important;
 }
 
-.ant-table-content::-webkit-scrollbar-thumb,
-.ant-table-body::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+.ant-table-wrapper .ant-table-thead > tr > th,
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 /* Prevent empty tables from displaying redundant scrollbars */

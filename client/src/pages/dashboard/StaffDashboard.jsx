@@ -13,6 +13,7 @@ import {
   AppstoreOutlined,
   ReloadOutlined,
   CompassOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import StatusTag from '../../components/StatusTag';
@@ -116,6 +117,44 @@ export default function StaffDashboard() {
       message.success('Booking rejected');
       setRejectingBookingId(null);
       setRejectReason('');
+      fetchOperationalData();
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function handleCancelBooking(bookingId) {
+    setActionLoadingId(bookingId);
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/cancel-week`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel booking.');
+      message.success(data.message || 'Booking cancelled.');
+      fetchOperationalData();
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function handleCancelSeries(groupId) {
+    setActionLoadingId(groupId);
+    try {
+      const res = await fetch(`/api/bookings/recurring/${groupId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'cancel' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel series.');
+      message.success(data.message || 'Series cancelled.');
       fetchOperationalData();
     } catch (err) {
       message.error(err.message);
@@ -230,7 +269,7 @@ export default function StaffDashboard() {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
-        <Space size="small">
+        <Space size="small" wrap>
           <Button
             size="small"
             type="primary"
@@ -252,6 +291,46 @@ export default function StaffDashboard() {
           >
             {record.is_recurring_series ? 'Reject Series' : 'Reject'}
           </Button>
+
+          {/* Cancel this one occurrence */}
+          <Popconfirm
+            title="Cancel This Booking"
+            description={record.is_recurring_series ? 'Cancel this one occurrence only?' : 'Cancel this booking?'}
+            onConfirm={() => handleCancelBooking(record.booking_id)}
+            okText="Yes, Cancel"
+            cancelText="No"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              size="small"
+              icon={<StopOutlined />}
+              loading={actionLoadingId === record.booking_id}
+              style={{ borderColor: '#F59E0B', color: '#B45309' }}
+            >
+              {record.is_recurring_series ? 'Cancel Week' : 'Cancel'}
+            </Button>
+          </Popconfirm>
+
+          {/* Cancel entire recurring series */}
+          {record.is_recurring_series && record.recurrence_group_id && (
+            <Popconfirm
+              title="Cancel Entire Series"
+              description="Cancel ALL remaining weeks of this recurring series? This cannot be undone."
+              onConfirm={() => handleCancelSeries(record.recurrence_group_id)}
+              okText="Yes, Cancel All"
+              cancelText="No"
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                size="small"
+                danger
+                icon={<StopOutlined />}
+                loading={actionLoadingId === record.recurrence_group_id}
+              >
+                Cancel Series
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -386,7 +465,6 @@ export default function StaffDashboard() {
           pagination={{ pageSize: 5 }}
           locale={{ emptyText: <Empty description="No pending room reservations awaiting approval" /> }}
           size="small"
-          scroll={{ x: 'max-content' }}
         />
       </Card>
 
@@ -413,7 +491,6 @@ export default function StaffDashboard() {
               pagination={{ pageSize: 4, simple: true }}
               locale={{ emptyText: <Empty description="No open breakdown tickets" /> }}
               size="small"
-              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>
@@ -478,7 +555,6 @@ export default function StaffDashboard() {
           rows={3}
           value={rejectReason}
           onChange={(e) => setRejectReason(e.target.value)}
-          placeholder="e.g. Facility is reserved for departmental workshop."
         />
       </Modal>
     </div>

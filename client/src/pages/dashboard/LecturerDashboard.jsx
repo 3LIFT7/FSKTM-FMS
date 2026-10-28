@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import BookRoomModal from '../booking/BookRoomModal';
+import WeeklyTimetable from '../../components/WeeklyTimetable';
 import StatusTag from '../../components/StatusTag';
 import { formatDateTime } from '../../utils/date';
 
@@ -25,6 +26,7 @@ export default function LecturerDashboard() {
   const [loading, setLoading] = useState(true);
   const [togglingGroupId, setTogglingGroupId] = useState(null);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
 
   useEffect(() => {
     fetchLecturerData();
@@ -238,34 +240,28 @@ export default function LecturerDashboard() {
         </Col>
       </Row>
 
-      {/* Bookings Table */}
-      <Card
-        title={
-          <Space>
-            <CalendarOutlined style={{ color: '#B45309' }} />
-            <span>My Lecture & Lab Reservations</span>
-          </Space>
-        }
-        extra={<Link to="/calendar">View Full Calendar &rarr;</Link>}
-        bordered={false}
-        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-      >
-        <Table
-          dataSource={myBookings}
-          columns={columns}
-          rowKey="booking_id"
-          loading={loading}
-          pagination={{ pageSize: 6 }}
-          locale={{ emptyText: <Empty description="No room reservations on record" /> }}
-          size="small"
-          scroll={{ x: 'max-content' }}
-        />
-      </Card>
+      {/* Weekly Timetable Table Section for Lecturer's Assigned Classes */}
+      <WeeklyTimetable
+        bookings={myBookings}
+        onBookSlot={(slot) => {
+          setSelectedSlotForBooking(slot || null);
+          setIsBookModalOpen(true);
+        }}
+        onRefresh={fetchLecturerData}
+        lecturerName={user?.name}
+      />
 
       <BookRoomModal
         isOpen={isBookModalOpen}
-        onClose={() => setIsBookModalOpen(false)}
-        onBookingCreated={() => fetchLecturerData()}
+        initialSlot={selectedSlotForBooking}
+        onClose={() => {
+          setIsBookModalOpen(false);
+          setSelectedSlotForBooking(null);
+        }}
+        onBookingCreated={() => {
+          fetchLecturerData();
+          setSelectedSlotForBooking(null);
+        }}
       />
     </div>
   );

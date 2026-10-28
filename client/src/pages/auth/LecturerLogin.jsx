@@ -201,7 +201,6 @@ export default function LecturerLogin() {
                       >
                         <Input
                           prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
-                          placeholder="e.g. norasri@uthm.edu.my or L-9042"
                           size="large"
                           autoComplete="username"
                         />
@@ -215,7 +214,6 @@ export default function LecturerLogin() {
                       >
                         <Input.Password
                           prefix={<LockOutlined style={{ color: '#94A3B8' }} />}
-                          placeholder="••••••••"
                           size="large"
                           autoComplete="current-password"
                         />

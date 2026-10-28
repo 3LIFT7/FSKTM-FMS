@@ -440,7 +440,6 @@ export default function DeviceManage() {
                   pagination={false}
                   locale={{ emptyText: <Empty description="No equipment loan records" /> }}
                   size="small"
-                  scroll={{ x: 'max-content' }}
                 />
               ),
             },
@@ -496,7 +495,6 @@ export default function DeviceManage() {
                     pagination={false}
                     locale={{ emptyText: <Empty description="No hardware equipment found" /> }}
                     size="small"
-                    scroll={{ x: 'max-content' }}
                     onRow={(record) => ({
                       onClick: (e) => {
                         if (e.target.closest('button') || e.target.closest('.ant-popover') || e.target.closest('.ant-popconfirm')) return;
@@ -529,16 +527,16 @@ export default function DeviceManage() {
           style={{ marginTop: 16 }}
         >
           <Form.Item name="name" label="Asset / Device Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g. Meta Quest 3 VR Headset" />
+            <Input />
           </Form.Item>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <Form.Item name="serial_number" label="Serial Number" rules={[{ required: true, message: 'Please enter serial number' }]}>
-              <Input placeholder="e.g. SN-VR-2024-001" style={{ textTransform: 'uppercase' }} />
+              <Input style={{ textTransform: 'uppercase' }} />
             </Form.Item>
 
             <Form.Item name="barcode" label="Barcode Number (optional)" extra="Asset tag / barcode">
-              <Input placeholder="e.g. BC-VR-2024-001" prefix={<BarcodeOutlined style={{ color: '#64748B' }} />} allowClear />
+              <Input prefix={<BarcodeOutlined style={{ color: '#64748B' }} />} allowClear />
             </Form.Item>
           </div>
 
@@ -589,7 +587,6 @@ export default function DeviceManage() {
             fieldName="image_url"
             label="Device Display Image URL"
             extra="Provide a product image URL or click 'Upload File' to select a photo from your computer."
-            placeholder="https://... or /uploads/..."
             presets={[
               { label: 'Laptop', url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800' },
               { label: 'VR Headset', url: 'https://images.unsplash.com/photo-1622979135225-d2ba269bc1df?w=800' },

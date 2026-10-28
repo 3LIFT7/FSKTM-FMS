@@ -1,16 +1,14 @@
 import React, { useState, useMemo } from 'react';
+import NotificationBell from '../components/NotificationBell';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Badge, Button, Space, Typography, Drawer, Grid } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Button, Space, Typography, Drawer, Grid } from 'antd';
 import {
   DashboardOutlined,
   CompassOutlined,
   CalendarOutlined,
-  ToolOutlined,
   BookOutlined,
   LaptopOutlined,
   AlertOutlined,
-  BellOutlined,
-  UserOutlined,
   LogoutOutlined,
   MenuOutlined,
 } from '@ant-design/icons';
@@ -178,14 +176,7 @@ export default function UserLayout() {
 
         {/* Right side user menu */}
         <Space size="middle" align="center">
-          <Badge count={0} offset={[-2, 2]}>
-            <Button
-              type="text"
-              icon={<BellOutlined style={{ fontSize: 18, color: '#475569' }} />}
-              shape="circle"
-              aria-label="Notifications"
-            />
-          </Badge>
+          <NotificationBell />
 
           <Dropdown menu={{ items: userMenuItems }} trigger={['click']} placement="bottomRight">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '4px 6px', borderRadius: 8 }}>

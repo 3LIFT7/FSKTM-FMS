@@ -97,7 +97,6 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
               >
                 <Input
                   prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
-                  placeholder="name@fsktm.um.edu.my"
                   size="large"
                 />
               </Form.Item>

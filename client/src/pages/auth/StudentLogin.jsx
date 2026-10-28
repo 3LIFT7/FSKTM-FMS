@@ -201,7 +201,6 @@ export default function StudentLogin() {
                       >
                         <Input
                           prefix={<MailOutlined style={{ color: '#94A3B8' }} />}
-                          placeholder="e.g. AI230182@student.uthm.edu.my"
                           size="large"
                           autoComplete="username"
                         />
@@ -219,7 +218,6 @@ export default function StudentLogin() {
                       >
                         <Input.Password
                           prefix={<LockOutlined style={{ color: '#94A3B8' }} />}
-                          placeholder="••••••••"
                           size="large"
                           autoComplete="current-password"
                         />

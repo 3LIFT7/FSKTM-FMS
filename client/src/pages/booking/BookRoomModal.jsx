@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, Form, Select, DatePicker, TimePicker, Input, Switch, Alert, Button, Space, Typography, Tag, message } from 'antd';
+import { Modal, Form, Select, DatePicker, TimePicker, Input, Switch, Alert, Button, Space, Typography, Tag, Row, Col, message } from 'antd';
 import {
   CalendarOutlined,
   ClockCircleOutlined,
@@ -14,7 +14,7 @@ import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
 
 const { Text, Paragraph } = Typography;
 
-export default function BookRoomModal({ isOpen, onClose, initialLocation, onBookingCreated }) {
+export default function BookRoomModal({ isOpen, onClose, initialLocation, initialSlot, onBookingCreated }) {
   const { user, isLecturer, isStaff } = useAuth();
   const [form] = Form.useForm();
 
@@ -36,23 +36,43 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, onBook
       fetchLocations();
       form.resetFields();
       setError('');
-      setIsRecurring(false);
 
-      if (initialLocation) {
-        setSelectedLocationId(initialLocation.location_id);
-        form.setFieldsValue({
-          location_id: initialLocation.location_id,
-          date: dayjs(),
-          timeRange: [dayjs().hour(9).minute(0), dayjs().hour(11).minute(0)],
-        });
+      let targetDate = dayjs();
+      let startHour = 9;
+      let endHour = 11;
+
+      if (initialSlot) {
+        if (initialSlot.day !== undefined) {
+          const currentDay = dayjs().day();
+          let diff = (initialSlot.day - currentDay + 7) % 7;
+          if (diff === 0 && dayjs().hour() >= (initialSlot.hour || 18)) diff = 7;
+          targetDate = dayjs().add(diff, 'day');
+        }
+        if (initialSlot.hour !== undefined) {
+          startHour = initialSlot.hour;
+          endHour = Math.min(startHour + 2, 20);
+        }
+        if (initialSlot.is_recurring !== undefined) {
+          setIsRecurring(Boolean(initialSlot.is_recurring));
+        } else {
+          setIsRecurring(Boolean(isLecturer));
+        }
       } else {
-        form.setFieldsValue({
-          date: dayjs(),
-          timeRange: [dayjs().hour(9).minute(0), dayjs().hour(11).minute(0)],
-        });
+        setIsRecurring(false);
       }
+
+      const locId = initialLocation ? initialLocation.location_id : (initialSlot?.location_id || undefined);
+      if (locId) {
+        setSelectedLocationId(locId);
+      }
+
+      form.setFieldsValue({
+        location_id: locId,
+        date: targetDate,
+        timeRange: [targetDate.hour(startHour).minute(0), targetDate.hour(endHour).minute(0)],
+      });
     }
-  }, [isOpen, initialLocation, form]);
+  }, [isOpen, initialLocation, initialSlot, isLecturer, form]);
 
   async function fetchLocations() {
     try {
@@ -142,7 +162,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, onBook
         start_time: startTimeStr,
         end_time: endTimeStr,
         purpose: values.purpose,
-        course_id: values.course_id || null,
+        course_id: values.course_id ? values.course_id.toUpperCase().trim() : null,
+        course_name: values.course_name ? values.course_name.trim() : null,
         is_recurring: isRecurring,
         weeks: isRecurring ? (values.weeks || 14) : 1,
       };
@@ -256,10 +277,48 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, onBook
             />
           </Form.Item>
 
-          {isLecturer && (
-            <Form.Item name="course_id" label="Course Code (Optional)">
-              <Input placeholder="e.g. WIX1002 or WIE2001" style={{ textTransform: 'uppercase' }} />
-            </Form.Item>
+          {isLecturer ? (
+            <Row gutter={12}>
+              <Col xs={24} sm={10}>
+                <Form.Item
+                  name="course_id"
+                  label="Course Code"
+                  rules={[{ required: true, message: 'Course Code is required' }]}
+                >
+                  <Input style={{ textTransform: 'uppercase' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={14}>
+                <Form.Item
+                  name="course_name"
+                  label="Course Name"
+                  rules={[{ required: true, message: 'Course Name is required' }]}
+                >
+                  <Input />
+                </Form.Item>
+              </Col>
+            </Row>
+          ) : (
+            <Row gutter={12}>
+              <Col xs={24} sm={10}>
+                <Form.Item
+                  name="course_id"
+                  label="Course Code"
+                  rules={[{ required: true, message: 'Course Code is required' }]}
+                >
+                  <Input style={{ textTransform: 'uppercase' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={14}>
+                <Form.Item
+                  name="course_name"
+                  label="Course Name"
+                  rules={[{ required: true, message: 'Course Name is required' }]}
+                >
+                  <Input />
+                </Form.Item>
+              </Col>
+            </Row>
           )}
 
           <Form.Item
@@ -269,7 +328,6 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, onBook
           >
             <Input.TextArea
               rows={3}
-              placeholder="e.g. Software Engineering practical session, student team project discussion"
             />
           </Form.Item>
 

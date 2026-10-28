@@ -13,7 +13,8 @@ import {
   StarOutlined,
   AlertOutlined,
   DeleteOutlined,
-  MessageOutlined
+  MessageOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
@@ -164,6 +165,46 @@ export default function RoomsControl() {
     }
   }
 
+  // Cancel a single booking occurrence
+  async function handleCancelBooking(bookingId) {
+    setActionLoadingId(bookingId);
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/cancel-week`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel booking.');
+      message.success(data.message || 'Booking cancelled.');
+      fetchData();
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  // Cancel entire recurring series
+  async function handleCancelSeries(groupId) {
+    setActionLoadingId(groupId);
+    try {
+      const res = await fetch(`/api/bookings/recurring/${groupId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'cancel' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel series.');
+      message.success(data.message || 'Series cancelled.');
+      fetchData();
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
   const filteredLocations = useMemo(() => {
     return locations.filter(l => {
       if (floorFilter !== 'All' && l.floor !== floorFilter) return false;
@@ -295,7 +336,7 @@ export default function RoomsControl() {
       title: 'Action',
       key: 'action',
       render: (_, r) => (
-        <Space size="small">
+        <Space size="small" wrap>
           {r.status === 'pending' && (
             <>
               <Button
@@ -319,6 +360,53 @@ export default function RoomsControl() {
               >
                 {r.is_recurring_series ? 'Reject Series' : 'Reject'}
               </Button>
+            </>
+          )}
+
+          {/* Cancel buttons — available for approved (and pending) bookings */}
+          {(r.status === 'approved' || r.status === 'pending') && (
+            <>
+              <Popconfirm
+                title="Cancel This Booking"
+                description={
+                  r.is_recurring_series
+                    ? 'Cancel this one session occurrence only?'
+                    : 'Are you sure you want to cancel this booking?'
+                }
+                onConfirm={() => handleCancelBooking(r.booking_id)}
+                okText="Yes, Cancel"
+                cancelText="No"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  size="small"
+                  icon={<StopOutlined />}
+                  loading={actionLoadingId === r.booking_id}
+                  style={{ borderColor: '#F59E0B', color: '#B45309' }}
+                >
+                  {r.is_recurring_series ? 'Cancel Week' : 'Cancel'}
+                </Button>
+              </Popconfirm>
+
+              {r.is_recurring_series && r.recurrence_group_id && (
+                <Popconfirm
+                  title="Cancel Entire Series"
+                  description="Cancel ALL remaining weeks of this recurring series? This cannot be undone."
+                  onConfirm={() => handleCancelSeries(r.recurrence_group_id)}
+                  okText="Yes, Cancel All"
+                  cancelText="No"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button
+                    size="small"
+                    danger
+                    icon={<StopOutlined />}
+                    loading={actionLoadingId === r.recurrence_group_id}
+                  >
+                    Cancel Series
+                  </Button>
+                </Popconfirm>
+              )}
             </>
           )}
         </Space>
@@ -491,7 +579,6 @@ export default function RoomsControl() {
                     pagination={{ pageSize: 8 }}
                     locale={{ emptyText: <Empty description="No bookings match filter" /> }}
                     size="small"
-                    scroll={{ x: 'max-content' }}
                   />
                 </div>
               ),
@@ -543,7 +630,6 @@ export default function RoomsControl() {
                     pagination={false}
                     locale={{ emptyText: <Empty description="No facilities found" /> }}
                     size="small"
-                    scroll={{ x: 'max-content' }}
                   />
                 </div>
               ),
@@ -744,7 +830,6 @@ export default function RoomsControl() {
           rows={3}
           value={rejectReason}
           onChange={(e) => setRejectReason(e.target.value)}
-          placeholder="e.g. Schedule conflict with faculty seminar."
         />
       </Modal>
 

@@ -243,7 +243,6 @@ export default function MaintenanceList() {
             pagination={{ pageSize: 8 }}
             locale={{ emptyText: <Empty description="No maintenance records found" /> }}
             size="small"
-            scroll={{ x: 'max-content' }}
           />
         </div>
       </Card>

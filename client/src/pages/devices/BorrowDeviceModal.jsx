@@ -142,7 +142,6 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
           >
             <Input.TextArea
               rows={3}
-              placeholder="e.g. Final Year Project VR testing, mobile usability study"
             />
           </Form.Item>
 

@@ -367,7 +367,6 @@ export default function GoogleAuthModal({
                         </label>
                         <Input
                           prefix={<KeyOutlined style={{ color: '#94A3B8' }} />}
-                          placeholder="e.g. 123456789-abcdefg.apps.googleusercontent.com"
                           value={apiKeyInput}
                           onChange={(e) => setApiKeyInput(e.target.value)}
                           size="large"
@@ -555,7 +554,6 @@ export default function GoogleAuthModal({
                         Name
                       </label>
                       <Input
-                        placeholder="e.g. Nur Aisyah"
                         value={simName}
                         onChange={(e) => setSimName(e.target.value)}
                         size="middle"
@@ -567,7 +565,6 @@ export default function GoogleAuthModal({
                         University Email
                       </label>
                       <Input
-                        placeholder="e.g. AI240199@student.uthm.edu.my"
                         value={simEmail}
                         onChange={(e) => setSimEmail(e.target.value)}
                         size="middle"

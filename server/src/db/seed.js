@@ -20,6 +20,7 @@ async function seedDatabase() {
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS recurrence_group_id VARCHAR(100);
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS series_status VARCHAR(50) DEFAULT 'active';
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS course_name VARCHAR(255);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT FALSE;
@@ -263,6 +264,23 @@ async function seedDatabase() {
       `INSERT INTO location_bookings (location_id, user_id, start_time, end_time, purpose, is_recurring, course_id, status, approved_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved', $8)`,
       [locMap['SEM-2'], lecturerUser.user_id, tomorrowAt(14), tomorrowAt(16), 'Postgraduate Research Colloquium Lecture', false, 'WIB7001', managerUser.user_id]
+    );
+  }
+
+  const norasriUser = userResults.rows.find(u => u.email === 'norasri@uthm.edu.my');
+  if (locMap['MKP'] && norasriUser && managerUser) {
+    const wedDate = new Date(now);
+    const day = wedDate.getDay();
+    let diff = (3 - day + 7) % 7;
+    wedDate.setDate(wedDate.getDate() + diff);
+    wedDate.setHours(10, 0, 0, 0);
+    const wedEndDate = new Date(wedDate);
+    wedEndDate.setHours(12, 0, 0, 0);
+
+    await query(
+      `INSERT INTO location_bookings (location_id, user_id, start_time, end_time, purpose, is_recurring, recurrence_pattern, recurrence_group_id, series_status, course_id, status, approved_by)
+       VALUES ($1, $2, $3, $4, $5, true, 'WEEKLY:WEDNESDAY', $6, 'active', 'BIT30453', 'approved', $7)`,
+      [locMap['MKP'], norasriUser.user_id, wedDate.toISOString(), wedEndDate.toISOString(), 'Customer Relationship Management (CRM) Lab Practical', `REC-NORASRI-BIT30453`, managerUser.user_id]
     );
   }
 

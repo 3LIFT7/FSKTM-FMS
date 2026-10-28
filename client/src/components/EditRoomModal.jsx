@@ -168,11 +168,11 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
         <Form form={form} layout="vertical" onFinish={handleFinish} requiredMark="optional">
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
             <Form.Item name="name" label="Facility / Room Name" rules={[{ required: true }]}>
-              <Input placeholder="e.g. Makmal Software Engineering (MSD)" />
+              <Input />
             </Form.Item>
 
             <Form.Item name="code" label="Room Code" rules={[{ required: true }]}>
-              <Input placeholder="MSD" style={{ textTransform: 'uppercase' }} />
+              <Input style={{ textTransform: 'uppercase' }} />
             </Form.Item>
           </div>
 
@@ -212,7 +212,7 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
           </Form.Item>
 
           <Form.Item name="description" label="Facility Description & Facilities">
-            <Input.TextArea rows={2} placeholder="Projector, Whiteboard, 40 PC Terminals, Air conditioned" />
+            <Input.TextArea rows={2} />
           </Form.Item>
 
           <ImageInputPreview
@@ -220,7 +220,6 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
             fieldName="image_url"
             label="Facility Display Image URL"
             extra="Provide an image URL or click 'Upload File' to select a photo from your computer."
-            placeholder="https://... or /uploads/..."
             presets={[
               { label: 'FSKTM DK2 Lab', url: 'https://fsktm.um.edu.my/fsktm/images/DEV/DK2.jpg' },
               { label: 'Computer Lab', url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800' },
@@ -263,7 +262,6 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
               size="small"
               pagination={false}
               locale={{ emptyText: 'No dedicated equipment assigned to this facility' }}
-              scroll={{ x: 'max-content' }}
             />
           </div>
 

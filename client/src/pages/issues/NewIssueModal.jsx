@@ -131,7 +131,6 @@ export default function NewIssueModal({ isOpen, onClose, onCreated }) {
           >
             <Input.TextArea
               rows={4}
-              placeholder="e.g. Projector in Lab 3 displays flickering green lines and does not power on properly after 5 minutes."
             />
           </Form.Item>
 

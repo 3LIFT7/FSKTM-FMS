@@ -226,7 +226,6 @@ export default function ScheduleImport() {
                 rowKey={(r, idx) => idx}
                 pagination={{ pageSize: 5 }}
                 size="small"
-                scroll={{ x: 'max-content' }}
               />
             )}
           </div>

@@ -166,7 +166,7 @@ export default function LogMaintenanceModal({ isOpen, onClose, prefillTicket, on
             label="Service Work Details & Actions Taken"
             rules={[{ required: true, message: 'Please describe the maintenance work performed' }]}
           >
-            <Input.TextArea rows={3} placeholder="e.g. Replaced optical lamp, cleaned cooling exhaust, recalibrated projector lens." />
+            <Input.TextArea rows={3} />
           </Form.Item>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
