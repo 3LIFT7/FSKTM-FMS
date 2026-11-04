@@ -154,7 +154,7 @@ The system enforces a 4-tier Role-Based Access Control (RBAC) model:
 
 | Role | Login Identifier | Default Password | Portal Route |
 | :--- | :--- | :--- | :--- |
-| **Lab Manager** | `manager@fsktm.um.edu.my` | `Password123!` *(or `Manager123!`)* | `/login/staff` |
+| **Lab Manager** | `manager@fsktm.um.edu.my` | `Manager123!` | `/login/staff` |
 | **Lab Technician** | `technician@fsktm.um.edu.my` | `Tech123!` | `/login/staff` |
 | **Lecturer** | `lecturer@fsktm.um.edu.my` | `Lecturer123!` | `/login/lecturer` |
 | **Academic Staff** | `norasri@uthm.edu.my` | `Lecturer123!` | `/login/lecturer` |

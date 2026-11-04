@@ -12,6 +12,14 @@ import { formatDateTime } from '../../utils/date';
 import PageHeader from '../../components/PageHeader';
 
 const { Text } = Typography;
+const ACTIVITY_PAGE_SIZE = 25;
+const activityPagination = {
+  pageSize: ACTIVITY_PAGE_SIZE,
+  position: ['bottomRight'],
+  showSizeChanger: false,
+  showLessItems: true,
+  hideOnSinglePage: true,
+};
 
 export default function MyActivity() {
   const { user } = useAuth();
@@ -155,6 +163,12 @@ export default function MyActivity() {
       key: 'status',
       render: (status) => <StatusTag status={status} />,
     },
+    {
+      title: 'Pickup Location',
+      dataIndex: 'pickup_location',
+      key: 'pickup_location',
+      render: (location) => location || <Text type="secondary">Provided after technician approval</Text>,
+    },
   ];
 
   const reportColumns = [
@@ -203,7 +217,7 @@ export default function MyActivity() {
           columns={bookingColumns}
           rowKey="booking_id"
           loading={loading}
-          pagination={{ pageSize: 6 }}
+          pagination={activityPagination}
           size="small"
           locale={{ emptyText: <Empty description="No room reservations found" /> }}
         />
@@ -223,7 +237,7 @@ export default function MyActivity() {
           columns={loanColumns}
           rowKey="loan_id"
           loading={loading}
-          pagination={{ pageSize: 6 }}
+          pagination={activityPagination}
           size="small"
           locale={{ emptyText: <Empty description="No hardware loans found" /> }}
         />
@@ -243,7 +257,7 @@ export default function MyActivity() {
           columns={reportColumns}
           rowKey="report_id"
           loading={loading}
-          pagination={{ pageSize: 6 }}
+          pagination={activityPagination}
           size="small"
           locale={{ emptyText: <Empty description="No damage reports submitted" /> }}
         />

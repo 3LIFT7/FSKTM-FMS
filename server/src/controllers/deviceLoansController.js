@@ -1,6 +1,17 @@
 const { query } = require('../config/db');
+const { createUserNotification } = require('./notificationsController');
 
 // GET /api/device-loans
+async function getLecturers(req, res) {
+  try {
+    const result = await query("SELECT user_id, name, email FROM users WHERE LOWER(TRIM(role)) = 'lecturer' ORDER BY name");
+    return res.json({ success: true, lecturers: result.rows });
+  } catch (err) {
+    console.error('getLecturers error:', err);
+    return res.status(500).json({ error: 'Failed to load lecturer approvers.' });
+  }
+}
+
 async function getDeviceLoans(req, res) {
   try {
     const { status, overdue, user_id } = req.query;
@@ -16,6 +27,9 @@ async function getDeviceLoans(req, res) {
         dl.actual_return_time,
         dl.status,
         dl.purpose,
+        dl.lecturer_approver_id,
+        dl.lecturer_approved_by,
+        dl.pickup_location,
         dl.created_at,
         d.name AS device_name,
         d.category AS device_category,
@@ -25,6 +39,13 @@ async function getDeviceLoans(req, res) {
         u.email AS borrower_email,
         u.matric_or_staff_id,
         app.name AS approver_name,
+        lecturer.name AS lecturer_approver_name,
+        lecturer_approver.name AS lecturer_approved_by_name,
+        technician.name AS technician_approver_name,
+        lecturer.email AS lecturer_approver_email,
+        lecturer_approver.email AS lecturer_approved_by_email,
+        technician.email AS technician_approver_email,
+        u.role AS user_role,
         CASE 
           WHEN dl.status = 'checked_out' AND dl.expected_return_time < CURRENT_TIMESTAMP THEN TRUE
           ELSE FALSE
@@ -33,14 +54,20 @@ async function getDeviceLoans(req, res) {
       JOIN devices d ON dl.device_id = d.device_id
       JOIN users u ON dl.user_id = u.user_id
       LEFT JOIN users app ON dl.approved_by = app.user_id
+      LEFT JOIN users lecturer ON dl.lecturer_approver_id = lecturer.user_id
+      LEFT JOIN users lecturer_approver ON dl.lecturer_approved_by = lecturer_approver.user_id
+      LEFT JOIN users technician ON dl.approved_by = technician.user_id
       WHERE 1=1
     `;
     const params = [];
 
-    // Students only see their own loans unless staff
-    if (currentUser.role === 'student' || currentUser.role === 'lecturer') {
+    // Lecturers see requests assigned to them plus their own borrowing history.
+    if (currentUser.role === 'student') {
       params.push(currentUser.user_id);
       sql += ` AND dl.user_id = $${params.length}`;
+    } else if (currentUser.role === 'lecturer') {
+      params.push(currentUser.user_id);
+      sql += ` AND (dl.user_id = $${params.length} OR dl.lecturer_approver_id = $${params.length})`;
     } else if (user_id) {
       params.push(user_id);
       sql += ` AND dl.user_id = $${params.length}`;
@@ -68,9 +95,17 @@ async function getDeviceLoans(req, res) {
 // POST /api/device-loans (Student or Lecturer initiates loan)
 async function requestDeviceLoan(req, res) {
   try {
-    const { device_id, expected_return_time, purpose } = req.body;
+    const { device_id, expected_return_time, purpose, lecturer_approver_id } = req.body;
     const userId = req.user.user_id;
     const userRole = req.user.role;
+
+    if (userRole === 'student' && !lecturer_approver_id) {
+      return res.status(400).json({ error: 'Select a registered lecturer to approve this request.' });
+    }
+    if (userRole === 'student') {
+      const lecturerRes = await query('SELECT user_id FROM users WHERE user_id = $1 AND role = $2', [lecturer_approver_id, 'lecturer']);
+      if (!lecturerRes.rows.length) return res.status(400).json({ error: 'Selected approver is not a registered lecturer.' });
+    }
 
     if (!device_id || !expected_return_time || !purpose) {
       return res.status(400).json({ error: 'Device ID, expected return time, and purpose are required.' });
@@ -114,20 +149,20 @@ async function requestDeviceLoan(req, res) {
     );
     const requiresApproval = settingRes.rows.length > 0 ? settingRes.rows[0].setting_value === 'true' : true;
 
-    const initialStatus = requiresApproval ? 'pending' : 'approved';
+    const initialStatus = userRole === 'student' ? 'pending_lecturer' : (requiresApproval ? 'pending_technician' : 'approved');
 
     const result = await query(
-      `INSERT INTO device_bookings (device_id, user_id, expected_return_time, purpose, status)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO device_bookings (device_id, user_id, expected_return_time, purpose, status, lecturer_approver_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [device_id, userId, expected_return_time, purpose, initialStatus]
+      [device_id, userId, expected_return_time, purpose, initialStatus, lecturer_approver_id || null]
     );
 
     return res.status(201).json({
       success: true,
-      message: requiresApproval
-        ? 'Device booking request submitted successfully. Awaiting technician approval.'
-        : 'Device booked successfully.',
+      message: userRole === 'student'
+        ? 'Request sent to your selected lecturer for approval.'
+        : requiresApproval ? 'Device booking request submitted successfully. Awaiting technician approval.' : 'Device booked successfully.',
       loan: result.rows[0]
     });
   } catch (err) {
@@ -140,33 +175,95 @@ async function requestDeviceLoan(req, res) {
 async function updateLoanStatus(req, res) {
   try {
     const { id } = req.params;
-    const { action } = req.body; // 'approve', 'reject', 'checkout', 'return'
+    const { action, pickup_location } = req.body; // lecturer_approve, approve, reject, checkout, return
     const staffId = req.user.user_id;
 
-    const loanRes = await query('SELECT * FROM device_bookings WHERE loan_id = $1', [id]);
+    const loanRes = await query(
+      `SELECT dl.*, d.name AS device_name
+       FROM device_bookings dl JOIN devices d ON d.device_id = dl.device_id
+       WHERE dl.loan_id = $1`,
+      [id]
+    );
     if (loanRes.rows.length === 0) {
       return res.status(404).json({ error: 'Loan record not found.' });
     }
 
     const loan = loanRes.rows[0];
 
+    if (action === 'lecturer_approve' || (action === 'reject' && loan.status === 'pending_lecturer')) {
+      if (req.user.role !== 'lecturer' || Number(loan.lecturer_approver_id) !== Number(staffId) || loan.status !== 'pending_lecturer') {
+        return res.status(403).json({ error: 'Only the selected lecturer can review this request.' });
+      }
+      const nextStatus = action === 'lecturer_approve' ? 'pending_technician' : 'rejected';
+      if (action === 'lecturer_approve') {
+        await query(`UPDATE device_bookings SET status = $1, lecturer_approved_by = $2 WHERE loan_id = $3`, [nextStatus, staffId, id]);
+        await createUserNotification({
+          userId: loan.user_id,
+          type: 'device_loan',
+          title: 'Lecturer approved your device request',
+          message: `${loan.device_name} has been approved by your lecturer and sent to the technician for final approval.`,
+          entityType: 'device_loan',
+          entityId: id,
+        });
+      } else {
+        await query(`UPDATE device_bookings SET status = $1 WHERE loan_id = $2`, [nextStatus, id]);
+        await createUserNotification({
+          userId: loan.user_id,
+          type: 'device_loan',
+          title: 'Device loan request rejected',
+          message: `Your request to borrow ${loan.device_name} was rejected by the selected lecturer.`,
+          entityType: 'device_loan',
+          entityId: id,
+        });
+      }
+      return res.json({ success: true, message: action === 'lecturer_approve' ? 'Request approved and sent to the technician.' : 'Request rejected.' });
+    }
+
     if (action === 'approve') {
+      if (!['technician', 'manager'].includes(req.user.role) || !['pending_technician', 'pending'].includes(loan.status)) {
+        return res.status(403).json({ error: 'This request is not awaiting technician approval.' });
+      }
+      if (!pickup_location?.trim()) {
+        return res.status(400).json({ error: 'Enter a pickup location before approving this request.' });
+      }
       await query(
-        `UPDATE device_bookings SET status = 'approved', approved_by = $1 WHERE loan_id = $2`,
-        [staffId, id]
+        `UPDATE device_bookings SET status = 'approved', approved_by = $1, pickup_location = $2 WHERE loan_id = $3`,
+        [staffId, pickup_location.trim(), id]
       );
+      await createUserNotification({
+        userId: loan.user_id,
+        type: 'device_loan',
+        title: 'Device loan request approved',
+        message: `${loan.device_name} is approved for pickup at ${pickup_location.trim()}.`,
+        entityType: 'device_loan',
+        entityId: id,
+      });
       return res.json({ success: true, message: 'Device loan request approved.' });
     }
 
     if (action === 'reject') {
+      if (!['technician', 'manager'].includes(req.user.role) || !['pending_technician', 'pending'].includes(loan.status)) {
+        return res.status(403).json({ error: 'This request is not awaiting technician review.' });
+      }
       await query(
         `UPDATE device_bookings SET status = 'rejected', approved_by = $1 WHERE loan_id = $2`,
         [staffId, id]
       );
+      await createUserNotification({
+        userId: loan.user_id,
+        type: 'device_loan',
+        title: 'Device loan request rejected',
+        message: `Your request to borrow ${loan.device_name} was rejected by the technician.`,
+        entityType: 'device_loan',
+        entityId: id,
+      });
       return res.json({ success: true, message: 'Device loan request rejected.' });
     }
 
     if (action === 'checkout') {
+      if (!['technician', 'manager'].includes(req.user.role) || loan.status !== 'approved') {
+        return res.status(400).json({ error: 'Only approved loans can be checked out.' });
+      }
       await query(
         `UPDATE device_bookings 
          SET status = 'checked_out', checkout_time = CURRENT_TIMESTAMP, approved_by = COALESCE(approved_by, $1) 
@@ -179,6 +276,9 @@ async function updateLoanStatus(req, res) {
     }
 
     if (action === 'return') {
+      if (!['technician', 'manager'].includes(req.user.role) || loan.status !== 'checked_out') {
+        return res.status(400).json({ error: 'Only checked out loans can be returned.' });
+      }
       await query(
         `UPDATE device_bookings 
          SET status = 'returned', actual_return_time = CURRENT_TIMESTAMP 
@@ -198,6 +298,7 @@ async function updateLoanStatus(req, res) {
 }
 
 module.exports = {
+  getLecturers,
   getDeviceLoans,
   requestDeviceLoan,
   updateLoanStatus

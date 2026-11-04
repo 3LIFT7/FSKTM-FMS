@@ -246,6 +246,12 @@ async function login(req, res) {
     }
 
     const user = result.rows[0];
+    if (user.role === 'student' || user.role === 'lecturer') {
+      return res.status(403).json({
+        error: 'Students and lecturers must sign in with their UTHM Google account.',
+        code: 'GOOGLE_SIGN_IN_REQUIRED'
+      });
+    }
     let passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     // Seamless dual-mode authentication for Google-registered users or standard credentials:
@@ -462,15 +468,19 @@ async function verifyGoogleToken({ credential, access_token }) {
 // Universal Google Workspace SSO & Registration for Students and Lecturers
 async function googleAuth(req, res) {
   try {
-    const { credential, access_token, email, name, role, portal, matric_number, specialization, department } = req.body;
+    const { credential, access_token } = req.body;
+    if (!credential && !access_token) {
+      return res.status(401).json({ error: 'A verified Google sign-in is required.' });
+    }
 
-    let targetEmail = email;
-    let targetName = name;
+    let targetEmail;
+    let targetName;
+    let verifiedGoogleUser;
 
     // 1. Verify authentic Google OAuth token if provided
     if (credential || access_token) {
       try {
-        const verifiedGoogleUser = await verifyGoogleToken({ credential, access_token });
+        verifiedGoogleUser = await verifyGoogleToken({ credential, access_token });
         if (!verifiedGoogleUser || !verifiedGoogleUser.email) {
           return res.status(401).json({ error: 'Failed to verify Google account credentials.' });
         }
@@ -484,15 +494,17 @@ async function googleAuth(req, res) {
       }
     }
 
+    if (!verifiedGoogleUser.email_verified) {
+      return res.status(403).json({ error: 'Your Google account must have a verified email address.' });
+    }
+
     if (!targetEmail || !targetEmail.trim()) {
       return res.status(400).json({ error: 'Google account email or token is required.' });
     }
 
     const trimmedEmail = targetEmail.trim().toLowerCase();
-    const targetRole = role || (portal && portal !== 'all' ? portal : null);
-
     // 2. Strict domain check - Only @student.uthm.edu.my and @uthm.edu.my allowed
-    const emailValidation = validateUniversityEmail(trimmedEmail, targetRole);
+    const emailValidation = validateUniversityEmail(trimmedEmail);
     if (!emailValidation.valid) {
       return res.status(403).json({
         error: emailValidation.error,
@@ -520,27 +532,25 @@ async function googleAuth(req, res) {
       // Existing user: Log them in
       user = userResult.rows[0];
 
+      if (user.role === 'technician' || user.role === 'manager') {
+        return res.status(403).json({
+          error: 'Staff accounts must sign in through the Staff Portal.',
+          code: 'STAFF_PORTAL_REQUIRED'
+        });
+      }
+
+      if (user.role !== assignedRole) {
+        const roleResult = await query(
+          'UPDATE users SET role = $1 WHERE user_id = $2 RETURNING role',
+          [assignedRole, user.user_id]
+        );
+        user.role = roleResult.rows[0].role;
+      }
+
       // Ensure auth_provider reflects google / dual access
       if (!user.auth_provider || user.auth_provider === 'local') {
         await query("UPDATE users SET auth_provider = 'google' WHERE user_id = $1", [user.user_id]);
         user.auth_provider = 'google';
-      }
-
-      // If user provided a password during Google flow and hasn't set one yet, sync it
-      if (req.body.password && req.body.password.length >= 6) {
-        const salt = await bcrypt.genSalt(10);
-        const newHash = await bcrypt.hash(req.body.password, salt);
-        await query("UPDATE users SET password_hash = $1, password_set = TRUE WHERE user_id = $2", [newHash, user.user_id]);
-        user.password_set = true;
-      }
-
-      // Role mismatch check against portal if specified
-      if (portal && portal !== 'all' && portal !== user.role) {
-        return res.status(403).json({
-          error: `Account role mismatch: Your Google account is registered as a ${user.role.toUpperCase()}. Please access via the ${user.role === 'student' ? 'Student' : 'Lecturer'} portal.`,
-          code: 'PORTAL_ROLE_MISMATCH',
-          actualRole: user.role
-        });
       }
 
       // Automatically sync authentic Google name if existing name was a placeholder or empty
@@ -565,13 +575,11 @@ async function googleAuth(req, res) {
         : `Lecturer (${emailValidation.staffId || trimmedEmail.split('@')[0]})`;
       const finalName = (targetName && targetName.trim()) 
         ? targetName.trim() 
-        : (name && name.trim()) 
-          ? name.trim() 
-          : fallbackName;
+        : fallbackName;
 
       let finalMatricOrStaffId = null;
       let finalSpecialization = null;
-      let finalDepartment = department ? department.trim() : 'Faculty of Computer Science and Information Technology (FSKTM)';
+      let finalDepartment = 'Faculty of Computer Science and Information Technology (FSKTM)';
 
       if (assignedRole === 'student') {
         // Automatically extracted from student's Siswamail prefix (e.g. AI230182)
@@ -579,7 +587,7 @@ async function googleAuth(req, res) {
 
         // Auto-detect specialization from matric prefix if possible
         const matricUpper = finalMatricOrStaffId.toUpperCase();
-        let chosenSpec = (specialization && specialization.trim()) ? specialization.trim().toUpperCase() : 'BIW';
+        let chosenSpec = 'BIW';
         if (matricUpper.includes('BIT')) chosenSpec = 'BIT';
         else if (matricUpper.includes('BIC')) chosenSpec = 'BIC';
         else if (matricUpper.includes('BIP')) chosenSpec = 'BIP';
@@ -599,23 +607,18 @@ async function googleAuth(req, res) {
         finalDepartment = specDepartments[chosenSpec] || 'Department of Software Engineering';
       } else {
         // Lecturer: Staff username from email (e.g. norasri)
-        finalMatricOrStaffId = emailValidation.staffId ? `STAFF-${emailValidation.staffId}` : (req.body.staff_id ? req.body.staff_id.trim().toUpperCase() : ('UTHM-' + Math.floor(1000 + Math.random() * 9000)));
-        finalDepartment = department && department.trim() ? department.trim() : 'Faculty of Computer Science and Information Technology (FSKTM)';
+        finalMatricOrStaffId = emailValidation.staffId ? `STAFF-${emailValidation.staffId}` : ('UTHM-' + Math.floor(1000 + Math.random() * 9000));
+        finalDepartment = 'Faculty of Computer Science and Information Technology (FSKTM)';
       }
 
-      // Initial password for Google-registered users to allow immediate standard login
-      const initialPassword = (req.body.password && req.body.password.length >= 6)
-        ? req.body.password
-        : (assignedRole === 'student' ? 'Student123!' : 'Lecturer123!');
       const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash(initialPassword, salt);
-      const passwordSet = Boolean(req.body.password && req.body.password.length >= 6);
+      const passwordHash = await bcrypt.hash(crypto.randomBytes(48).toString('hex'), salt);
 
       const insertResult = await query(
         `INSERT INTO users (name, email, password_hash, role, matric_or_staff_id, department, specialization, auth_provider, password_set)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE)
          RETURNING user_id, name, email, role, matric_or_staff_id, department, specialization, auth_provider, password_set, created_at`,
-        [finalName, trimmedEmail, passwordHash, assignedRole, finalMatricOrStaffId, finalDepartment, finalSpecialization, 'google', passwordSet]
+        [finalName, trimmedEmail, passwordHash, assignedRole, finalMatricOrStaffId, finalDepartment, finalSpecialization, 'google']
       );
 
       user = insertResult.rows[0];
@@ -645,7 +648,7 @@ async function googleAuth(req, res) {
     return res.status(isNewUser ? 201 : 200).json({
       success: true,
       message: isNewUser
-        ? `Account registered successfully via Google! Welcome to FSKTM, ${user.name}.`
+        ? `Your FSKTM account is ready. Welcome, ${user.name}.`
         : `Signed in successfully via Google! Welcome back, ${user.name}.`,
       user,
       token,

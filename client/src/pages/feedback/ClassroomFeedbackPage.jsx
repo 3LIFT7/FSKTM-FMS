@@ -45,7 +45,6 @@ import {
   BulbOutlined,
   AppstoreOutlined,
   QrcodeOutlined,
-  IdcardOutlined,
   BookOutlined,
   RightOutlined
 } from '@ant-design/icons';
@@ -341,7 +340,7 @@ export default function ClassroomFeedbackPage() {
           <Button
             size="small"
             type="primary"
-            onClick={() => navigate('/login/student', { state: { from: locationState } })}
+            onClick={() => navigate('/login', { state: { from: locationState } })}
             style={{ fontSize: 12, borderRadius: 8, fontWeight: 700, background: '#1E3A8A' }}
           >
             Sign In
@@ -686,18 +685,10 @@ export default function ClassroomFeedbackPage() {
                         type="primary"
                         size="large"
                         icon={<UserOutlined />}
-                        onClick={() => navigate('/login/student', { state: { from: locationState } })}
+                        onClick={() => navigate('/login', { state: { from: locationState } })}
                         style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 700, borderRadius: 10 }}
                       >
-                        Sign In as Student
-                      </Button>
-                      <Button
-                        size="large"
-                        icon={<IdcardOutlined />}
-                        onClick={() => navigate('/login/lecturer', { state: { from: locationState } })}
-                        style={{ fontWeight: 700, borderRadius: 10 }}
-                      >
-                        Sign In as Lecturer
+                        Academic Sign In
                       </Button>
                       <Button
                         size="large"
@@ -708,16 +699,8 @@ export default function ClassroomFeedbackPage() {
                       </Button>
                     </Space>
 
-                    <div style={{ marginTop: 12 }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        New to FSKTM?{' '}
-                        <a
-                          onClick={() => navigate('/register', { state: { from: locationState } })}
-                          style={{ fontWeight: 700, color: '#2563EB', cursor: 'pointer' }}
-                        >
-                          Create student account &rarr;
-                        </a>
-                      </Text>
+                    <div style={{ marginTop: 12, color: '#64748B', fontSize: 12 }}>
+                      Sign in with your UTHM Google account. Your academic role is identified automatically.
                     </div>
 
                     <Divider style={{ margin: '16px 0 12px 0' }} />

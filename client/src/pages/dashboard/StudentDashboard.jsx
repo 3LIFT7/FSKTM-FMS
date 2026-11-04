@@ -168,6 +168,12 @@ export default function StudentDashboard() {
       key: 'status',
       render: (status) => <StatusTag status={status} />,
     },
+    {
+      title: 'Pickup Location',
+      dataIndex: 'pickup_location',
+      key: 'pickup_location',
+      render: (location) => location || <Text type="secondary">Pending technician approval</Text>,
+    },
   ];
 
   return (

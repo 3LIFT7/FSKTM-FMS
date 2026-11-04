@@ -26,14 +26,10 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
   // Not authenticated: redirect to appropriate login page based on target URL
   if (!user) {
     const path = location.pathname;
-    let redirectLogin = '/login/student';
+    let redirectLogin = '/login';
 
-    if (path.startsWith('/lecturer')) {
-      redirectLogin = '/login/lecturer';
-    } else if (path.startsWith('/staff') || path.startsWith('/admin') || path.startsWith('/rooms') || path.startsWith('/maintenance')) {
+    if (path.startsWith('/staff') || path.startsWith('/admin') || path.startsWith('/rooms') || path.startsWith('/maintenance')) {
       redirectLogin = '/login/staff';
-    } else if (path.startsWith('/student')) {
-      redirectLogin = '/login/student';
     }
 
     return <Navigate to={redirectLogin} state={{ from: location }} replace />;

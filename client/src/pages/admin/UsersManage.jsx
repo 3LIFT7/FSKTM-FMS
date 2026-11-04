@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Table, Button, Input, Select, Modal, Form, Space, Typography, Tag, Row, Col, Empty, message } from 'antd';
+import { Card, Table, Button, Input, Select, Modal, Form, Space, Typography, Row, Col, Empty, message, Popconfirm } from 'antd';
 import {
   TeamOutlined,
   UserAddOutlined,
   SearchOutlined,
   ReloadOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import StatusTag from '../../components/StatusTag';
 import PageHeader from '../../components/PageHeader';
@@ -60,6 +61,21 @@ export default function UsersManage() {
       message.error(err.message);
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  async function handleDeleteUser(record) {
+    try {
+      const res = await fetch(`/api/admin/users/${record.user_id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete user');
+      message.success(`${record.name} was deleted`);
+      fetchUsers();
+    } catch (err) {
+      message.error(err.message);
     }
   }
 
@@ -138,6 +154,7 @@ export default function UsersManage() {
         <Select
           size="small"
           value={record.role}
+          disabled={record.role === 'student'}
           loading={updatingId === record.user_id}
           onChange={(newRole) => handleRoleChange(record.user_id, newRole)}
           style={{ width: '100%' }}
@@ -150,13 +167,29 @@ export default function UsersManage() {
         />
       ),
     },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 100,
+      render: (_, record) => (
+        <Popconfirm
+          title="Delete this user?"
+          description={`Delete ${record.name}'s account? This cannot be undone.`}
+          okText="Delete"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => handleDeleteUser(record)}
+        >
+          <Button size="small" danger icon={<DeleteOutlined />}>Delete</Button>
+        </Popconfirm>
+      ),
+    },
   ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="User Accounts & Role Permissions"
-        subtitle="Manage faculty user directory, authorize role transitions, and provision technical staff accounts."
+        subtitle="Manage faculty accounts. Student roles are fixed; administrators can delete user accounts."
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={fetchUsers}>
@@ -212,7 +245,7 @@ export default function UsersManage() {
             columns={columns}
             rowKey="user_id"
             loading={loading}
-            pagination={{ pageSize: 8 }}
+            pagination={{ pageSize: 25 }}
             locale={{ emptyText: <Empty description="No users found" /> }}
             size="small"
           />

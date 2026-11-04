@@ -24,6 +24,11 @@ async function seedDatabase() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT FALSE;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS lecturer_approver_id INT REFERENCES users(user_id) ON DELETE SET NULL;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS lecturer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS pickup_location TEXT;
+      ALTER TABLE device_bookings DROP CONSTRAINT IF EXISTS device_bookings_status_check;
+      ALTER TABLE device_bookings ADD CONSTRAINT device_bookings_status_check CHECK (status IN ('pending', 'pending_lecturer', 'pending_technician', 'approved', 'checked_out', 'returned', 'rejected'));
       ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);
@@ -31,6 +36,10 @@ async function seedDatabase() {
       ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255);
       ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_email VARCHAR(255);
       ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'General';
+      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS issue_reason TEXT;
+      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolution_notes TEXT;
+      ALTER TABLE issue_reports DROP CONSTRAINT IF EXISTS issue_reports_status_check;
+      ALTER TABLE issue_reports ADD CONSTRAINT issue_reports_status_check CHECK (status IN ('open', 'in_progress', 'resolved', 'cannot_be_resolved', 'requires_further_action', 'closed'));
 
       CREATE TABLE IF NOT EXISTS room_feedback (
           feedback_id SERIAL PRIMARY KEY,

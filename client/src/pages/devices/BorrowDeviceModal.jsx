@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, DatePicker, TimePicker, Input, Button, Alert, Typography, message } from 'antd';
+import { Modal, Form, DatePicker, TimePicker, Input, Button, Alert, Typography, message, Select } from 'antd';
 import { LaptopOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
@@ -12,6 +12,8 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [lecturers, setLecturers] = useState([]);
+  const [lecturersLoading, setLecturersLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && device) {
@@ -21,8 +23,29 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
         returnDate: dayjs().add(1, 'day'),
         returnTime: dayjs().hour(17).minute(0),
       });
+      if (user?.role === 'student') {
+        setLecturers([]);
+        setLecturersLoading(true);
+        fetch('/api/device-loans/lecturers', { credentials: 'include' })
+          .then(async (res) => {
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || `Lecturer list request failed (${res.status}).`);
+            }
+            setLecturers(data.lecturers || []);
+            if (!(data.lecturers || []).length) {
+              setError('No accounts currently have the Lecturer role. Ask an administrator to check Users & Roles.');
+            }
+          })
+          .catch((err) => {
+            setError(err instanceof SyntaxError
+              ? 'The lecturer list API did not return JSON. Restart the backend server, then reopen this form.'
+              : `${err.message} Check that the backend server is running and restart it if it was already open when this feature was added.`);
+          })
+          .finally(() => setLecturersLoading(false));
+      }
     }
-  }, [isOpen, device, form]);
+  }, [isOpen, device, form, user?.role]);
 
   if (!isOpen || !device) return null;
 
@@ -60,6 +83,7 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
           device_id: device.device_id,
           expected_return_time,
           purpose: values.purpose,
+          lecturer_approver_id: values.lecturer_approver_id,
         }),
       });
 
@@ -115,6 +139,26 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
         </div>
 
         <Form form={form} layout="vertical" onFinish={handleFinish} requiredMark="optional">
+          {user?.role === 'student' && (
+            <Form.Item
+              name="lecturer_approver_id"
+              label="Lecturer Approver"
+              rules={[{ required: true, message: 'Select a lecturer to review your request' }]}
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                placeholder="Select a registered lecturer"
+                loading={lecturersLoading}
+                disabled={lecturersLoading}
+                options={lecturers.map((lecturer) => ({
+                  value: lecturer.user_id,
+                  label: `${lecturer.name} (${lecturer.email})`,
+                }))}
+                notFoundContent="No registered lecturers found"
+              />
+            </Form.Item>
+          )}
           <Form.Item
             name="returnDate"
             label="Expected Return Date"

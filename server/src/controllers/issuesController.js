@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { createUserNotification } = require('./notificationsController');
 
 // GET /api/issues
 async function getIssues(req, res) {
@@ -15,6 +16,8 @@ async function getIssues(req, res) {
         ir.description,
         ir.photo_url,
         ir.status,
+        ir.issue_reason,
+        ir.resolution_notes,
         ir.created_at,
         ir.updated_at,
         ir.guest_name,
@@ -23,6 +26,7 @@ async function getIssues(req, res) {
         COALESCE(u.name, ir.guest_name, 'Classroom Reporter') AS reporter_name,
         COALESCE(u.email, ir.guest_email, '') AS reporter_email,
         COALESCE(u.role, 'guest') AS reporter_role,
+        u.matric_or_staff_id AS reporter_matric_number,
         l.name AS location_name,
         l.code AS location_code,
         l.floor AS location_floor,
@@ -113,23 +117,54 @@ async function createIssue(req, res) {
 async function updateIssueStatus(req, res) {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, issue_reason, resolution_notes } = req.body;
 
-    const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
+    const validStatuses = ['open', 'in_progress', 'resolved', 'cannot_be_resolved', 'requires_further_action'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
     }
 
+    const previousRes = await query(
+      `SELECT ir.reported_by, ir.status,
+              COALESCE(l.name, d.name, 'reported issue') AS issue_target
+       FROM issue_reports ir
+       LEFT JOIN locations l ON l.location_id = ir.location_id
+       LEFT JOIN devices d ON d.device_id = ir.device_id
+       WHERE ir.report_id = $1`,
+      [id]
+    );
+    if (!previousRes.rows.length) return res.status(404).json({ error: 'Report not found.' });
+    const previous = previousRes.rows[0];
+
     const result = await query(
       `UPDATE issue_reports 
-       SET status = $1, updated_at = CURRENT_TIMESTAMP 
-       WHERE report_id = $2 
+       SET status = $1, issue_reason = $2, resolution_notes = $3, updated_at = CURRENT_TIMESTAMP 
+       WHERE report_id = $4 
        RETURNING *`,
-      [status, id]
+      [status, issue_reason || null, resolution_notes || null, id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Report not found.' });
+    }
+
+    if (previous.status !== status) {
+      const statusLabels = {
+        open: 'Open',
+        in_progress: 'In Progress',
+        resolved: 'Resolved',
+        cannot_be_resolved: 'Cannot Be Resolved',
+        requires_further_action: 'Requires Further Action',
+      };
+      const details = [issue_reason, resolution_notes].filter(Boolean).join(' ');
+      await createUserNotification({
+        userId: previous.reported_by,
+        type: 'damage_report',
+        title: 'Damage & Breakdown Report updated',
+        message: `Report #${id} for ${previous.issue_target} changed from ${statusLabels[previous.status] || previous.status} to ${statusLabels[status]}.${details ? ` ${details}` : ''}`,
+        entityType: 'damage_report',
+        entityId: id,
+      });
     }
 
     return res.json({

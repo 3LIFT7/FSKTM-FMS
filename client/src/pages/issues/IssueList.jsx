@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Table, Button, Input, Select, Image, Tag, Space, Typography, Row, Col, Empty, message } from 'antd';
+import { Card, Table, Button, Input, Select, Image, Space, Typography, Row, Col, Empty, message, Modal, Form } from 'antd';
 import {
   AlertOutlined,
   PlusOutlined,
@@ -23,6 +23,8 @@ export default function IssueList() {
   const [search, setSearch] = useState('');
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const [activeReport, setActiveReport] = useState(null);
+  const [actionForm] = Form.useForm();
 
   useEffect(() => {
     fetchIssues();
@@ -42,18 +44,29 @@ export default function IssueList() {
     }
   }
 
-  async function updateStatus(reportId, newStatus) {
+  function openStaffAction(report) {
+    setActiveReport(report);
+    actionForm.setFieldsValue({
+      status: report.status || 'open',
+      issue_reason: report.issue_reason || '',
+      resolution_notes: report.resolution_notes || '',
+    });
+  }
+
+  async function saveStaffAction(values) {
+    const reportId = activeReport.report_id;
     setUpdatingId(reportId);
     try {
       const res = await fetch(`/api/issues/${reportId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(values),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      message.success(`Ticket #${reportId} updated to ${newStatus}`);
+      message.success(`Ticket #${reportId} staff action saved`);
+      setActiveReport(null);
       fetchIssues();
     } catch (err) {
       message.error(err.message);
@@ -71,7 +84,8 @@ export default function IssueList() {
           (r.description && r.description.toLowerCase().includes(q)) ||
           (r.location_name && r.location_name.toLowerCase().includes(q)) ||
           (r.device_name && r.device_name.toLowerCase().includes(q)) ||
-          (r.user_name && r.user_name.toLowerCase().includes(q))
+          (r.reporter_name && r.reporter_name.toLowerCase().includes(q)) ||
+          (r.reporter_matric_number && r.reporter_matric_number.toLowerCase().includes(q))
         );
       }
       return true;
@@ -130,7 +144,12 @@ export default function IssueList() {
       key: 'reporter',
       render: (_, record) => (
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{record.user_name || 'Anonymous'}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{record.reporter_name || 'Anonymous'}</div>
+          {record.reporter_matric_number && (
+            <div style={{ fontSize: 11, color: '#475569' }}>
+              Matric No.: {record.reporter_matric_number}
+            </div>
+          )}
           <div style={{ fontSize: 11, color: '#64748B' }}>
             {formatDateTime(record.created_at)}
           </div>
@@ -151,19 +170,7 @@ export default function IssueList() {
             key: 'action',
             width: 160,
             render: (_, record) => (
-              <Select
-                size="small"
-                value={record.status}
-                loading={updatingId === record.report_id}
-                onChange={(val) => updateStatus(record.report_id, val)}
-                style={{ width: '100%' }}
-                options={[
-                  { value: 'open', label: 'Open' },
-                  { value: 'in_progress', label: 'In Progress' },
-                  { value: 'resolved', label: 'Resolved' },
-                  { value: 'closed', label: 'Closed' },
-                ]}
-              />
+              <Button size="small" onClick={() => openStaffAction(record)}>Update</Button>
             ),
           },
         ]
@@ -173,7 +180,7 @@ export default function IssueList() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
-        title="Damage & Breakdown Tickets"
+        title="Damage & Breakdown Reporte"
         subtitle={
           isStaff
             ? 'Operational queue for campus maintenance technicians to manage and resolve reported damages.'
@@ -220,7 +227,8 @@ export default function IssueList() {
                   { value: 'open', label: 'Open' },
                   { value: 'in_progress', label: 'In Progress' },
                   { value: 'resolved', label: 'Resolved' },
-                  { value: 'closed', label: 'Closed' },
+                  { value: 'cannot_be_resolved', label: 'Cannot Be Resolved' },
+                  { value: 'requires_further_action', label: 'Requires Further Action' },
                 ]}
               />
             </Col>
@@ -248,6 +256,34 @@ export default function IssueList() {
         onClose={() => setIsNewModalOpen(false)}
         onCreated={() => fetchIssues()}
       />
+
+      <Modal
+        title={activeReport ? `Staff Action · Ticket #${activeReport.report_id}` : 'Staff Action'}
+        open={Boolean(activeReport)}
+        onCancel={() => setActiveReport(null)}
+        onOk={() => actionForm.submit()}
+        confirmLoading={Boolean(activeReport && updatingId === activeReport.report_id)}
+        okText="Save Action"
+        destroyOnClose
+      >
+        <Form form={actionForm} layout="vertical" onFinish={saveStaffAction}>
+          <Form.Item name="status" label="Status" rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'open', label: 'Open' },
+              { value: 'in_progress', label: 'In Progress' },
+              { value: 'resolved', label: 'Resolved' },
+              { value: 'cannot_be_resolved', label: 'Cannot Be Resolved' },
+              { value: 'requires_further_action', label: 'Requires Further Action' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="issue_reason" label="Reason for the Issue">
+            <Input.TextArea rows={3} placeholder="Describe the cause or reason for the issue" />
+          </Form.Item>
+          <Form.Item name="resolution_notes" label="How It Was Resolved / Next Steps">
+            <Input.TextArea rows={4} placeholder="Record the resolution or action required" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

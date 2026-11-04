@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { createUserNotification } = require('./notificationsController');
 
 // GET /api/bookings
 async function getBookings(req, res) {
@@ -355,6 +356,15 @@ async function updateBookingStatus(req, res) {
           [staffId, booking.recurrence_group_id]
         );
 
+        if (booking.status !== 'approved') await createUserNotification({
+          userId: booking.user_id,
+          type: 'room_booking',
+          title: 'Room booking approved',
+          message: `Your recurring booking for ${booking.location_name} was approved (${updateRes.rows.length} sessions).`,
+          entityType: 'room_booking_series',
+          entityId: booking.recurrence_group_id,
+        });
+
         return res.json({
           success: true,
           message: `Entire semester recurring reservation (${updateRes.rows.length} weeks) approved successfully!`,
@@ -408,6 +418,15 @@ async function updateBookingStatus(req, res) {
         [staffId, id]
       );
 
+      if (booking.status !== 'approved') await createUserNotification({
+        userId: booking.user_id,
+        type: 'room_booking',
+        title: 'Room booking approved',
+        message: `Your booking for ${booking.location_name} was approved.`,
+        entityType: 'room_booking',
+        entityId: id,
+      });
+
       return res.json({
         success: true,
         message: `Booking request for ${booking.location_name} approved successfully.`,
@@ -426,6 +445,15 @@ async function updateBookingStatus(req, res) {
           [staffId, reason || 'Semester recurring request was not approved by administration.', booking.recurrence_group_id]
         );
 
+        if (booking.status !== 'rejected') await createUserNotification({
+          userId: booking.user_id,
+          type: 'room_booking',
+          title: 'Room booking rejected',
+          message: `Your recurring booking for ${booking.location_name} was rejected (${updateRes.rows.length} sessions). Reason: ${reason || 'No reason provided.'}`,
+          entityType: 'room_booking_series',
+          entityId: booking.recurrence_group_id,
+        });
+
         return res.json({
           success: true,
           message: `Entire semester recurring reservation (${updateRes.rows.length} weeks) rejected. The time slots are released.`,
@@ -441,6 +469,15 @@ async function updateBookingStatus(req, res) {
          RETURNING *`,
         [staffId, reason || 'Booking request was not approved by administration.', id]
       );
+
+      if (booking.status !== 'rejected') await createUserNotification({
+        userId: booking.user_id,
+        type: 'room_booking',
+        title: 'Room booking rejected',
+        message: `Your booking for ${booking.location_name} was rejected. Reason: ${reason || 'No reason provided.'}`,
+        entityType: 'room_booking',
+        entityId: id,
+      });
 
       return res.json({
         success: true,

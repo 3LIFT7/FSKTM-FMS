@@ -27,6 +27,8 @@ export default function LecturerDashboard() {
   const [togglingGroupId, setTogglingGroupId] = useState(null);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
+  const [loanRequests, setLoanRequests] = useState([]);
+  const [loanActionId, setLoanActionId] = useState(null);
 
   useEffect(() => {
     fetchLecturerData();
@@ -35,16 +37,35 @@ export default function LecturerDashboard() {
   async function fetchLecturerData() {
     setLoading(true);
     try {
-      const res = await fetch('/api/bookings');
-      const data = await res.json();
-      if (data.success) {
-        setMyBookings(data.bookings.filter(b => b.user_id === user?.user_id));
-      }
+      const [res, loanRes] = await Promise.all([fetch('/api/bookings'), fetch('/api/device-loans')]);
+      const [data, loanData] = await Promise.all([res.json(), loanRes.json()]);
+      if (data.success) setMyBookings(data.bookings.filter(b => b.user_id === user?.user_id));
+      if (loanData.success) setLoanRequests(loanData.loans.filter((loan) => loan.status === 'pending_lecturer' && Number(loan.lecturer_approver_id) === Number(user?.user_id)));
     } catch (err) {
       console.error(err);
       message.error('Failed to load reservations');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function reviewLoan(loanId, action) {
+    setLoanActionId(loanId);
+    try {
+      const res = await fetch(`/api/device-loans/${loanId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not review request');
+      message.success(data.message);
+      await fetchLecturerData();
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setLoanActionId(null);
     }
   }
 
@@ -241,6 +262,27 @@ export default function LecturerDashboard() {
       </Row>
 
       {/* Weekly Timetable Table Section for Lecturer's Assigned Classes */}
+      <Card
+        title={<Space><LaptopOutlined /><span>Device Loans Awaiting Your Approval</span><Tag color="blue">{loanRequests.length}</Tag></Space>}
+        bordered={false}
+        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Table
+          size="small"
+          rowKey="loan_id"
+          dataSource={loanRequests}
+          pagination={{ pageSize: 5, simple: true }}
+          locale={{ emptyText: <Empty description="No device requests need your approval" /> }}
+          columns={[
+            { title: 'Student', dataIndex: 'borrower_name', key: 'borrower_name', render: (name, row) => <div><Text strong>{name}</Text><div style={{ color: '#64748B', fontSize: 12 }}>{row.matric_or_staff_id}</div></div> },
+            { title: 'Device', dataIndex: 'device_name', key: 'device_name' },
+            { title: 'Return By', dataIndex: 'expected_return_time', key: 'expected_return_time', render: formatDateTime },
+            { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', ellipsis: true },
+            { title: 'Review', key: 'review', render: (_, row) => <Space><Button size="small" type="primary" loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'lecturer_approve')}>Approve</Button><Button size="small" danger loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'reject')}>Reject</Button></Space> },
+          ]}
+        />
+      </Card>
+
       <WeeklyTimetable
         bookings={myBookings}
         onBookSlot={(slot) => {

@@ -5,10 +5,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
 // Auth Pages
-import StudentLogin from './pages/auth/StudentLogin';
-import LecturerLogin from './pages/auth/LecturerLogin';
+import AcademicLogin from './pages/auth/AcademicLogin';
 import StaffLogin from './pages/auth/StaffLogin';
-import RegisterPage from './pages/auth/RegisterPage';
 
 // Dashboard Pages
 import StudentDashboard from './pages/dashboard/StudentDashboard';
@@ -42,7 +40,7 @@ function RootRedirect() {
       </div>
     );
   }
-  if (!user) return <Navigate to="/login/student" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'student') return <Navigate to="/student" replace />;
   if (user.role === 'lecturer') return <Navigate to="/lecturer" replace />;
   return <Navigate to="/staff" replace />;
@@ -57,10 +55,11 @@ export default function App() {
           <Route path="/" element={<RootRedirect />} />
 
           {/* Authentication Portals */}
-          <Route path="/login/student" element={<StudentLogin />} />
-          <Route path="/login/lecturer" element={<LecturerLogin />} />
+          <Route path="/login" element={<AcademicLogin />} />
+          <Route path="/login/student" element={<Navigate to="/login" replace />} />
+          <Route path="/login/lecturer" element={<Navigate to="/login" replace />} />
           <Route path="/login/staff" element={<StaffLogin />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/register" element={<Navigate to="/login" replace />} />
 
           {/* Public Classroom QR Scan & Feedback Landing Portals */}
           <Route path="/room-feedback/:codeOrId" element={<ClassroomFeedbackPage />} />

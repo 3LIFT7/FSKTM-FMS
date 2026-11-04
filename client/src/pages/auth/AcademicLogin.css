@@ -1,0 +1,525 @@
+.academic-login {
+  --auth-ink: #15213a;
+  --auth-muted: #52627a;
+  --auth-line: #d9e0ea;
+  --auth-blue: #203f91;
+  --auth-blue-dark: #152a61;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.6fr) minmax(480px, 1.4fr);
+  background: #f5f7fb;
+  color: var(--auth-ink);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.academic-login__identity {
+  position: relative;
+  display: flex;
+  min-height: 100%;
+  overflow: hidden;
+  background: var(--auth-blue-dark);
+  color: #fff;
+}
+
+.academic-login__identity::before,
+.academic-login__identity::after {
+  position: absolute;
+  content: '';
+  pointer-events: none;
+}
+
+.academic-login__identity::before {
+  width: 420px;
+  height: 420px;
+  top: 24%;
+  left: -240px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 50%;
+}
+
+.academic-login__identity::after {
+  width: 580px;
+  height: 580px;
+  right: -430px;
+  bottom: -340px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 50%;
+}
+
+.academic-login__identity-inner {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 610px);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: clamp(34px, 6vw, 78px) clamp(32px, 6.6vw, 92px);
+}
+
+.academic-login__brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 218px;
+  height: 78px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.academic-login__brand img,
+.academic-login__mobile-brand img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.academic-login__identity-copy {
+  max-width: 470px;
+  margin-top: clamp(74px, 15vh, 160px);
+}
+
+.academic-login__faculty {
+  max-width: 350px;
+  margin: 0 0 22px;
+  color: #d8e2fb;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.015em;
+}
+
+.academic-login__identity-copy h1 {
+  max-width: 430px;
+  margin: 0;
+  color: #fff;
+  font-size: 58px;
+  font-weight: 650;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.academic-login__description {
+  max-width: 390px;
+  margin: 24px 0 0;
+  color: #d4ddf1;
+  font-size: 15px;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+.academic-login__identity-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 48px;
+  color: #d3ddf3;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.academic-login__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e2252a;
+  box-shadow: 0 0 0 4px rgb(226 37 42 / 16%);
+}
+
+.academic-login__watermark {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  color: rgb(255 255 255 / 4%);
+  font-size: clamp(90px, 17vw, 250px);
+  font-weight: 800;
+  letter-spacing: -0.09em;
+  line-height: 0.8;
+  pointer-events: none;
+  user-select: none;
+}
+
+.academic-login__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 56px clamp(32px, 7vw, 100px);
+  background: #fff;
+}
+
+.academic-login__content-inner {
+  width: min(100%, 430px);
+}
+
+.academic-login__mobile-brand {
+  display: none;
+}
+
+.academic-login__brand--content {
+  margin-bottom: 44px;
+}
+
+.academic-login__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  margin-bottom: 34px;
+}
+
+.academic-login__heading-icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  background: #edf2fc;
+  color: var(--auth-blue);
+}
+
+.academic-login__eyebrow {
+  margin: 1px 0 8px;
+  color: #536887;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.academic-login__heading h2 {
+  margin: 0;
+  color: var(--auth-ink);
+  font-size: 27px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.academic-login__subheading {
+  margin: 9px 0 0;
+  color: var(--auth-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.academic-login__alert {
+  margin: -12px 0 18px;
+}
+
+.academic-login__google-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  min-height: 54px;
+  gap: 12px;
+  padding: 12px 48px;
+  border: 1px solid #aab7c8;
+  border-radius: 7px;
+  background: #fff;
+  color: #1d293b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.academic-login__google-button:hover:not(:disabled) {
+  border-color: #526b9f;
+  background: #f8faff;
+}
+
+.academic-login__google-button:focus-visible,
+.academic-login__staff-link:focus-visible,
+.academic-login__brand:focus-visible {
+  outline: 3px solid #e2252a;
+  outline-offset: 3px;
+}
+
+.academic-login__google-button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.academic-login__button-arrow {
+  position: absolute;
+  right: 17px;
+  color: #58677d;
+}
+
+.academic-login__verified-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  color: #344765;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.academic-login__verified-note svg {
+  flex: 0 0 auto;
+  color: #28519d;
+}
+
+.academic-login__role-section {
+  margin-top: 34px;
+  padding-top: 20px;
+  border-top: 1px solid var(--auth-line);
+}
+
+.academic-login__role-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: #31435e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.academic-login__role-heading svg {
+  flex: 0 0 auto;
+  color: var(--auth-blue);
+}
+
+.academic-login__role-list {
+  display: grid;
+  gap: 8px;
+}
+
+.academic-login__role-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e0e6ef;
+  border-radius: 7px;
+  background: #fbfcfe;
+}
+
+.academic-login__role-icon {
+  display: grid;
+  place-items: center;
+  color: #314e8c;
+}
+
+.academic-login__role-name {
+  color: #1e2c43;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.academic-login__role-row code {
+  color: #435773;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.academic-login__provision-note {
+  margin: 13px 0 0;
+  color: #40516a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.academic-login__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 34px;
+  padding-top: 20px;
+  border-top: 1px solid var(--auth-line);
+  color: #465872;
+  font-size: 12px;
+}
+
+.academic-login__staff-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  color: #203f91;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.academic-login__staff-link:hover {
+  color: #142b68;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.staff-login__form .ant-form-item-label > label {
+  color: #263852;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.staff-login__form .ant-input-affix-wrapper {
+  min-height: 48px;
+  border-color: #aab7c8;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.staff-login__form .ant-input-affix-wrapper:hover,
+.staff-login__form .ant-input-affix-wrapper-focused {
+  border-color: #203f91;
+  box-shadow: 0 0 0 3px rgb(32 63 145 / 14%);
+}
+
+.staff-login__form .ant-input-prefix {
+  margin-right: 10px;
+  color: #546780;
+}
+
+.staff-login__form-options {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: -2px 0 18px;
+}
+
+.staff-login__form-options .ant-btn {
+  min-height: 32px;
+  padding-inline: 0;
+  color: #203f91;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.staff-login__submit.ant-btn-primary {
+  min-height: 52px;
+  border-color: #203f91;
+  border-radius: 7px;
+  background: #203f91;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.staff-login__submit.ant-btn-primary:hover {
+  border-color: #152a61;
+  background: #152a61;
+}
+
+.staff-login__submit.ant-btn:focus-visible,
+.staff-login__form-options .ant-btn:focus-visible {
+  outline: 3px solid #e2252a;
+  outline-offset: 3px;
+}
+
+.staff-login__keyboard-note {
+  margin: 13px 0 0;
+  color: #40516a;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+@media (max-width: 900px) {
+  .academic-login {
+    grid-template-columns: minmax(300px, 0.6fr) minmax(420px, 1.4fr);
+  }
+
+  .academic-login__identity-inner {
+    padding-inline: 34px;
+  }
+
+  .academic-login__content {
+    padding-inline: 34px;
+  }
+}
+
+@media (max-width: 760px) {
+  .academic-login {
+    display: block;
+    background: #fff;
+  }
+
+  .academic-login__identity {
+    display: none;
+  }
+
+  .academic-login__content {
+    min-height: 100vh;
+    min-height: 100svh;
+    align-items: flex-start;
+    padding: 26px 22px 34px;
+  }
+
+  .academic-login__content-inner {
+    width: min(100%, 440px);
+    margin: 0 auto;
+  }
+
+  .academic-login__mobile-brand {
+    display: flex;
+    width: 182px;
+    height: 65px;
+    margin: 0 0 42px;
+  }
+
+  .academic-login__brand--content {
+    margin: 0 0 42px;
+  }
+
+  .academic-login__heading {
+    margin-bottom: 28px;
+  }
+
+  .academic-login__heading h2 {
+    font-size: 25px;
+  }
+
+  .academic-login__identity-copy h1 {
+    font-size: 38px;
+  }
+
+  .academic-login__role-section {
+    margin-top: 30px;
+  }
+
+  .academic-login__footer {
+    margin-top: 30px;
+  }
+}
+
+@media (max-width: 390px) {
+  .academic-login__role-row {
+    grid-template-columns: 26px minmax(62px, 0.7fr) minmax(0, 1fr);
+    gap: 7px;
+    padding-inline: 9px;
+  }
+
+  .academic-login__role-row code {
+    font-size: 10px;
+  }
+
+  .academic-login__heading {
+    gap: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .academic-login__google-button {
+    transition: none;
+  }
+}

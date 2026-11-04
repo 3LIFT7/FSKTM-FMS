@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T06:17:23Z",
+  "title": "Design System: FSKTM Facility Management System",
+  "extensions": {
+    "colorMeta": {
+      "uthm-navy": {
+        "role": "primary",
+        "displayName": "UTHM Navy",
+        "canonical": "#152A61",
+        "tonalRamp": ["#101C3E", "#152A61", "#1A3474", "#203F91", "#526AA8", "#879AC4", "#C5CEE1", "#F5F7FB"]
+      },
+      "operational-blue": {
+        "role": "primary",
+        "displayName": "Operational Blue",
+        "canonical": "#203F91",
+        "tonalRamp": ["#142A60", "#1A3475", "#203F91", "#3A58A0", "#6A80B5", "#9BAACB", "#CDD5E7", "#F4F6FB"]
+      },
+      "theme-blue": {
+        "role": "secondary",
+        "displayName": "System Blue",
+        "canonical": "#1E3A8A",
+        "tonalRamp": ["#132451", "#172D6D", "#1E3A8A", "#38569B", "#6B80B4", "#9EACCC", "#CFD7E8", "#F5F7FB"]
+      },
+      "uthm-red": {
+        "role": "tertiary",
+        "displayName": "UTHM Red",
+        "canonical": "#E2252A",
+        "tonalRamp": ["#641013", "#95191D", "#C51F24", "#E2252A", "#E95458", "#F08B8E", "#F7C3C4", "#FDEDEE"]
+      },
+      "neutral-white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": ["#15213A", "#34445E", "#52627A", "#8794A7", "#B4BECC", "#D9E0EA", "#F5F7FB", "#FFFFFF"]
+      },
+      "neutral-ground": {
+        "role": "neutral",
+        "displayName": "Cool Ground",
+        "canonical": "#F5F7FB",
+        "tonalRamp": ["#15213A", "#34445E", "#52627A", "#8794A7", "#B4BECC", "#D9E0EA", "#F5F7FB", "#FFFFFF"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Identity headline", "purpose": "Brand-panel headline on the login screens." },
+      "title": { "displayName": "Page title", "purpose": "Primary task or form title." },
+      "body": { "displayName": "Body", "purpose": "Supporting and instructional interface copy." },
+      "label": { "displayName": "Label", "purpose": "Field labels and compact metadata." }
+    },
+    "shadows": [
+      { "name": "focus-halo", "value": "0 0 0 3px rgb(32 63 145 / 14%)", "purpose": "Clarifies keyboard focus on staff fields." },
+      { "name": "brand-marker-halo", "value": "0 0 0 4px rgb(226 37 42 / 16%)", "purpose": "Separates the small UTHM-red status marker from navy." }
+    ],
+    "motion": [
+      { "name": "state-transition", "value": "160ms ease", "purpose": "Hover and focus state changes on sign-in controls." },
+      { "name": "reduced-motion", "value": "prefers-reduced-motion: reduce", "purpose": "Remove nonessential transitions when requested by the operating system." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "760px" },
+      { "name": "compact-mobile", "value": "390px" },
+      { "name": "tablet", "value": "900px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Full-width staff sign-in action on the white content surface.",
+      "html": "<button class=\"ds-btn-primary\">Sign in to Staff Portal</button>",
+      "css": ".ds-btn-primary { background: #203F91; color: #FFFFFF; border: 1px solid #203F91; border-radius: 7px; padding: 12px 24px; height: 52px; font: 650 14px Inter, system-ui, sans-serif; cursor: pointer; transition: background-color 160ms ease, border-color 160ms ease; } .ds-btn-primary:hover { background: #152A61; border-color: #152A61; } .ds-btn-primary:focus-visible { outline: 3px solid #E2252A; outline-offset: 3px; }"
+    },
+    {
+      "name": "Google Sign-In",
+      "kind": "button",
+      "refersTo": "button-google",
+      "description": "The single academic sign-in action for students and lecturers.",
+      "html": "<button class=\"ds-btn-google\"><svg class=\"ds-google-mark\" viewBox=\"0 0 48 48\" aria-hidden=\"true\"><path fill=\"#EA4335\" d=\"M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z\"/><path fill=\"#4285F4\" d=\"M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z\"/><path fill=\"#FBBC05\" d=\"M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z\"/><path fill=\"#34A853\" d=\"M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z\"/></svg><span>Continue with Google</span></button>",
+      "css": ".ds-btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 54px; padding: 12px 24px; border: 1px solid #AAB7C8; border-radius: 7px; background: #FFFFFF; color: #1D293B; font: 650 14px Inter, system-ui, sans-serif; cursor: pointer; transition: background-color 160ms ease, border-color 160ms ease; } .ds-btn-google:hover { border-color: #526B9F; background: #F8FAFF; } .ds-btn-google:focus-visible { outline: 3px solid #E2252A; outline-offset: 3px; } .ds-google-mark { width: 21px; height: 21px; flex: 0 0 auto; }"
+    },
+    {
+      "name": "Staff Email Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "A labeled staff credential field with visible focus treatment.",
+      "html": "<label class=\"ds-field\"><span>Staff email address</span><input type=\"email\" autocomplete=\"off\"/></label>",
+      "css": ".ds-field { display: grid; gap: 7px; color: #263852; font: 600 13px Inter, system-ui, sans-serif; } .ds-field input { min-height: 48px; padding: 12px 14px; border: 1px solid #AAB7C8; border-radius: 7px; background: #FFFFFF; color: #15213A; font: 400 14px Inter, system-ui, sans-serif; } .ds-field input:focus-visible { outline: 0; border-color: #203F91; box-shadow: 0 0 0 3px rgb(32 63 145 / 14%); }"
+    },
+    {
+      "name": "Academic Role Row",
+      "kind": "custom",
+      "refersTo": "role-row",
+      "description": "An informational row mapping an email domain to its automatically assigned role.",
+      "html": "<div class=\"ds-role-row\"><span class=\"ds-role-name\">Student</span><code>@student.uthm.edu.my</code></div>",
+      "css": ".ds-role-row { display: grid; grid-template-columns: minmax(80px, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #E0E6EF; border-radius: 7px; background: #FBFCFE; color: #15213A; font: 400 12px Inter, system-ui, sans-serif; } .ds-role-name { font-weight: 650; } .ds-role-row code { color: #435773; font: 400 11px Inter, system-ui, sans-serif; text-align: right; overflow-wrap: anywhere; }"
+    },
+    {
+      "name": "Staff Portal Link",
+      "kind": "nav",
+      "refersTo": "link-staff-portal",
+      "description": "A clear route between academic sign-in and the separate staff portal.",
+      "html": "<a class=\"ds-staff-link\" href=\"#\">Go to Staff Portal <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 17 17 7M8 7h9v9\"/></svg></a>",
+      "css": ".ds-staff-link { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; color: #203F91; font: 700 12px Inter, system-ui, sans-serif; text-decoration: none; } .ds-staff-link svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; } .ds-staff-link:hover { color: #152A61; text-decoration: underline; text-underline-offset: 3px; } .ds-staff-link:focus-visible { outline: 3px solid #E2252A; outline-offset: 3px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Campus Operations Desk",
+    "overview": "This is a working university service. It should feel clear, trustworthy, and official, with the UTHM identity visible and the task easy to find. Inter carries both headings and controls so the interface stays familiar across sign-in, dashboards, tables, and facility workflows. Use restrained borders and tonal differences to separate content. Shadows are rare and functional.",
+    "keyCharacteristics": [
+      "Official UTHM and FSKTM identity.",
+      "White and cool-neutral working surfaces balanced by deep navy.",
+      "One clear primary action per task.",
+      "Familiar, keyboard-operable controls with visible focus."
+    ],
+    "rules": [
+      { "name": "The 60/30/10 Rule", "body": "Aim for 60% light neutral surfaces, 30% UTHM navy, and 10% blue and red accents. Treat this as a visual balance across a screen, not a pixel-count requirement.", "section": "colors" },
+      { "name": "The One Family Rule", "body": "Use Inter throughout the interface; change weight and size to distinguish roles.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces stay flat at rest. Use borders first; elevation only to clarify focus or state.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do follow the 60/30/10 balance: light neutral surfaces, UTHM navy, then blue and red accents.",
+      "Do use verified Google email domains to identify student and lecturer accounts.",
+      "Do keep a separate, easy-to-find Staff Portal.",
+      "Do provide semantic labels, keyboard access, visible focus, readable contrast, and reduced motion.",
+      "Do use flat surfaces and familiar controls before adding visual effects."
+    ],
+    "donts": [
+      "Don't create separate student and lecturer login portals for the same Google sign-in flow.",
+      "Don't add a separate student or lecturer registration process.",
+      "Don't offer password entry or demo credential autofill for student and lecturer access.",
+      "Don't add demo credential autofill to the staff portal.",
+      "Don't turn red, green, or amber into large decorative surfaces; preserve them for accents and status."
+    ]
+  }
+}

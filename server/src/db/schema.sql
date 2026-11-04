@@ -68,23 +68,46 @@ CREATE TABLE IF NOT EXISTS device_bookings (
     checkout_time TIMESTAMP WITH TIME ZONE,
     expected_return_time TIMESTAMP WITH TIME ZONE NOT NULL,
     actual_return_time TIMESTAMP WITH TIME ZONE,
-    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'checked_out', 'returned', 'rejected')),
+    status VARCHAR(50) NOT NULL DEFAULT 'pending_technician' CHECK (status IN ('pending', 'pending_lecturer', 'pending_technician', 'approved', 'checked_out', 'returned', 'rejected')),
     purpose TEXT,
     approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    lecturer_approver_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+    lecturer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    pickup_location TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS issue_reports (
     report_id SERIAL PRIMARY KEY,
-    reported_by INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    reported_by INT REFERENCES users(user_id) ON DELETE CASCADE,
     location_id INT REFERENCES locations(location_id) ON DELETE SET NULL,
     device_id INT REFERENCES devices(device_id) ON DELETE SET NULL,
     description TEXT NOT NULL,
     photo_url TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+    status VARCHAR(50) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'cannot_be_resolved', 'requires_further_action', 'closed')),
+    issue_reason TEXT,
+    resolution_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    guest_name VARCHAR(255),
+    guest_email VARCHAR(255),
+    category VARCHAR(100) DEFAULT 'General'
 );
+
+CREATE TABLE IF NOT EXISTS user_notifications (
+    notification_id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_notifications_user_created
+    ON user_notifications (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS maintenance_logs (
     log_id SERIAL PRIMARY KEY,

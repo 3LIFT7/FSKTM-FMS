@@ -115,39 +115,6 @@ export function AuthProvider({ children }) {
     return data.user;
   }
 
-  async function register(registrationData) {
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify(registrationData)
-    });
-
-    const text = await res.text();
-    let data;
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch (_) {
-      data = { error: res.statusText || 'Unexpected server response' };
-    }
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Registration failed.');
-    }
-
-    if (data.token) {
-      localStorage.setItem('fsktm_auth_token', data.token);
-    }
-    if (data.user) {
-      localStorage.setItem('fsktm_user', JSON.stringify(data.user));
-    }
-
-    setUser(data.user);
-    return data.user;
-  }
-
   async function logout() {
     try {
       await fetch('/api/auth/logout', {
@@ -168,7 +135,6 @@ export function AuthProvider({ children }) {
     loading,
     login,
     googleAuth,
-    register,
     logout,
     checkSession,
     isAuthenticated: !!user,

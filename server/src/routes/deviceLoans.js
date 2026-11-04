@@ -4,7 +4,8 @@ const deviceLoansController = require('../controllers/deviceLoansController');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 
 router.get('/', authenticateToken, deviceLoansController.getDeviceLoans);
+router.get('/lecturers', authenticateToken, requireRole(['student']), deviceLoansController.getLecturers);
 router.post('/', authenticateToken, deviceLoansController.requestDeviceLoan);
-router.patch('/:id/status', authenticateToken, requireRole(['technician', 'manager']), deviceLoansController.updateLoanStatus);
+router.patch('/:id/status', authenticateToken, requireRole(['lecturer', 'technician', 'manager']), deviceLoansController.updateLoanStatus);
 
 module.exports = router;

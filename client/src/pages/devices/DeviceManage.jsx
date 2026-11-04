@@ -32,6 +32,8 @@ export default function DeviceManage() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [approvingLoan, setApprovingLoan] = useState(null);
+  const [approvalForm] = Form.useForm();
 
   // Filter state for inventory
   const [inventorySearch, setInventorySearch] = useState('');
@@ -72,21 +74,23 @@ export default function DeviceManage() {
     }
   }
 
-  async function handleLoanAction(loanId, action) {
+  async function handleLoanAction(loanId, action, extra = {}) {
     setActionLoadingId(loanId);
     try {
       const res = await fetch(`/api/device-loans/${loanId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...extra }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       message.success(`Loan status updated to ${action}`);
       fetchData();
+      return true;
     } catch (err) {
       message.error(err.message);
+      return false;
     } finally {
       setActionLoadingId(null);
     }
@@ -175,7 +179,7 @@ export default function DeviceManage() {
       key: 'user',
       render: (_, record) => (
         <div>
-          <Text strong>{record.user_name}</Text>
+          <Text strong>{record.borrower_name}</Text>
           <div style={{ fontSize: 11, color: '#64748B' }}>
             {record.matric_or_staff_id} • {record.user_role}
           </div>
@@ -228,13 +232,13 @@ export default function DeviceManage() {
         const isLoading = actionLoadingId === record.loan_id;
         return (
           <Space size="small">
-            {record.status === 'pending' && (
+            {['pending', 'pending_technician'].includes(record.status) && (
               <>
                 <Button
                   size="small"
                   type="primary"
                   loading={isLoading}
-                  onClick={() => handleLoanAction(record.loan_id, 'approve')}
+                  onClick={() => { setApprovingLoan(record); approvalForm.resetFields(); }}
                   style={{ background: '#16A34A', borderColor: '#16A34A' }}
                 >
                   Approve
@@ -509,6 +513,35 @@ export default function DeviceManage() {
           ]}
         />
       </Card>
+
+      <Modal
+        open={Boolean(approvingLoan)}
+        title={`Approve loan #${approvingLoan?.loan_id}`}
+        okText="Approve & Notify Student"
+        cancelText="Cancel"
+        confirmLoading={actionLoadingId === approvingLoan?.loan_id}
+        onCancel={() => setApprovingLoan(null)}
+        onOk={() => approvalForm.submit()}
+        destroyOnClose
+      >
+        <p>Enter the pickup point the student should go to after approval.</p>
+        <Form
+          form={approvalForm}
+          layout="vertical"
+          onFinish={async ({ pickup_location }) => {
+            const saved = await handleLoanAction(approvingLoan.loan_id, 'approve', { pickup_location });
+            if (saved) setApprovingLoan(null);
+          }}
+        >
+          <Form.Item
+            name="pickup_location"
+            label="Device pickup location"
+            rules={[{ required: true, whitespace: true, message: 'Enter where the student should collect the device' }]}
+          >
+            <Input.TextArea rows={2} placeholder="e.g. FSKTM Device Counter, Block A, Level 2" />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* Add Device Modal */}
       <Modal
