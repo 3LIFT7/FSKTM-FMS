@@ -128,23 +128,35 @@ export default function MyActivity() {
 
   const loanColumns = [
     {
-      title: 'Hardware Item',
+      title: 'Hardware Item & Accessories',
       dataIndex: 'device_name',
       key: 'device_name',
-      render: (text, record) => (
-        <div>
-          <Text strong>{text}</Text>
-          <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
-            Serial: {record.serial_number}
+      render: (text, record) => {
+        const selAcc = Array.isArray(record.selected_accessories) ? record.selected_accessories : [];
+        return (
+          <div>
+            <Text strong>{text}</Text>
+            <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
+              Serial: {record.serial_number}
+            </div>
+            {selAcc.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                {selAcc.map((acc) => (
+                  <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>
+                    + {acc}
+                  </Tag>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: 'Category',
-      dataIndex: 'category',
+      dataIndex: 'device_category',
       key: 'category',
-      render: (cat) => <Tag color="blue">{cat || 'Hardware'}</Tag>,
+      render: (cat, record) => <Tag color="blue">{cat || record.category || 'Hardware'}</Tag>,
     },
     {
       title: 'Return Deadline',

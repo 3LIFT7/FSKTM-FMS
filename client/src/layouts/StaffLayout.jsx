@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, Avatar, Dropdown, Badge, Button, Space, Typography, Grid, Drawer } from 'antd';
 import {
   DashboardOutlined,
   CalendarOutlined,
   LaptopOutlined,
   AlertOutlined,
-  ToolOutlined,
   TeamOutlined,
   UploadOutlined,
   BarChartOutlined,
@@ -18,7 +17,7 @@ import {
   MenuOutlined,
   BellOutlined,
   LogoutOutlined,
-  UserOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import StatusTag from '../components/StatusTag';
@@ -78,6 +77,11 @@ export default function StaffLayout() {
       items.push(
         {
           type: 'divider',
+        },
+        {
+          key: '/admin/lab-usage-logs',
+          icon: <FileTextOutlined />,
+          label: 'LOG REKOD PENGGUNAAN MAKMAL',
         },
         {
           key: '/admin/schedule-import',

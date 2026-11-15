@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Alert, Empty, message } from 'antd';
+import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Empty, Checkbox, message } from 'antd';
 import {
   LaptopOutlined,
   PlusOutlined,
   SearchOutlined,
-  CheckOutlined,
-  CloseOutlined,
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
   ClockCircleOutlined,
   BarcodeOutlined,
   EyeOutlined,
+  AppstoreAddOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
@@ -23,6 +22,18 @@ import PageHeader from '../../components/PageHeader';
 import { formatDateTime } from '../../utils/date';
 
 const { Text } = Typography;
+
+const ACCESSORY_PRESETS = [
+  'Power Adapter / Charger',
+  'HDMI Cable',
+  'USB-C Cable',
+  'Carrying Case / Bag',
+  'Remote Control',
+  'Wireless Mouse',
+  'Controllers (L & R)',
+  'Tripod / Stand',
+  'Extra Battery',
+];
 
 export default function DeviceManage() {
   const { user } = useAuth();
@@ -46,6 +57,8 @@ export default function DeviceManage() {
   const [viewingDevice, setViewingDevice] = useState(null);
   const [addForm] = Form.useForm();
   const [addMode, setAddMode] = useState('pool');
+  const [addHasAccessories, setAddHasAccessories] = useState(false);
+  const watchedAddAccessories = Form.useWatch('accessories', addForm) || [];
 
   useEffect(() => {
     fetchData();
@@ -111,10 +124,22 @@ export default function DeviceManage() {
     }
   }
 
+  const handleToggleAddPresetAccessory = (item) => {
+    const current = addForm.getFieldValue('accessories') || [];
+    if (current.includes(item)) {
+      addForm.setFieldsValue({ accessories: current.filter((a) => a !== item) });
+    } else {
+      addForm.setFieldsValue({ accessories: [...current, item] });
+    }
+  };
+
   async function handleCreateDevice(values) {
     try {
       const isLoanable = values.mode === 'pool';
       const locId = isLoanable ? null : values.location_id ? parseInt(values.location_id, 10) : null;
+      const cleanedAccessories = addHasAccessories
+        ? (values.accessories || []).map((a) => String(a).trim()).filter(Boolean)
+        : [];
 
       const res = await fetch('/api/devices', {
         method: 'POST',
@@ -126,6 +151,7 @@ export default function DeviceManage() {
           serial_number: values.serial_number.trim(),
           barcode: values.barcode ? values.barcode.trim() : null,
           specs: values.specs || null,
+          accessories: cleanedAccessories,
           image_url: values.image_url ? values.image_url.trim() : null,
           is_loanable: isLoanable,
           location_id: locId,
@@ -138,6 +164,7 @@ export default function DeviceManage() {
 
       message.success('New hardware asset registered');
       setIsAddDeviceOpen(false);
+      setAddHasAccessories(false);
       addForm.resetFields();
       fetchData();
     } catch (err) {
@@ -152,10 +179,12 @@ export default function DeviceManage() {
       if (inventoryStatus !== 'All' && d.status !== inventoryStatus) return false;
       if (inventorySearch) {
         const q = inventorySearch.toLowerCase();
+        const accMatch = Array.isArray(d.accessories) && d.accessories.some((a) => a.toLowerCase().includes(q));
         return (
           d.name.toLowerCase().includes(q) ||
           d.serial_number.toLowerCase().includes(q) ||
-          (d.specs && d.specs.toLowerCase().includes(q))
+          (d.specs && d.specs.toLowerCase().includes(q)) ||
+          accMatch
         );
       }
       return true;
@@ -187,16 +216,28 @@ export default function DeviceManage() {
       ),
     },
     {
-      title: 'Device',
+      title: 'Device & Selected Accessories',
       key: 'device',
-      render: (_, record) => (
-        <div>
-          <Text strong>{record.device_name}</Text>
-          <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
-            SN: {record.serial_number}
+      render: (_, record) => {
+        const selAcc = Array.isArray(record.selected_accessories) ? record.selected_accessories : [];
+        return (
+          <div>
+            <Text strong>{record.device_name}</Text>
+            <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
+              SN: {record.serial_number}
+            </div>
+            {selAcc.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                {selAcc.map((acc) => (
+                  <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>
+                    + {acc}
+                  </Tag>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: 'Expected Return',
@@ -286,43 +327,52 @@ export default function DeviceManage() {
     {
       title: 'Device Asset',
       key: 'name',
-      render: (_, record) => (
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-          onClick={() => setViewingDevice(record)}
-          title="Click to view full specs & asset details"
-        >
-          {record.image_url ? (
-            <img
-              src={record.image_url}
-              alt={record.name}
-              referrerPolicy="no-referrer"
-              style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
-          ) : (
-            <div style={{ width: 40, height: 40, borderRadius: 8, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', flexShrink: 0 }}>
-              <LaptopOutlined />
-            </div>
-          )}
-          <div>
-            <Text strong style={{ fontSize: 13, color: '#1E293B', display: 'block' }}>
-              {record.name}
-            </Text>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace' }}>
-                SN: {record.serial_number}
-              </span>
-              {record.barcode && (
-                <span style={{ fontSize: 10, color: '#0369A1', background: '#E0F2FE', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace', fontWeight: 600 }}>
-                  <BarcodeOutlined style={{ marginRight: 2 }} />
-                  {record.barcode}
+      render: (_, record) => {
+        const accessories = Array.isArray(record.accessories) ? record.accessories : [];
+        return (
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+            onClick={() => setViewingDevice(record)}
+            title="Click to view full specs & asset details"
+          >
+            {record.image_url ? (
+              <img
+                src={record.image_url}
+                alt={record.name}
+                referrerPolicy="no-referrer"
+                style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            ) : (
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', flexShrink: 0 }}>
+                <LaptopOutlined />
+              </div>
+            )}
+            <div>
+              <Text strong style={{ fontSize: 13, color: '#1E293B', display: 'block' }}>
+                {record.name}
+              </Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: '#64748B', fontFamily: 'monospace' }}>
+                  SN: {record.serial_number}
                 </span>
-              )}
+                {record.barcode && (
+                  <span style={{ fontSize: 10, color: '#0369A1', background: '#E0F2FE', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace', fontWeight: 600 }}>
+                    <BarcodeOutlined style={{ marginRight: 2 }} />
+                    {record.barcode}
+                  </span>
+                )}
+                {accessories.length > 0 && (
+                  <span style={{ fontSize: 10, color: '#1E40AF', background: '#DBEAFE', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                    <AppstoreAddOutlined style={{ marginRight: 3 }} />
+                    {accessories.length} {accessories.length === 1 ? 'Accessory' : 'Accessories'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: 'Category',
@@ -413,7 +463,11 @@ export default function DeviceManage() {
             <Button
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => setIsAddDeviceOpen(true)}
+              onClick={() => {
+                setAddHasAccessories(false);
+                addForm.resetFields();
+                setIsAddDeviceOpen(true);
+              }}
               style={{ fontWeight: 600 }}
             >
               Add Hardware Asset
@@ -462,7 +516,7 @@ export default function DeviceManage() {
                     <Col xs={24} md={10}>
                       <Input
                         prefix={<SearchOutlined style={{ color: '#94A3B8' }} />}
-                        placeholder="Search devices by name, serial, specs..."
+                        placeholder="Search devices by name, serial, specs, accessories..."
                         value={inventorySearch}
                         onChange={(e) => setInventorySearch(e.target.value)}
                         allowClear
@@ -524,6 +578,20 @@ export default function DeviceManage() {
         onOk={() => approvalForm.submit()}
         destroyOnClose
       >
+        {Array.isArray(approvingLoan?.selected_accessories) && approvingLoan.selected_accessories.length > 0 && (
+          <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
+              Requested Optional Accessories:
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {approvingLoan.selected_accessories.map((acc) => (
+                <Tag key={acc} color="geekblue" style={{ margin: 0 }}>
+                  {acc}
+                </Tag>
+              ))}
+            </div>
+          </div>
+        )}
         <p>Enter the pickup point the student should go to after approval.</p>
         <Form
           form={approvalForm}
@@ -556,7 +624,7 @@ export default function DeviceManage() {
           form={addForm}
           layout="vertical"
           onFinish={handleCreateDevice}
-          initialValues={{ category: 'General', mode: 'pool' }}
+          initialValues={{ category: 'General', mode: 'pool', accessories: [] }}
           style={{ marginTop: 16 }}
         >
           <Form.Item name="name" label="Asset / Device Name" rules={[{ required: true }]}>
@@ -575,11 +643,16 @@ export default function DeviceManage() {
 
           <Form.Item name="category" label="Category" rules={[{ required: true }]}>
             <Select>
+              <Select.Option value="Audio/Visual">Audio/Visual</Select.Option>
+              <Select.Option value="Forensics">Forensics</Select.Option>
+              <Select.Option value="Media">Media</Select.Option>
+              <Select.Option value="Networking">Networking</Select.Option>
+              <Select.Option value="Testing & Lab">Testing & Lab</Select.Option>
+              <Select.Option value="VR / AR">VR / AR</Select.Option>
+              <Select.Option value="Workstation">Workstation</Select.Option>
               <Select.Option value="Laptops">Laptops</Select.Option>
-              <Select.Option value="VR / AR Headsets">VR / AR Headsets</Select.Option>
               <Select.Option value="Mobile Devices">Mobile Devices</Select.Option>
               <Select.Option value="IoT & Microcontrollers">IoT & Microcontrollers</Select.Option>
-              <Select.Option value="Audio / Visual">Audio / Visual</Select.Option>
               <Select.Option value="General">General Hardware</Select.Option>
             </Select>
           </Form.Item>
@@ -614,6 +687,82 @@ export default function DeviceManage() {
           <Form.Item name="specs" label="Specifications">
             <Input.TextArea rows={2} placeholder="Optional hardware specs" />
           </Form.Item>
+
+          {/* Optional Accessories Check & Selector */}
+          <div
+            style={{
+              background: addHasAccessories ? '#F0F9FF' : '#F8FAFC',
+              border: `1px solid ${addHasAccessories ? '#BAE6FD' : '#E2E8F0'}`,
+              borderRadius: 10,
+              padding: '12px 14px',
+              marginBottom: 16,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Checkbox
+              checked={addHasAccessories}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setAddHasAccessories(checked);
+                if (!checked) {
+                  addForm.setFieldsValue({ accessories: [] });
+                }
+              }}
+              style={{ fontWeight: 600, color: '#0F172A' }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <AppstoreAddOutlined style={{ color: '#2563EB' }} />
+                Device has optional accessories
+              </span>
+            </Checkbox>
+            <div style={{ fontSize: 12, color: '#64748B', marginLeft: 24, marginTop: 2 }}>
+              Enable this to list optional accessories (cables, adapters, cases, controllers) so borrowers can choose which ones they need.
+            </div>
+
+            {addHasAccessories && (
+              <div style={{ marginTop: 12 }}>
+                <Form.Item
+                  name="accessories"
+                  label={<span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B' }}>Available Accessories for This Device</span>}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Select
+                    mode="tags"
+                    style={{ width: '100%' }}
+                    placeholder="Type an accessory name and press Enter (or click presets below)..."
+                    tokenSeparators={[',']}
+                    options={ACCESSORY_PRESETS.map((item) => ({ value: item, label: item }))}
+                  />
+                </Form.Item>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  <Text type="secondary" style={{ fontSize: 11, marginRight: 4 }}>
+                    Quick Add:
+                  </Text>
+                  {ACCESSORY_PRESETS.map((preset) => {
+                    const isSelected = watchedAddAccessories.includes(preset);
+                    return (
+                      <Tag
+                        key={preset}
+                        color={isSelected ? 'blue' : 'default'}
+                        style={{
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          margin: 0,
+                          userSelect: 'none',
+                          borderStyle: isSelected ? 'solid' : 'dashed',
+                        }}
+                        onClick={() => handleToggleAddPresetAccessory(preset)}
+                      >
+                        {isSelected ? `✓ ${preset}` : `+ ${preset}`}
+                      </Tag>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
 
           <ImageInputPreview
             form={addForm}

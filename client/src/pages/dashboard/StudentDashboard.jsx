@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Row, Col, Card, Statistic, Table, Button, Popconfirm, Empty, Spin, Space, Typography, Tag, message } from 'antd';
+import { Row, Col, Card, Statistic, Table, Button, Popconfirm, Empty, Space, Typography, Tag, message } from 'antd';
 import {
   CalendarOutlined,
   LaptopOutlined,
   AlertOutlined,
   CompassOutlined,
   PlusOutlined,
-  ClockCircleOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import BookRoomModal from '../booking/BookRoomModal';
@@ -142,14 +139,26 @@ export default function StudentDashboard() {
       title: 'Device',
       dataIndex: 'device_name',
       key: 'device_name',
-      render: (text, record) => (
-        <div>
-          <Text strong>{text}</Text>
-          <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
-            SN: {record.serial_number}
+      render: (text, record) => {
+        const selAcc = Array.isArray(record.selected_accessories) ? record.selected_accessories : [];
+        return (
+          <div>
+            <Text strong>{text}</Text>
+            <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
+              SN: {record.serial_number}
+            </div>
+            {selAcc.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                {selAcc.map((acc) => (
+                  <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px', borderRadius: 4 }}>
+                    + {acc}
+                  </Tag>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: 'Return Deadline',

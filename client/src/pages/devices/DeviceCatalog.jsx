@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Row, Col, Input, Select, Button, Tag, Space, Typography, Empty, Spin, Badge } from 'antd';
+import { Card, Row, Col, Input, Select, Button, Tag, Typography, Empty, Spin } from 'antd';
 import {
   LaptopOutlined,
   SearchOutlined,
-  FilterOutlined,
-  PlusOutlined,
-  CheckCircleOutlined,
-  QrcodeOutlined,
+  AppstoreAddOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import BorrowDeviceModal from './BorrowDeviceModal';
@@ -16,7 +14,7 @@ import PageHeader from '../../components/PageHeader';
 const { Text, Paragraph } = Typography;
 
 export default function DeviceCatalog() {
-  const { user, isStaff } = useAuth();
+  const { user } = useAuth();
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -41,38 +39,38 @@ export default function DeviceCatalog() {
     }
   }
 
-  const isStudentOrLecturer = !isStaff || user?.role === 'student' || user?.role === 'lecturer';
-
   const categories = useMemo(() => {
     const list = devices
-      .filter(d => (isStudentOrLecturer ? d.is_loanable : true))
       .map(d => d.category)
       .filter(Boolean);
     return ['All', ...new Set(list)];
-  }, [devices, isStudentOrLecturer]);
+  }, [devices]);
 
   const filteredDevices = useMemo(() => {
     return devices.filter(d => {
-      if (isStudentOrLecturer && !d.is_loanable) return false;
       if (categoryFilter !== 'All' && d.category !== categoryFilter) return false;
       if (statusFilter !== 'All' && d.status !== statusFilter) return false;
       if (search) {
         const q = search.toLowerCase();
+        const accMatch = Array.isArray(d.accessories) && d.accessories.some((a) => a.toLowerCase().includes(q));
+        const locMatch = d.location_name && d.location_name.toLowerCase().includes(q);
         return (
           d.name.toLowerCase().includes(q) ||
           d.serial_number.toLowerCase().includes(q) ||
-          (d.specs && d.specs.toLowerCase().includes(q))
+          (d.specs && d.specs.toLowerCase().includes(q)) ||
+          accMatch ||
+          locMatch
         );
       }
       return true;
     });
-  }, [devices, isStudentOrLecturer, categoryFilter, statusFilter, search]);
+  }, [devices, categoryFilter, statusFilter, search]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="Hardware & Equipment Catalog"
-        subtitle="Borrow VR headsets, mobile testing devices, microcontrollers, and computing equipment for academic projects."
+        subtitle="Borrow VR headsets, mobile testing devices, microcontrollers, media gear, and lab equipment for academic projects."
       />
 
       {/* Filter Row */}
@@ -81,7 +79,7 @@ export default function DeviceCatalog() {
           <Col xs={24} md={10}>
             <Input
               prefix={<SearchOutlined style={{ color: '#94A3B8' }} />}
-              placeholder="Search by device model, serial number, or specs..."
+              placeholder="Search by device model, serial number, specs, or accessories..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               allowClear
@@ -126,6 +124,7 @@ export default function DeviceCatalog() {
         <Row gutter={[20, 20]}>
           {filteredDevices.map(d => {
             const isAvailable = d.status === 'available';
+            const accessories = Array.isArray(d.accessories) ? d.accessories : [];
             return (
               <Col xs={24} sm={12} lg={8} xl={6} key={d.device_id}>
                 <Card
@@ -193,24 +192,49 @@ export default function DeviceCatalog() {
                     <Paragraph
                       type="secondary"
                       ellipsis={{ rows: 2 }}
-                      style={{ fontSize: 12, flex: 1, margin: '4px 0 16px 0' }}
+                      style={{ fontSize: 12, margin: '4px 0 10px 0' }}
                     >
                       {d.specs}
                     </Paragraph>
                   )}
 
+                  {accessories.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <AppstoreAddOutlined style={{ color: '#2563EB' }} />
+                        <span>Optional Accessories ({accessories.length}):</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {accessories.slice(0, 3).map((acc) => (
+                          <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>
+                            {acc}
+                          </Tag>
+                        ))}
+                        {accessories.length > 3 && (
+                          <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>
+                            +{accessories.length - 3} more
+                          </Tag>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid #F1F5F9' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <Tag color="blue">{d.category || 'General Pool'}</Tag>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 6, flexWrap: 'wrap' }}>
+                      <Tag color="blue" style={{ margin: 0 }}>{d.category || 'General Pool'}</Tag>
                       <Text type="secondary" style={{ fontSize: 11 }}>
-                        {d.is_loanable ? 'Portable' : 'In-Room'}
+                        {d.location_name ? (
+                          <span><EnvironmentOutlined style={{ marginRight: 3 }} />{d.location_name}</span>
+                        ) : (
+                          'Portable Pool'
+                        )}
                       </Text>
                     </div>
 
                     <Button
                       type="primary"
                       block
-                      disabled={!isAvailable || !d.is_loanable}
+                      disabled={!isAvailable}
                       onClick={() => setSelectedDeviceForLoan(d)}
                       style={{ fontWeight: 600 }}
                     >

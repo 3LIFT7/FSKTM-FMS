@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Descriptions, Tag, Button, Typography, Space, message, Card } from 'antd';
+import { Modal, Descriptions, Tag, Button, Typography, Space, message } from 'antd';
 import {
   LaptopOutlined,
   EditOutlined,
@@ -7,15 +7,16 @@ import {
   FileTextOutlined,
   EnvironmentOutlined,
   CopyOutlined,
-  CheckCircleOutlined,
-  InfoCircleOutlined
+  AppstoreAddOutlined,
 } from '@ant-design/icons';
 import StatusTag from './StatusTag';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
 export default function DeviceDetailModal({ isOpen, onClose, device, onEdit, canEdit = true }) {
   if (!device) return null;
+
+  const accessories = Array.isArray(device.accessories) ? device.accessories : [];
 
   const copyBarcode = () => {
     if (device.barcode) {
@@ -265,6 +266,36 @@ export default function DeviceDetailModal({ isOpen, onClose, device, onEdit, can
               <div style={{ color: '#64748B', fontStyle: 'italic', fontSize: 12 }}>
                 No technical specifications or notes recorded for this hardware item.
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Optional Accessories Section */}
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AppstoreAddOutlined style={{ color: '#2563EB' }} />
+            <span>Optional Accessories</span>
+          </div>
+          <div
+            style={{
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              borderRadius: 10,
+              padding: '12px 16px',
+            }}
+          >
+            {accessories.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {accessories.map((acc) => (
+                  <Tag key={acc} color="geekblue" style={{ margin: 0, borderRadius: 6, fontWeight: 500 }}>
+                    {acc}
+                  </Tag>
+                ))}
+              </div>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 12, fontStyle: 'italic' }}>
+                No optional accessories listed for this device.
+              </Text>
             )}
           </div>
         </div>

@@ -27,11 +27,13 @@ async function seedDatabase() {
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS lecturer_approver_id INT REFERENCES users(user_id) ON DELETE SET NULL;
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS lecturer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL;
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS pickup_location TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
       ALTER TABLE device_bookings DROP CONSTRAINT IF EXISTS device_bookings_status_check;
       ALTER TABLE device_bookings ADD CONSTRAINT device_bookings_status_check CHECK (status IN ('pending', 'pending_lecturer', 'pending_technician', 'approved', 'checked_out', 'returned', 'rejected'));
       ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS image_url TEXT;
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);
+      ALTER TABLE devices ADD COLUMN IF NOT EXISTS accessories TEXT;
       ALTER TABLE issue_reports ALTER COLUMN reported_by DROP NOT NULL;
       ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255);
       ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_email VARCHAR(255);
@@ -62,6 +64,16 @@ async function seedDatabase() {
     await exec(`UPDATE devices SET is_loanable = FALSE WHERE location_id IS NOT NULL`);
     await exec(`UPDATE devices SET is_loanable = TRUE WHERE location_id IS NULL`);
     await exec(`UPDATE devices SET barcode = 'BC-' || REPLACE(serial_number, ' ', '-') WHERE barcode IS NULL OR barcode = ''`);
+
+    // Populate default accessories for loanable devices that don't have accessories configured yet
+    await exec(`UPDATE devices SET accessories = '["Touch Controllers (L & R)","USB-C Charging Cable","Carrying Case"]' WHERE serial_number IN ('VR-MQ2-001', 'VR-MQ2-002') AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["Base Stations 2.0 (Pair)","Wireless Adapter","Controllers (L & R)","Link Box & Cables"]' WHERE serial_number = 'VR-VIVE-001' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["24-70mm GM Lens","Extra NP-FZ100 Battery","64GB SDXC Card","Camera Hard Case","Charger & Strap"]' WHERE serial_number = 'CAM-SNY-A7IV' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["BG30 Battery Grip","Quick-Release Plate","Extended Grip / Tripod","Carrying Case"]' WHERE serial_number = 'GMB-DJI-RS3P' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["140W USB-C Power Adapter","MagSafe 3 Cable","USB-C Multiport Hub","Protective Laptop Sleeve","Wireless Mouse"]' WHERE serial_number = 'LAP-APL-MBP16' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["130W USB-C Power Adapter","USB-C to HDMI/USB Adapter","Laptop Carrying Bag","Wireless Mouse"]' WHERE serial_number = 'LAP-DEL-XPS15' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["Remote Control","HDMI Cable","Power Cord"]' WHERE serial_number = 'PRJ-EPS-2250' AND accessories IS NULL`);
+
     console.log('✓ Database schema migrations applied.');
 
     // Ensure new blocks (Blok B8, Blok C12, Blok L Perpustakaan) exist
@@ -214,20 +226,20 @@ async function seedDatabase() {
     { name: 'NVIDIA RTX 4090 Deep Learning Rig #1', category: 'Workstation', serial: 'WS-GPU-4090-1', locCode: 'MSD', specs: 'Ryzen 9 7950X, 64GB DDR5, RTX 4090 24GB. Fixed Lab Station.', is_loanable: false, status: 'available' },
     { name: 'Dell Precision 3660 Workstation #08', category: 'Workstation', serial: 'WS-DEL-3660-8', locCode: 'MKP', specs: 'Core i7 13700, 32GB RAM, RTX A2000. Fixed Lab Station.', is_loanable: false, status: 'available' },
     { name: 'Tableau Forensic Universal Bridge T35u', category: 'Forensics', serial: 'FRN-TAB-T35U', locCode: 'MFD', specs: 'Write-blocker for SATA, SAS, PCIe, USB 3.0. Fixed Lab Bench.', is_loanable: false, status: 'available' },
-    { name: 'Epson EB-2250U 3LCD Projector', category: 'Audio/Visual', serial: 'PRJ-EPS-2250', locCode: 'SEM-2', specs: '5000 Lumens, Full HD WUXGA, Ceiling Mounted.', is_loanable: false, status: 'available' },
+    { name: 'Epson EB-2250U 3LCD Projector', category: 'Audio/Visual', serial: 'PRJ-EPS-2250', locCode: 'SEM-2', specs: '5000 Lumens, Full HD WUXGA, Ceiling Mounted.', is_loanable: false, status: 'available', accessories: '["Remote Control","HDMI Cable","Power Cord"]' },
     { name: 'Rode RodeCaster Pro II Audio Studio Console', category: 'Audio/Visual', serial: 'AUD-ROD-CP2', locCode: 'SAV', specs: 'Integrated audio production studio, 4 XLR inputs, 8 motorized faders. Fixed Studio Console.', is_loanable: false, status: 'available' },
     { name: 'Blackmagic Studio Camera 4K Pro G2', category: 'Media', serial: 'CAM-BMD-ST4K', locCode: 'SAV', specs: '12G-SDI, 7" HDR touchscreen, Micro Four Thirds mount. Fixed Studio Pedestal Camera.', is_loanable: false, status: 'available' },
     { name: 'Genelec 8030C Studio Monitors (Pair)', category: 'Audio/Visual', serial: 'SPK-GEN-8030', locCode: 'SAV', specs: 'Bi-amplified active studio monitors, sound-isolated acoustic mount. Fixed Studio Monitors.', is_loanable: false, status: 'available' },
     { name: 'HTC Vive Pro 2 Space Tracking Rig (Fixed)', category: 'VR / AR', serial: 'VR-VIVE-FIXED', locCode: 'MRM', specs: 'Fixed ceiling-mounted SteamVR 2.0 Base Stations, tethered workstation rig.', is_loanable: false, status: 'available' },
     
     // Loanable devices not associated with specific rooms (General Loan Pool)
-    { name: 'Meta Quest 2 VR Headset #01', category: 'VR / AR', serial: 'VR-MQ2-001', locCode: null, specs: '128GB, Elite Strap, 2x Touch Controllers (Portable Loan Asset)', is_loanable: true, status: 'maintenance' },
-    { name: 'Meta Quest 2 VR Headset #02', category: 'VR / AR', serial: 'VR-MQ2-002', locCode: null, specs: '256GB, Hand Tracking Enabled (Portable Loan Asset)', is_loanable: true, status: 'available' },
-    { name: 'HTC Vive Pro Rig #01', category: 'VR / AR', serial: 'VR-VIVE-001', locCode: null, specs: 'Base Stations 2.0, Wireless Adapter (Portable Loan Kit)', is_loanable: true, status: 'available' },
-    { name: 'Sony Alpha A7 IV Video Kit', category: 'Media', serial: 'CAM-SNY-A7IV', locCode: null, specs: '33MP Full-frame, 4K 60p, 24-70mm GM Lens, Hard Case (Loan Asset)', is_loanable: true, status: 'checked_out' },
-    { name: 'DJI RS 3 Pro Camera Gimbal', category: 'Media', serial: 'GMB-DJI-RS3P', locCode: null, specs: 'Carbon fiber, 4.5kg tested payload (Loan Asset)', is_loanable: true, status: 'available' },
-    { name: 'MacBook Pro 16" M2 Max (Mobile Testing)', category: 'Workstation', serial: 'LAP-APL-MBP16', locCode: null, specs: '32GB RAM, 1TB SSD, macOS Ventura (Loan Asset)', is_loanable: true, status: 'available' },
-    { name: 'Dell XPS 15 9530 (Mobile Testing)', category: 'Workstation', serial: 'LAP-DEL-XPS15', locCode: null, specs: 'Core i9, 32GB RAM, RTX 4070, Win 11 Pro (Loan Asset)', is_loanable: true, status: 'available' }
+    { name: 'Meta Quest 2 VR Headset #01', category: 'VR / AR', serial: 'VR-MQ2-001', locCode: null, specs: '128GB, Elite Strap, 2x Touch Controllers (Portable Loan Asset)', is_loanable: true, status: 'maintenance', accessories: '["Touch Controllers (L & R)","USB-C Charging Cable","Carrying Case"]' },
+    { name: 'Meta Quest 2 VR Headset #02', category: 'VR / AR', serial: 'VR-MQ2-002', locCode: null, specs: '256GB, Hand Tracking Enabled (Portable Loan Asset)', is_loanable: true, status: 'available', accessories: '["Touch Controllers (L & R)","USB-C Charging Cable","Carrying Case"]' },
+    { name: 'HTC Vive Pro Rig #01', category: 'VR / AR', serial: 'VR-VIVE-001', locCode: null, specs: 'Base Stations 2.0, Wireless Adapter (Portable Loan Kit)', is_loanable: true, status: 'available', accessories: '["Base Stations 2.0 (Pair)","Wireless Adapter","Controllers (L & R)","Link Box & Cables"]' },
+    { name: 'Sony Alpha A7 IV Video Kit', category: 'Media', serial: 'CAM-SNY-A7IV', locCode: null, specs: '33MP Full-frame, 4K 60p, 24-70mm GM Lens, Hard Case (Loan Asset)', is_loanable: true, status: 'checked_out', accessories: '["24-70mm GM Lens","Extra NP-FZ100 Battery","64GB SDXC Card","Camera Hard Case","Charger & Strap"]' },
+    { name: 'DJI RS 3 Pro Camera Gimbal', category: 'Media', serial: 'GMB-DJI-RS3P', locCode: null, specs: 'Carbon fiber, 4.5kg tested payload (Loan Asset)', is_loanable: true, status: 'available', accessories: '["BG30 Battery Grip","Quick-Release Plate","Extended Grip / Tripod","Carrying Case"]' },
+    { name: 'MacBook Pro 16" M2 Max (Mobile Testing)', category: 'Workstation', serial: 'LAP-APL-MBP16', locCode: null, specs: '32GB RAM, 1TB SSD, macOS Ventura (Loan Asset)', is_loanable: true, status: 'available', accessories: '["140W USB-C Power Adapter","MagSafe 3 Cable","USB-C Multiport Hub","Protective Laptop Sleeve","Wireless Mouse"]' },
+    { name: 'Dell XPS 15 9530 (Mobile Testing)', category: 'Workstation', serial: 'LAP-DEL-XPS15', locCode: null, specs: 'Core i9, 32GB RAM, RTX 4070, Win 11 Pro (Loan Asset)', is_loanable: true, status: 'available', accessories: '["130W USB-C Power Adapter","USB-C to HDMI/USB Adapter","Laptop Carrying Bag","Wireless Mouse"]' }
   ];
 
   const deviceMap = {};
@@ -236,10 +248,10 @@ async function seedDatabase() {
     const isLoanable = dev.is_loanable !== undefined ? dev.is_loanable : (locId === null);
     const barcodeVal = dev.barcode || `BC-${dev.serial}`;
     const res = await query(
-      `INSERT INTO devices (name, category, serial_number, barcode, location_id, is_loanable, specs, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO devices (name, category, serial_number, barcode, location_id, is_loanable, specs, accessories, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING device_id, serial_number;`,
-      [dev.name, dev.category, dev.serial, barcodeVal, locId, isLoanable, dev.specs, dev.status]
+      [dev.name, dev.category, dev.serial, barcodeVal, locId, isLoanable, dev.specs, dev.accessories || null, dev.status]
     );
     deviceMap[dev.serial] = res.rows[0].device_id;
   }
@@ -304,9 +316,9 @@ async function seedDatabase() {
   console.log('Seeding device loan...');
   if (deviceMap['CAM-SNY-A7IV'] && studentUser && techUser) {
     await query(
-      `INSERT INTO device_bookings (device_id, user_id, checkout_time, expected_return_time, status, purpose, approved_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [deviceMap['CAM-SNY-A7IV'], studentUser.user_id, todayAt(9), tomorrowAt(17), 'checked_out', 'Faculty Annual Tech Showcase Video Recording', techUser.user_id]
+      `INSERT INTO device_bookings (device_id, user_id, checkout_time, expected_return_time, status, purpose, selected_accessories, approved_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [deviceMap['CAM-SNY-A7IV'], studentUser.user_id, todayAt(9), tomorrowAt(17), 'checked_out', 'Faculty Annual Tech Showcase Video Recording', '["24-70mm GM Lens","Extra NP-FZ100 Battery","Camera Hard Case"]', techUser.user_id]
     );
   }
 

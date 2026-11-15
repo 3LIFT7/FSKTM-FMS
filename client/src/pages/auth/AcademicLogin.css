@@ -523,3 +523,105 @@
     transition: none;
   }
 }
+
+
+/* Temporary Demo Access Styles */
+.academic-login__demo-section {
+  margin-top: 24px;
+  padding: 14px;
+  border: 1px dashed #93b4f5;
+  border-radius: 9px;
+  background: #f4f8ff;
+}
+
+.academic-login__demo-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.academic-login__demo-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.academic-login__demo-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.academic-login__demo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.academic-login__demo-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #cbd9f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #15213a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, transform 100ms ease;
+}
+
+.academic-login__demo-btn:hover:not(:disabled) {
+  border-color: #203f91;
+  background: #eef4ff;
+}
+
+.academic-login__demo-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.academic-login__demo-btn-icon {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 6px;
+  background: #e8effd;
+  color: #203f91;
+}
+
+.academic-login__demo-btn-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.academic-login__demo-btn-label {
+  color: #15213a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.academic-login__demo-btn-sub {
+  overflow: hidden;
+  color: #52627a;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

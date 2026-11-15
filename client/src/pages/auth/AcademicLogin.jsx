@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, Spin } from 'antd';
-import { ArrowUpRight, CheckCircle2, GraduationCap, Landmark, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, GraduationCap, Landmark, ShieldCheck, Wrench, UserCog, Zap } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import GoogleColorIcon from '../../components/GoogleColorIcon';
@@ -9,12 +9,69 @@ import './AcademicLogin.css';
 
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
 
+const DEMO_ACCOUNTS = [
+  {
+    key: 'student',
+    label: 'Student',
+    sublabel: 'AI230182@student.uthm.edu.my',
+    email: 'AI230182@student.uthm.edu.my',
+    password: 'Student123!',
+    portal: 'student',
+    redirect: '/student',
+    icon: GraduationCap,
+  },
+  {
+    key: 'lecturer',
+    label: 'Lecturer',
+    sublabel: 'norasri@uthm.edu.my',
+    email: 'norasri@uthm.edu.my',
+    password: 'Lecturer123!',
+    portal: 'lecturer',
+    redirect: '/lecturer',
+    icon: Landmark,
+  },
+  {
+    key: 'technician',
+    label: 'Technician',
+    sublabel: 'technician@fsktm.um.edu.my',
+    email: 'technician@fsktm.um.edu.my',
+    password: 'Tech123!',
+    portal: 'staff',
+    redirect: '/staff',
+    icon: Wrench,
+  },
+  {
+    key: 'manager',
+    label: 'Lab Manager',
+    sublabel: 'manager@fsktm.um.edu.my',
+    email: 'manager@fsktm.um.edu.my',
+    password: 'Manager123!',
+    portal: 'staff',
+    redirect: '/staff',
+    icon: UserCog,
+  },
+];
+
 export default function AcademicLogin() {
   const [loading, setLoading] = useState(false);
+  const [demoLoadingKey, setDemoLoadingKey] = useState(null);
   const [error, setError] = useState('');
-  const { googleAuth } = useAuth();
+  const { googleAuth, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const handleDemoLogin = async (preset) => {
+    setError('');
+    setDemoLoadingKey(preset.key);
+    try {
+      await login(preset.email, preset.password, preset.portal, true);
+      navigate(getRedirectDestination(location, preset.redirect), { replace: true });
+    } catch (authError) {
+      setError(authError.message || 'Demo sign-in failed.');
+    } finally {
+      setDemoLoadingKey(null);
+    }
+  };
 
   const handleGoogleLogin = () => {
     setError('');
@@ -66,6 +123,8 @@ export default function AcademicLogin() {
       setError(oauthError.message || 'Google sign-in could not be started.');
     }
   };
+
+  const isBusy = loading || Boolean(demoLoadingKey);
 
   return (
     <main className="academic-login">
@@ -119,7 +178,7 @@ export default function AcademicLogin() {
             type="button"
             className="academic-login__google-button"
             onClick={handleGoogleLogin}
-            disabled={loading}
+            disabled={isBusy}
             aria-busy={loading}
           >
             {loading ? <Spin size="small" /> : <GoogleColorIcon size={21} />}
@@ -130,6 +189,40 @@ export default function AcademicLogin() {
           <div className="academic-login__verified-note">
             <ShieldCheck size={17} aria-hidden="true" />
             <span>Only verified UTHM accounts can access this system.</span>
+          </div>
+
+          {/* Temporary Demo Access for All Roles */}
+          <div className="academic-login__demo-section" aria-label="Quick demo access for all roles">
+            <div className="academic-login__demo-heading">
+              <span className="academic-login__demo-title">
+                <Zap size={14} aria-hidden="true" />
+                <span>Quick Demo Access (All Users)</span>
+              </span>
+              <span className="academic-login__demo-badge">DEV MODE</span>
+            </div>
+            <div className="academic-login__demo-grid">
+              {DEMO_ACCOUNTS.map((preset) => {
+                const Icon = preset.icon;
+                const isThisLoading = demoLoadingKey === preset.key;
+                return (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className="academic-login__demo-btn"
+                    onClick={() => handleDemoLogin(preset)}
+                    disabled={isBusy}
+                  >
+                    <span className="academic-login__demo-btn-icon">
+                      {isThisLoading ? <Spin size="small" /> : <Icon size={16} />}
+                    </span>
+                    <span className="academic-login__demo-btn-copy">
+                      <span className="academic-login__demo-btn-label">{preset.label}</span>
+                      <span className="academic-login__demo-btn-sub">{preset.sublabel}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="academic-login__role-section" aria-label="Academic role assignment">

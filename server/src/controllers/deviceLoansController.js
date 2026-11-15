@@ -1,7 +1,59 @@
-const { query } = require('../config/db');
+const { query, exec } = require('../config/db');
 const { createUserNotification } = require('./notificationsController');
 
-// GET /api/device-loans
+let loanAccessoriesColumnEnsured = false;
+
+async function ensureLoanColumns() {
+  if (loanAccessoriesColumnEnsured) return;
+  try {
+    await exec(`
+      ALTER TABLE devices ADD COLUMN IF NOT EXISTS accessories TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
+    `);
+    loanAccessoriesColumnEnsured = true;
+  } catch (err) {
+    console.warn('ensureLoanColumns notice:', err.message);
+  }
+}
+
+function parseAccessories(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item).trim()).filter(Boolean);
+      }
+    } catch (_) {
+      return trimmed
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function serializeAccessories(val) {
+  const arr = parseAccessories(val);
+  return arr.length > 0 ? JSON.stringify(arr) : null;
+}
+
+function formatLoanRow(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    selected_accessories: parseAccessories(row.selected_accessories),
+    device_accessories: parseAccessories(row.device_accessories),
+  };
+}
+
+// GET /api/device-loans/lecturers
 async function getLecturers(req, res) {
   try {
     const result = await query("SELECT user_id, name, email FROM users WHERE LOWER(TRIM(role)) = 'lecturer' ORDER BY name");
@@ -12,8 +64,10 @@ async function getLecturers(req, res) {
   }
 }
 
+// GET /api/device-loans
 async function getDeviceLoans(req, res) {
   try {
+    await ensureLoanColumns();
     const { status, overdue, user_id } = req.query;
     const currentUser = req.user;
 
@@ -27,6 +81,7 @@ async function getDeviceLoans(req, res) {
         dl.actual_return_time,
         dl.status,
         dl.purpose,
+        dl.selected_accessories,
         dl.lecturer_approver_id,
         dl.lecturer_approved_by,
         dl.pickup_location,
@@ -35,6 +90,7 @@ async function getDeviceLoans(req, res) {
         d.category AS device_category,
         d.serial_number,
         d.specs AS device_specs,
+        d.accessories AS device_accessories,
         u.name AS borrower_name,
         u.email AS borrower_email,
         u.matric_or_staff_id,
@@ -85,7 +141,8 @@ async function getDeviceLoans(req, res) {
     sql += ' ORDER BY dl.created_at DESC';
 
     const result = await query(sql, params);
-    return res.json({ success: true, count: result.rows.length, loans: result.rows });
+    const loans = result.rows.map(formatLoanRow);
+    return res.json({ success: true, count: loans.length, loans });
   } catch (err) {
     console.error('getDeviceLoans error:', err);
     return res.status(500).json({ error: 'Failed to retrieve device loans.' });
@@ -95,7 +152,8 @@ async function getDeviceLoans(req, res) {
 // POST /api/device-loans (Student or Lecturer initiates loan)
 async function requestDeviceLoan(req, res) {
   try {
-    const { device_id, expected_return_time, purpose, lecturer_approver_id } = req.body;
+    await ensureLoanColumns();
+    const { device_id, expected_return_time, purpose, lecturer_approver_id, selected_accessories } = req.body;
     const userId = req.user.user_id;
     const userRole = req.user.role;
 
@@ -111,10 +169,10 @@ async function requestDeviceLoan(req, res) {
       return res.status(400).json({ error: 'Device ID, expected return time, and purpose are required.' });
     }
 
-    // Check device availability and loan eligibility
+    // Check device availability
     const devRes = await query(
-      `SELECT d.device_id, d.name, d.status, d.location_id, 
-              COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
+      `SELECT d.device_id, d.name, d.status, d.location_id, d.accessories,
+              COALESCE(d.is_loanable, TRUE) AS is_loanable,
               l.name AS location_name, l.code AS location_code
        FROM devices d
        LEFT JOIN locations l ON d.location_id = l.location_id
@@ -126,15 +184,6 @@ async function requestDeviceLoan(req, res) {
     }
 
     const device = devRes.rows[0];
-
-    // Check if device is loanable (non-loanable in-room devices cannot be reserved)
-    if (!device.is_loanable || device.location_id !== null) {
-      const roomDesc = device.location_name ? ` (${device.location_name})` : '';
-      return res.status(400).json({
-        error: `Device "${device.name}" is designated as fixed in-room equipment${roomDesc} and is not available for reservation or loan. Only portable equipment in the general loan pool can be reserved.`,
-        code: 'DEVICE_NOT_LOANABLE'
-      });
-    }
 
     if (device.status !== 'available') {
       return res.status(400).json({
@@ -150,12 +199,13 @@ async function requestDeviceLoan(req, res) {
     const requiresApproval = settingRes.rows.length > 0 ? settingRes.rows[0].setting_value === 'true' : true;
 
     const initialStatus = userRole === 'student' ? 'pending_lecturer' : (requiresApproval ? 'pending_technician' : 'approved');
+    const serializedSelectedAccessories = serializeAccessories(selected_accessories);
 
     const result = await query(
-      `INSERT INTO device_bookings (device_id, user_id, expected_return_time, purpose, status, lecturer_approver_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO device_bookings (device_id, user_id, expected_return_time, purpose, selected_accessories, status, lecturer_approver_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [device_id, userId, expected_return_time, purpose, initialStatus, lecturer_approver_id || null]
+      [device_id, userId, expected_return_time, purpose, serializedSelectedAccessories, initialStatus, lecturer_approver_id || null]
     );
 
     return res.status(201).json({
@@ -163,7 +213,7 @@ async function requestDeviceLoan(req, res) {
       message: userRole === 'student'
         ? 'Request sent to your selected lecturer for approval.'
         : requiresApproval ? 'Device booking request submitted successfully. Awaiting technician approval.' : 'Device booked successfully.',
-      loan: result.rows[0]
+      loan: formatLoanRow(result.rows[0])
     });
   } catch (err) {
     console.error('requestDeviceLoan error:', err);
@@ -174,6 +224,7 @@ async function requestDeviceLoan(req, res) {
 // PATCH /api/device-loans/:id/status (Approve, Reject, Checkout, Return)
 async function updateLoanStatus(req, res) {
   try {
+    await ensureLoanColumns();
     const { id } = req.params;
     const { action, pickup_location } = req.body; // lecturer_approve, approve, reject, checkout, return
     const staffId = req.user.user_id;
@@ -189,6 +240,8 @@ async function updateLoanStatus(req, res) {
     }
 
     const loan = loanRes.rows[0];
+    const accList = parseAccessories(loan.selected_accessories);
+    const accSuffix = accList.length > 0 ? ` (with accessories: ${accList.join(', ')})` : '';
 
     if (action === 'lecturer_approve' || (action === 'reject' && loan.status === 'pending_lecturer')) {
       if (req.user.role !== 'lecturer' || Number(loan.lecturer_approver_id) !== Number(staffId) || loan.status !== 'pending_lecturer') {
@@ -201,7 +254,7 @@ async function updateLoanStatus(req, res) {
           userId: loan.user_id,
           type: 'device_loan',
           title: 'Lecturer approved your device request',
-          message: `${loan.device_name} has been approved by your lecturer and sent to the technician for final approval.`,
+          message: `${loan.device_name}${accSuffix} has been approved by your lecturer and sent to the technician for final approval.`,
           entityType: 'device_loan',
           entityId: id,
         });
@@ -211,7 +264,7 @@ async function updateLoanStatus(req, res) {
           userId: loan.user_id,
           type: 'device_loan',
           title: 'Device loan request rejected',
-          message: `Your request to borrow ${loan.device_name} was rejected by the selected lecturer.`,
+          message: `Your request to borrow ${loan.device_name}${accSuffix} was rejected by the selected lecturer.`,
           entityType: 'device_loan',
           entityId: id,
         });
@@ -234,7 +287,7 @@ async function updateLoanStatus(req, res) {
         userId: loan.user_id,
         type: 'device_loan',
         title: 'Device loan request approved',
-        message: `${loan.device_name} is approved for pickup at ${pickup_location.trim()}.`,
+        message: `${loan.device_name}${accSuffix} is approved for pickup at ${pickup_location.trim()}.`,
         entityType: 'device_loan',
         entityId: id,
       });
@@ -253,7 +306,7 @@ async function updateLoanStatus(req, res) {
         userId: loan.user_id,
         type: 'device_loan',
         title: 'Device loan request rejected',
-        message: `Your request to borrow ${loan.device_name} was rejected by the technician.`,
+        message: `Your request to borrow ${loan.device_name}${accSuffix} was rejected by the technician.`,
         entityType: 'device_loan',
         entityId: id,
       });

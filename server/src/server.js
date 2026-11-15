@@ -19,6 +19,7 @@ const settingsRoutes = require('./routes/settings');
 const feedbackRoutes = require('./routes/feedback');
 const uploadRoutes = require('./routes/upload');
 const notificationRoutes = require('./routes/notifications');
+const labUsageRoutes = require('./routes/labUsage');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -56,6 +57,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/lab-usage', labUsageRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

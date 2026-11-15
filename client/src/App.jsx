@@ -27,6 +27,7 @@ import UsersManage from './pages/admin/UsersManage';
 import Reports from './pages/admin/Reports';
 import SettingsPage from './pages/admin/SettingsPage';
 import RoomsControl from './pages/admin/RoomsControl';
+import LabUsageLogs from './pages/admin/LabUsageLogs';
 import ClassroomFeedbackPage from './pages/feedback/ClassroomFeedbackPage';
 
 import { Spin } from 'antd';
@@ -190,6 +191,15 @@ export default function App() {
             />
 
             {/* Manager / Admin Specific Routes */}
+            <Route
+              path="/admin/lab-usage-logs"
+              element={
+                <ProtectedRoute allowedRoles={['manager']}>
+                  <LabUsageLogs />
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/admin/schedule-import"
               element={

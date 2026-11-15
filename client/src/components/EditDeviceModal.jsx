@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Select, Radio, Button, Alert, message, Typography } from 'antd';
-import { LaptopOutlined, BarcodeOutlined } from '@ant-design/icons';
+import { Modal, Form, Input, Select, Radio, Button, Alert, message, Typography, Checkbox, Tag } from 'antd';
+import { LaptopOutlined, BarcodeOutlined, PlusOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import ImageInputPreview from './ImageInputPreview';
 
 const { Text } = Typography;
+
+const ACCESSORY_PRESETS = [
+  'Power Adapter / Charger',
+  'HDMI Cable',
+  'USB-C Cable',
+  'Carrying Case / Bag',
+  'Remote Control',
+  'Wireless Mouse',
+  'Controllers (L & R)',
+  'Tripod / Stand',
+  'Extra Battery',
+];
 
 export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
   const [form] = Form.useForm();
@@ -11,6 +23,8 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [allocationMode, setAllocationMode] = useState('pool');
+  const [hasAccessories, setHasAccessories] = useState(false);
+  const watchedAccessories = Form.useWatch('accessories', form) || [];
 
   useEffect(() => {
     if (isOpen && device) {
@@ -18,6 +32,21 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
       fetchLocations();
       const isRoom = Boolean(device.location_id);
       setAllocationMode(isRoom ? 'room' : 'pool');
+
+      const existingAcc = Array.isArray(device.accessories)
+        ? device.accessories
+        : typeof device.accessories === 'string' && device.accessories.trim()
+          ? (() => {
+            try {
+              const p = JSON.parse(device.accessories);
+              return Array.isArray(p) ? p : [];
+            } catch {
+              return device.accessories.split(',').map((s) => s.trim()).filter(Boolean);
+            }
+          })()
+          : [];
+
+      setHasAccessories(existingAcc.length > 0);
 
       form.setFieldsValue({
         name: device.name || '',
@@ -27,6 +56,7 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
         location_id: device.location_id ? String(device.location_id) : undefined,
         status: device.status || 'available',
         specs: device.specs || '',
+        accessories: existingAcc,
         image_url: device.image_url || '',
         allocationMode: isRoom ? 'room' : 'pool',
       });
@@ -45,6 +75,15 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
     }
   }
 
+  const handleTogglePresetAccessory = (item) => {
+    const current = form.getFieldValue('accessories') || [];
+    if (current.includes(item)) {
+      form.setFieldsValue({ accessories: current.filter((a) => a !== item) });
+    } else {
+      form.setFieldsValue({ accessories: [...current, item] });
+    }
+  };
+
   const handleFinish = async (values) => {
     setSaving(true);
     setError('');
@@ -59,6 +98,10 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
         return;
       }
 
+      const cleanedAccessories = hasAccessories
+        ? (values.accessories || []).map((a) => String(a).trim()).filter(Boolean)
+        : [];
+
       const res = await fetch(`/api/devices/${device.device_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -72,6 +115,7 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
           is_loanable: isLoanable,
           status: values.status,
           specs: values.specs ? values.specs.trim() : null,
+          accessories: cleanedAccessories,
           image_url: values.image_url ? values.image_url.trim() : null,
         }),
       });
@@ -147,11 +191,16 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
 
           <Form.Item name="category" label="Equipment Category" rules={[{ required: true }]}>
             <Select>
+              <Select.Option value="Audio/Visual">Audio/Visual</Select.Option>
+              <Select.Option value="Forensics">Forensics</Select.Option>
+              <Select.Option value="Media">Media</Select.Option>
+              <Select.Option value="Networking">Networking</Select.Option>
+              <Select.Option value="Testing & Lab">Testing & Lab</Select.Option>
+              <Select.Option value="VR / AR">VR / AR</Select.Option>
+              <Select.Option value="Workstation">Workstation</Select.Option>
               <Select.Option value="Laptops">Laptops</Select.Option>
-              <Select.Option value="VR / AR Headsets">VR / AR Headsets</Select.Option>
               <Select.Option value="Mobile Devices">Mobile Devices</Select.Option>
               <Select.Option value="IoT & Microcontrollers">IoT & Microcontrollers</Select.Option>
-              <Select.Option value="Audio / Visual">Audio / Visual</Select.Option>
               <Select.Option value="General">General Hardware</Select.Option>
             </Select>
           </Form.Item>
@@ -200,6 +249,82 @@ export default function EditDeviceModal({ isOpen, onClose, device, onSaved }) {
           <Form.Item name="specs" label="Technical Specifications & Notes">
             <Input.TextArea rows={2} />
           </Form.Item>
+
+          {/* Optional Accessories Check & Selector */}
+          <div
+            style={{
+              background: hasAccessories ? '#F0F9FF' : '#F8FAFC',
+              border: `1px solid ${hasAccessories ? '#BAE6FD' : '#E2E8F0'}`,
+              borderRadius: 10,
+              padding: '12px 14px',
+              marginBottom: 16,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Checkbox
+              checked={hasAccessories}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setHasAccessories(checked);
+                if (!checked) {
+                  form.setFieldsValue({ accessories: [] });
+                }
+              }}
+              style={{ fontWeight: 600, color: '#0F172A' }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <AppstoreAddOutlined style={{ color: '#2563EB' }} />
+                Device has optional accessories
+              </span>
+            </Checkbox>
+            <div style={{ fontSize: 12, color: '#64748B', marginLeft: 24, marginTop: 2 }}>
+              Enable this to list optional accessories (cables, adapters, cases, controllers) so borrowers can choose which ones they need.
+            </div>
+
+            {hasAccessories && (
+              <div style={{ marginTop: 12 }}>
+                <Form.Item
+                  name="accessories"
+                  label={<span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B' }}>Available Accessories for This Device</span>}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Select
+                    mode="tags"
+                    style={{ width: '100%' }}
+                    placeholder="Type an accessory name and press Enter (or click presets below)..."
+                    tokenSeparators={[',']}
+                    options={ACCESSORY_PRESETS.map((item) => ({ value: item, label: item }))}
+                  />
+                </Form.Item>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  <Text type="secondary" style={{ fontSize: 11, marginRight: 4 }}>
+                    Quick Add:
+                  </Text>
+                  {ACCESSORY_PRESETS.map((preset) => {
+                    const isSelected = watchedAccessories.includes(preset);
+                    return (
+                      <Tag
+                        key={preset}
+                        color={isSelected ? 'blue' : 'default'}
+                        style={{
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          margin: 0,
+                          userSelect: 'none',
+                          borderStyle: isSelected ? 'solid' : 'dashed',
+                        }}
+                        onClick={() => handleTogglePresetAccessory(preset)}
+                      >
+                        {isSelected ? `✓ ${preset}` : `+ ${preset}`}
+                      </Tag>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
 
           <ImageInputPreview
             form={form}

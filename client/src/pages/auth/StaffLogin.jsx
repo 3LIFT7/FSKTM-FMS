@@ -1,15 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Form, Input } from 'antd';
-import { ArrowRight, ArrowUpRight, LockKeyhole, Mail } from 'lucide-react';
+import { Alert, Button, Form, Input, Spin } from 'antd';
+import { ArrowRight, ArrowUpRight, LockKeyhole, Mail, Wrench, UserCog, Zap } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
 import { getRedirectDestination } from '../../utils/navigation';
 import './AcademicLogin.css';
 
+const STAFF_DEMO_ACCOUNTS = [
+  {
+    key: 'technician',
+    label: 'Technician',
+    sublabel: 'technician@fsktm.um.edu.my',
+    email: 'technician@fsktm.um.edu.my',
+    password: 'Tech123!',
+    icon: Wrench,
+  },
+  {
+    key: 'manager',
+    label: 'Lab Manager',
+    sublabel: 'manager@fsktm.um.edu.my',
+    email: 'manager@fsktm.um.edu.my',
+    password: 'Manager123!',
+    icon: UserCog,
+  },
+];
+
 export default function StaffLogin() {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [demoLoadingKey, setDemoLoadingKey] = useState(null);
   const [error, setError] = useState('');
   const [isForgotOpen, setIsForgotOpen] = useState(false);
   const { login } = useAuth();
@@ -34,6 +54,22 @@ export default function StaffLogin() {
       setLoading(false);
     }
   };
+
+  const handleDemoStaffLogin = async (preset) => {
+    setError('');
+    form.setFieldsValue({ email: preset.email, password: preset.password });
+    setDemoLoadingKey(preset.key);
+    try {
+      await login(preset.email, preset.password, 'staff', true);
+      navigate(redirectUrl, { replace: true });
+    } catch (authError) {
+      setError(authError.message || 'Demo staff sign-in failed.');
+    } finally {
+      setDemoLoadingKey(null);
+    }
+  };
+
+  const isBusy = loading || Boolean(demoLoadingKey);
 
   return (
     <main className="academic-login staff-login">
@@ -81,6 +117,40 @@ export default function StaffLogin() {
               onClose={() => setError('')}
             />
           )}
+
+          {/* Temporary Demo Staff Access */}
+          <div className="academic-login__demo-section" style={{ marginTop: 0, marginBottom: 20 }} aria-label="Quick demo access for staff">
+            <div className="academic-login__demo-heading">
+              <span className="academic-login__demo-title">
+                <Zap size={14} aria-hidden="true" />
+                <span>Quick Demo Staff Access</span>
+              </span>
+              <span className="academic-login__demo-badge">DEV MODE</span>
+            </div>
+            <div className="academic-login__demo-grid">
+              {STAFF_DEMO_ACCOUNTS.map((preset) => {
+                const Icon = preset.icon;
+                const isThisLoading = demoLoadingKey === preset.key;
+                return (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className="academic-login__demo-btn"
+                    onClick={() => handleDemoStaffLogin(preset)}
+                    disabled={isBusy}
+                  >
+                    <span className="academic-login__demo-btn-icon">
+                      {isThisLoading ? <Spin size="small" /> : <Icon size={16} />}
+                    </span>
+                    <span className="academic-login__demo-btn-copy">
+                      <span className="academic-login__demo-btn-label">{preset.label}</span>
+                      <span className="academic-login__demo-btn-sub">{preset.sublabel}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <Form
             form={form}
@@ -131,6 +201,7 @@ export default function StaffLogin() {
               type="primary"
               htmlType="submit"
               loading={loading}
+              disabled={isBusy}
               block
               size="large"
               icon={<ArrowRight size={17} aria-hidden="true" />}

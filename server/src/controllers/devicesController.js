@@ -1,8 +1,67 @@
-const { query } = require('../config/db');
+const { query, exec } = require('../config/db');
+
+let accessoriesColumnEnsured = false;
+
+async function ensureAccessoriesColumn() {
+  if (accessoriesColumnEnsured) return;
+  try {
+    await exec(`
+      ALTER TABLE devices ADD COLUMN IF NOT EXISTS accessories TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
+    `);
+    await exec(`UPDATE devices SET accessories = '["Touch Controllers (L & R)","USB-C Charging Cable","Carrying Case"]' WHERE serial_number IN ('VR-MQ2-001', 'VR-MQ2-002') AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["Base Stations 2.0 (Pair)","Wireless Adapter","Controllers (L & R)","Link Box & Cables"]' WHERE serial_number = 'VR-VIVE-001' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["24-70mm GM Lens","Extra NP-FZ100 Battery","64GB SDXC Card","Camera Hard Case","Charger & Strap"]' WHERE serial_number = 'CAM-SNY-A7IV' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["BG30 Battery Grip","Quick-Release Plate","Extended Grip / Tripod","Carrying Case"]' WHERE serial_number = 'GMB-DJI-RS3P' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["140W USB-C Power Adapter","MagSafe 3 Cable","USB-C Multiport Hub","Protective Laptop Sleeve","Wireless Mouse"]' WHERE serial_number = 'LAP-APL-MBP16' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["130W USB-C Power Adapter","USB-C to HDMI/USB Adapter","Laptop Carrying Bag","Wireless Mouse"]' WHERE serial_number = 'LAP-DEL-XPS15' AND accessories IS NULL`);
+    await exec(`UPDATE devices SET accessories = '["Remote Control","HDMI Cable","Power Cord"]' WHERE serial_number = 'PRJ-EPS-2250' AND accessories IS NULL`);
+    accessoriesColumnEnsured = true;
+  } catch (err) {
+    console.warn('ensureAccessoriesColumn notice:', err.message);
+  }
+}
+
+function parseAccessories(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    return val.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item).trim()).filter(Boolean);
+      }
+    } catch (_) {
+      return trimmed
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function serializeAccessories(val) {
+  const arr = parseAccessories(val);
+  return arr.length > 0 ? JSON.stringify(arr) : null;
+}
+
+function formatDeviceRow(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    accessories: parseAccessories(row.accessories),
+  };
+}
 
 // GET /api/devices
 async function getAllDevices(req, res) {
   try {
+    await ensureAccessoriesColumn();
     const { status, category, location_id, is_loanable, search } = req.query;
 
     let sql = `
@@ -13,6 +72,7 @@ async function getAllDevices(req, res) {
         d.serial_number,
         d.barcode,
         d.specs,
+        d.accessories,
         d.image_url,
         d.status,
         d.location_id,
@@ -58,7 +118,8 @@ async function getAllDevices(req, res) {
     sql += ' ORDER BY d.category, d.name ASC';
 
     const result = await query(sql, params);
-    return res.json({ success: true, count: result.rows.length, devices: result.rows });
+    const devices = result.rows.map(formatDeviceRow);
+    return res.json({ success: true, count: devices.length, devices });
   } catch (err) {
     console.error('getAllDevices error:', err);
     return res.status(500).json({ error: 'Failed to retrieve devices.' });
@@ -68,6 +129,7 @@ async function getAllDevices(req, res) {
 // GET /api/devices/:id
 async function getDeviceById(req, res) {
   try {
+    await ensureAccessoriesColumn();
     const { id } = req.params;
     if (isNaN(parseInt(id, 10))) {
       return res.status(404).json({ error: 'Device not found.' });
@@ -110,8 +172,11 @@ async function getDeviceById(req, res) {
     return res.json({
       success: true,
       device: {
-        ...devRes.rows[0],
-        recent_loans: loanRes.rows,
+        ...formatDeviceRow(devRes.rows[0]),
+        recent_loans: loanRes.rows.map((l) => ({
+          ...l,
+          selected_accessories: parseAccessories(l.selected_accessories),
+        })),
         maintenance_logs: maintRes.rows
       }
     });
@@ -124,7 +189,8 @@ async function getDeviceById(req, res) {
 // POST /api/devices
 async function createDevice(req, res) {
   try {
-    const { name, category, serial_number, barcode, location_id, is_loanable, specs, status, image_url } = req.body;
+    await ensureAccessoriesColumn();
+    const { name, category, serial_number, barcode, location_id, is_loanable, specs, accessories, status, image_url } = req.body;
     if (!name || !serial_number) {
       return res.status(400).json({ error: 'Device name and serial number are required.' });
     }
@@ -140,24 +206,27 @@ async function createDevice(req, res) {
       ? false
       : (is_loanable !== undefined ? (is_loanable === true || is_loanable === 'true') : true);
 
+    const serializedAccessories = serializeAccessories(accessories);
+
     const result = await query(
-      `INSERT INTO devices (name, category, serial_number, barcode, location_id, is_loanable, specs, status, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO devices (name, category, serial_number, barcode, location_id, is_loanable, specs, accessories, status, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
-        name,
+        name.trim(),
         category || 'General',
         serial_number.trim(),
         barcode ? barcode.trim() : null,
         targetLocationId,
         targetIsLoanable,
         specs || '',
+        serializedAccessories,
         status || 'available',
         image_url || null
       ]
     );
 
-    return res.status(201).json({ success: true, device: result.rows[0] });
+    return res.status(201).json({ success: true, device: formatDeviceRow(result.rows[0]) });
   } catch (err) {
     console.error('createDevice error:', err);
     return res.status(500).json({ error: 'Failed to create device.' });
@@ -167,8 +236,9 @@ async function createDevice(req, res) {
 // PUT /api/devices/:id
 async function updateDevice(req, res) {
   try {
+    await ensureAccessoriesColumn();
     const { id } = req.params;
-    const { name, category, serial_number, barcode, location_id, is_loanable, specs, status, image_url } = req.body;
+    const { name, category, serial_number, barcode, location_id, is_loanable, specs, accessories, status, image_url } = req.body;
 
     const existingRes = await query('SELECT * FROM devices WHERE device_id = $1', [id]);
     if (existingRes.rows.length === 0) {
@@ -211,6 +281,7 @@ async function updateDevice(req, res) {
     }
 
     const updatedSpecs = specs !== undefined ? specs : current.specs;
+    const updatedAccessories = accessories !== undefined ? serializeAccessories(accessories) : current.accessories;
     const updatedStatus = status !== undefined ? status : current.status;
     const updatedImageUrl = image_url !== undefined ? (image_url ? image_url.trim() : null) : current.image_url;
 
@@ -223,10 +294,11 @@ async function updateDevice(req, res) {
            location_id = $5,
            is_loanable = $6,
            specs = $7,
-           status = $8,
-           image_url = $9
-       WHERE device_id = $10`,
-      [updatedName, updatedCategory, updatedSerial, updatedBarcode, updatedLocationId, updatedIsLoanable, updatedSpecs, updatedStatus, updatedImageUrl, id]
+           accessories = $8,
+           status = $9,
+           image_url = $10
+       WHERE device_id = $11`,
+      [updatedName, updatedCategory, updatedSerial, updatedBarcode, updatedLocationId, updatedIsLoanable, updatedSpecs, updatedAccessories, updatedStatus, updatedImageUrl, id]
     );
 
     const devWithLoc = await query(
@@ -239,7 +311,7 @@ async function updateDevice(req, res) {
       [id]
     );
 
-    return res.json({ success: true, device: devWithLoc.rows[0] });
+    return res.json({ success: true, device: formatDeviceRow(devWithLoc.rows[0]) });
   } catch (err) {
     console.error('updateDevice error:', err);
     return res.status(500).json({ error: 'Failed to update device.' });

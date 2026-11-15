@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, DatePicker, TimePicker, Input, Button, Alert, Typography, message, Select } from 'antd';
-import { LaptopOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { Modal, Form, DatePicker, TimePicker, Input, Button, Alert, Typography, message, Select, Checkbox } from 'antd';
+import { LaptopOutlined, AppstoreAddOutlined, EnvironmentOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
 import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
@@ -14,6 +14,20 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
   const [error, setError] = useState('');
   const [lecturers, setLecturers] = useState([]);
   const [lecturersLoading, setLecturersLoading] = useState(false);
+  const selectedAccessories = Form.useWatch('selected_accessories', form) || [];
+
+  const availableAccessories = Array.isArray(device?.accessories)
+    ? device.accessories
+    : typeof device?.accessories === 'string' && device.accessories.trim()
+    ? (() => {
+        try {
+          const p = JSON.parse(device.accessories);
+          return Array.isArray(p) ? p : [];
+        } catch {
+          return device.accessories.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      })()
+    : [];
 
   useEffect(() => {
     if (isOpen && device) {
@@ -22,6 +36,7 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
       form.setFieldsValue({
         returnDate: dayjs().add(1, 'day'),
         returnTime: dayjs().hour(17).minute(0),
+        selected_accessories: [],
       });
       if (user?.role === 'student') {
         setLecturers([]);
@@ -49,23 +64,6 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
 
   if (!isOpen || !device) return null;
 
-  if (!device.is_loanable || device.location_id !== null) {
-    return (
-      <Modal open={isOpen} onCancel={onClose} footer={null} centered title="Fixed Facility Hardware">
-        <div style={{ textAlign: 'center', padding: '16px 0' }}>
-          <LaptopOutlined style={{ fontSize: 36, color: '#F59E0B', marginBottom: 12 }} />
-          <Title level={4} style={{ margin: '0 0 8px 0' }}>Non-Reservable Hardware</Title>
-          <p style={{ color: '#64748B', fontSize: 13, lineHeight: 1.6 }}>
-            <strong>{device.name}</strong> is permanently assigned to <strong>{device.location_name || 'a faculty facility'}</strong> as in-room laboratory hardware and cannot be borrowed individually.
-          </p>
-          <Button type="primary" onClick={onClose} style={{ marginTop: 16 }}>
-            Understood
-          </Button>
-        </div>
-      </Modal>
-    );
-  }
-
   const handleFinish = async (values) => {
     setError('');
     setLoading(true);
@@ -84,6 +82,7 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
           expected_return_time,
           purpose: values.purpose,
           lecturer_approver_id: values.lecturer_approver_id,
+          selected_accessories: values.selected_accessories || [],
         }),
       });
 
@@ -131,6 +130,12 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
           <div style={{ fontSize: 12, color: '#64748B', fontFamily: 'monospace' }}>
             Serial Number: {device.serial_number}
           </div>
+          {device.location_name && (
+            <div style={{ fontSize: 12, color: '#2563EB', marginTop: 2 }}>
+              <EnvironmentOutlined style={{ marginRight: 4 }} />
+              Location: {device.location_name}
+            </div>
+          )}
           {device.specs && (
             <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>
               Specs: {device.specs}
@@ -159,6 +164,83 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
               />
             </Form.Item>
           )}
+
+          {availableAccessories.length > 0 && (
+            <div
+              style={{
+                background: '#F0F9FF',
+                border: '1px solid #BAE6FD',
+                borderRadius: 10,
+                padding: '12px 14px',
+                marginBottom: 16,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#0F172A', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <AppstoreAddOutlined style={{ color: '#2563EB' }} />
+                  Optional Accessories (Choose what you need)
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ padding: 0, height: 'auto', fontSize: 12 }}
+                    onClick={() => form.setFieldsValue({ selected_accessories: [...availableAccessories] })}
+                  >
+                    Select All
+                  </Button>
+                  {selectedAccessories.length > 0 && (
+                    <>
+                      <span style={{ color: '#CBD5E1' }}>|</span>
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ padding: 0, height: 'auto', fontSize: 12, color: '#64748B' }}
+                        onClick={() => form.setFieldsValue({ selected_accessories: [] })}
+                      >
+                        Clear
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: '#475569', marginBottom: 10 }}>
+                Check the optional accessories you would like to borrow along with this device:
+              </div>
+
+              <Form.Item name="selected_accessories" style={{ marginBottom: 0 }}>
+                <Checkbox.Group style={{ width: '100%' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
+                    {availableAccessories.map((acc) => {
+                      const isChecked = selectedAccessories.includes(acc);
+                      return (
+                        <label
+                          key={acc}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            background: isChecked ? '#EFF6FF' : '#FFFFFF',
+                            border: `1px solid ${isChecked ? '#3B82F6' : '#E2E8F0'}`,
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: isChecked ? 600 : 500,
+                            color: '#1E293B',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <Checkbox value={acc} style={{ marginRight: 8 }} />
+                          <span>{acc}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Checkbox.Group>
+              </Form.Item>
+            </div>
+          )}
+
           <Form.Item
             name="returnDate"
             label="Expected Return Date"

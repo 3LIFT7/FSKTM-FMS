@@ -246,12 +246,6 @@ async function login(req, res) {
     }
 
     const user = result.rows[0];
-    if (user.role === 'student' || user.role === 'lecturer') {
-      return res.status(403).json({
-        error: 'Students and lecturers must sign in with their UTHM Google account.',
-        code: 'GOOGLE_SIGN_IN_REQUIRED'
-      });
-    }
     let passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     // Seamless dual-mode authentication for Google-registered users or standard credentials:

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS devices (
     location_id INT REFERENCES locations(location_id) ON DELETE SET NULL,
     is_loanable BOOLEAN DEFAULT FALSE,
     specs TEXT,
+    accessories TEXT,
     image_url TEXT,
     status VARCHAR(50) NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'checked_out', 'maintenance', 'broken')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS device_bookings (
     actual_return_time TIMESTAMP WITH TIME ZONE,
     status VARCHAR(50) NOT NULL DEFAULT 'pending_technician' CHECK (status IN ('pending', 'pending_lecturer', 'pending_technician', 'approved', 'checked_out', 'returned', 'rejected')),
     purpose TEXT,
+    selected_accessories TEXT,
     approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     lecturer_approver_id INT REFERENCES users(user_id) ON DELETE SET NULL,
     lecturer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
@@ -153,3 +155,19 @@ VALUES
     ('max_booking_duration_hours', '4', 'Maximum single booking duration in hours')
 ON CONFLICT (setting_key) DO NOTHING;
 
+-- 8. LAB USAGE & LECTURE ATTENDANCE LOGS (LOG REKOD PENGGUNAAN MAKMAL)
+CREATE TABLE IF NOT EXISTS lab_usage_logs (
+    log_id SERIAL PRIMARY KEY,
+    location_id INT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    course_id VARCHAR(50) NOT NULL,
+    course_name VARCHAR(255) NOT NULL,
+    purpose TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_lab_usage_logs_location ON lab_usage_logs(location_id);
+CREATE INDEX IF NOT EXISTS idx_lab_usage_logs_user ON lab_usage_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_lab_usage_logs_start ON lab_usage_logs(start_time);

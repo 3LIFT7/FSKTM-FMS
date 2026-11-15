@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Row, Col, Card, Statistic, Table, Button, Popconfirm, Empty, Spin, Space, Typography, Tag, message } from 'antd';
+import { Row, Col, Card, Statistic, Table, Button, Empty, Space, Typography, Tag, message } from 'antd';
 import {
   CalendarOutlined,
   PlusOutlined,
   CompassOutlined,
-  AlertOutlined,
   BookOutlined,
-  PauseCircleOutlined,
-  PlayCircleOutlined,
-  DeleteOutlined,
   LaptopOutlined,
+  FileTextOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import BookRoomModal from '../booking/BookRoomModal';
+import LabUsageModal from '../booking/LabUsageModal';
 import WeeklyTimetable from '../../components/WeeklyTimetable';
 import StatusTag from '../../components/StatusTag';
 import { formatDateTime } from '../../utils/date';
@@ -23,9 +22,11 @@ const { Title, Text, Paragraph } = Typography;
 export default function LecturerDashboard() {
   const { user } = useAuth();
   const [myBookings, setMyBookings] = useState([]);
+  const [myUsageLogs, setMyUsageLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [togglingGroupId, setTogglingGroupId] = useState(null);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
   const [loanRequests, setLoanRequests] = useState([]);
   const [loanActionId, setLoanActionId] = useState(null);
@@ -37,10 +38,27 @@ export default function LecturerDashboard() {
   async function fetchLecturerData() {
     setLoading(true);
     try {
-      const [res, loanRes] = await Promise.all([fetch('/api/bookings'), fetch('/api/device-loans')]);
-      const [data, loanData] = await Promise.all([res.json(), loanRes.json()]);
-      if (data.success) setMyBookings(data.bookings.filter(b => b.user_id === user?.user_id));
-      if (loanData.success) setLoanRequests(loanData.loans.filter((loan) => loan.status === 'pending_lecturer' && Number(loan.lecturer_approver_id) === Number(user?.user_id)));
+      const [res, loanRes, usageRes] = await Promise.all([
+        fetch('/api/bookings', { credentials: 'include' }),
+        fetch('/api/device-loans', { credentials: 'include' }),
+        fetch('/api/lab-usage', { credentials: 'include' }),
+      ]);
+      const [data, loanData, usageData] = await Promise.all([
+        res.json(),
+        loanRes.json(),
+        usageRes.json().catch(() => ({ success: false, logs: [] })),
+      ]);
+      if (data.success) setMyBookings(data.bookings.filter((b) => b.user_id === user?.user_id));
+      if (loanData.success) {
+        setLoanRequests(
+          loanData.loans.filter(
+            (loan) => loan.status === 'pending_lecturer' && Number(loan.lecturer_approver_id) === Number(user?.user_id)
+          )
+        );
+      }
+      if (usageData.success) {
+        setMyUsageLogs((usageData.logs || []).filter((log) => Number(log.user_id) === Number(user?.user_id)));
+      }
     } catch (err) {
       console.error(err);
       message.error('Failed to load reservations');
@@ -95,87 +113,8 @@ export default function LecturerDashboard() {
     }
   }
 
-  const activeBookings = myBookings.filter(b => b.status === 'approved' || b.status === 'pending');
-  const recurringBookings = myBookings.filter(b => Boolean(b.recurrence_group_id || b.recurring_group_id));
-
-  const columns = [
-    {
-      title: 'Facility',
-      dataIndex: 'location_name',
-      key: 'location_name',
-      render: (text, record) => (
-        <div>
-          <Text strong>{text}</Text>
-          <div style={{ fontSize: 12, color: '#64748B' }}>{record.location_code}</div>
-        </div>
-      ),
-    },
-    {
-      title: 'Course / Purpose',
-      key: 'purpose',
-      render: (_, record) => {
-        const hasRecurrence = Boolean(record.recurrence_group_id || record.recurring_group_id);
-        return (
-          <div>
-            {record.course_id && (
-              <Tag color="cyan" style={{ fontWeight: 700, marginBottom: 2 }}>
-                {record.course_id}
-              </Tag>
-            )}
-            <div style={{ fontSize: 12 }}>{record.purpose}</div>
-            {hasRecurrence && (
-              <Tag color="purple" style={{ fontSize: 10, marginTop: 4, fontWeight: 700, borderRadius: 6 }}>
-                📅 14-Wk Recurring Class
-              </Tag>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      title: 'Time Window',
-      key: 'time',
-      render: (_, record) => (
-        <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
-          {formatDateTime(record.start_time)} &rarr; {formatDateTime(record.end_time)}
-        </span>
-      ),
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status) => <StatusTag status={status} />,
-    },
-    {
-      title: 'Action',
-      key: 'action',
-      render: (_, record) => {
-        const gId = record.recurrence_group_id || record.recurring_group_id;
-        if (!gId) return null;
-        return (
-          <Space size="small">
-            <Button
-              size="small"
-              icon={<PauseCircleOutlined />}
-              loading={togglingGroupId === gId}
-              onClick={() => handleToggleSeries(gId, 'pause')}
-            >
-              Pause
-            </Button>
-            <Button
-              size="small"
-              icon={<PlayCircleOutlined />}
-              loading={togglingGroupId === gId}
-              onClick={() => handleToggleSeries(gId, 'activate')}
-            >
-              Resume
-            </Button>
-          </Space>
-        );
-      },
-    },
-  ];
+  const activeBookings = myBookings.filter((b) => b.status === 'approved' || b.status === 'pending');
+  const recurringBookings = myBookings.filter((b) => Boolean(b.recurrence_group_id || b.recurring_group_id));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -213,6 +152,14 @@ export default function LecturerDashboard() {
             >
               Book Lab / Room
             </Button>
+            <Button
+              type="primary"
+              icon={<FileTextOutlined />}
+              onClick={() => setIsUsageModalOpen(true)}
+              style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 700 }}
+            >
+              Record Lecture Attendance
+            </Button>
             <Link to="/devices">
               <Button icon={<LaptopOutlined />} style={{ fontWeight: 600 }}>
                 Borrow Devices
@@ -227,9 +174,9 @@ export default function LecturerDashboard() {
         </div>
       </Card>
 
-      {/* Statistics - 3 Columns on phones & tablets */}
+      {/* Statistics - 4 Columns */}
       <Row gutter={[12, 12]}>
-        <Col xs={8} sm={8}>
+        <Col xs={12} sm={6}>
           <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2.5vw, 16px)' }}>
             <Statistic
               title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Reservations</span>}
@@ -239,7 +186,7 @@ export default function LecturerDashboard() {
             />
           </Card>
         </Col>
-        <Col xs={8} sm={8}>
+        <Col xs={12} sm={6}>
           <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2.5vw, 16px)' }}>
             <Statistic
               title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Recurring</span>}
@@ -249,19 +196,29 @@ export default function LecturerDashboard() {
             />
           </Card>
         </Col>
-        <Col xs={8} sm={8}>
+        <Col xs={12} sm={6}>
           <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2.5vw, 16px)' }}>
             <Statistic
-              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Total Records</span>}
+              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Total Bookings</span>}
               value={myBookings.length}
               valueStyle={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 800 }}
               prefix={<CompassOutlined style={{ color: '#10B981' }} />}
             />
           </Card>
         </Col>
+        <Col xs={12} sm={6}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2.5vw, 16px)' }}>
+            <Statistic
+              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Attendance Logs</span>}
+              value={myUsageLogs.length}
+              valueStyle={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 800 }}
+              prefix={<FileTextOutlined style={{ color: '#2563EB' }} />}
+            />
+          </Card>
+        </Col>
       </Row>
 
-      {/* Weekly Timetable Table Section for Lecturer's Assigned Classes */}
+      {/* Device Loans Awaiting Approval */}
       <Card
         title={<Space><LaptopOutlined /><span>Device Loans Awaiting Your Approval</span><Tag color="blue">{loanRequests.length}</Tag></Space>}
         bordered={false}
@@ -275,10 +232,109 @@ export default function LecturerDashboard() {
           locale={{ emptyText: <Empty description="No device requests need your approval" /> }}
           columns={[
             { title: 'Student', dataIndex: 'borrower_name', key: 'borrower_name', render: (name, row) => <div><Text strong>{name}</Text><div style={{ color: '#64748B', fontSize: 12 }}>{row.matric_or_staff_id}</div></div> },
-            { title: 'Device', dataIndex: 'device_name', key: 'device_name' },
+            {
+              title: 'Device & Accessories',
+              dataIndex: 'device_name',
+              key: 'device_name',
+              render: (name, row) => {
+                const selAcc = Array.isArray(row.selected_accessories) ? row.selected_accessories : [];
+                return (
+                  <div>
+                    <Text strong>{name}</Text>
+                    {selAcc.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {selAcc.map((acc) => (
+                          <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>
+                            + {acc}
+                          </Tag>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              },
+            },
             { title: 'Return By', dataIndex: 'expected_return_time', key: 'expected_return_time', render: formatDateTime },
             { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', ellipsis: true },
             { title: 'Review', key: 'review', render: (_, row) => <Space><Button size="small" type="primary" loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'lecturer_approve')}>Approve</Button><Button size="small" danger loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'reject')}>Reject</Button></Space> },
+          ]}
+        />
+      </Card>
+
+      {/* Lecture Attendance & Lab Usage Log Card */}
+      <Card
+        title={
+          <Space>
+            <FileTextOutlined style={{ color: '#1E3A8A' }} />
+            <span>My Lecture Attendance &amp; Lab Usage Logs (Log Rekod Penggunaan Makmal)</span>
+            <Tag color="blue">{myUsageLogs.length}</Tag>
+          </Space>
+        }
+        extra={
+          <Button
+            type="primary"
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={() => setIsUsageModalOpen(true)}
+            style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 600 }}
+          >
+            Record Lecture Attendance
+          </Button>
+        }
+        bordered={false}
+        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+      >
+        <Table
+          size="small"
+          rowKey="log_id"
+          loading={loading}
+          dataSource={myUsageLogs}
+          pagination={{ pageSize: 5, simple: true }}
+          locale={{ emptyText: <Empty description="No lecture attendance / lab usage sessions recorded yet" /> }}
+          columns={[
+            {
+              title: 'Lab / Room Facility',
+              key: 'facility',
+              render: (_, row) => (
+                <div>
+                  <Text strong>{row.location_name}</Text>
+                  <div style={{ fontSize: 12, color: '#64748B' }}>{row.location_code}</div>
+                </div>
+              ),
+            },
+            {
+              title: 'Course',
+              key: 'course',
+              render: (_, row) => (
+                <div>
+                  <Tag color="blue" style={{ fontWeight: 700, marginBottom: 2 }}>{row.course_id}</Tag>
+                  <div style={{ fontSize: 12 }}>{row.course_name}</div>
+                </div>
+              ),
+            },
+            {
+              title: 'Purpose / Lecture Notes',
+              dataIndex: 'purpose',
+              key: 'purpose',
+            },
+            {
+              title: 'Lecture Time Window',
+              key: 'time_window',
+              render: (_, row) => (
+                <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                  {formatDateTime(row.start_time)} &rarr; {formatDateTime(row.end_time)}
+                </span>
+              ),
+            },
+            {
+              title: 'Status',
+              key: 'status',
+              render: () => (
+                <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontWeight: 600 }}>
+                  Logged
+                </Tag>
+              ),
+            },
           ]}
         />
       </Card>
@@ -304,6 +360,12 @@ export default function LecturerDashboard() {
           fetchLecturerData();
           setSelectedSlotForBooking(null);
         }}
+      />
+
+      <LabUsageModal
+        isOpen={isUsageModalOpen}
+        onClose={() => setIsUsageModalOpen(false)}
+        onLogCreated={fetchLecturerData}
       />
     </div>
   );
