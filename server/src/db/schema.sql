@@ -76,6 +76,12 @@ CREATE TABLE IF NOT EXISTS device_bookings (
     lecturer_approver_id INT REFERENCES users(user_id) ON DELETE SET NULL,
     lecturer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     pickup_location TEXT,
+    return_rating INT CHECK (return_rating >= 1 AND return_rating <= 5),
+    return_condition VARCHAR(100),
+    return_notes TEXT,
+    device_rating INT CHECK (device_rating >= 1 AND device_rating <= 5),
+    device_review TEXT,
+    rated_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

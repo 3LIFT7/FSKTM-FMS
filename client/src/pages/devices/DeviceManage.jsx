@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Empty, Checkbox, message } from 'antd';
+import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Empty, Checkbox, Descriptions, Rate, message } from 'antd';
 import {
   LaptopOutlined,
   PlusOutlined,
@@ -11,6 +11,10 @@ import {
   BarcodeOutlined,
   EyeOutlined,
   AppstoreAddOutlined,
+  HistoryOutlined,
+  StarFilled,
+  StarOutlined,
+  CheckCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
@@ -35,6 +39,8 @@ const ACCESSORY_PRESETS = [
   'Extra Battery',
 ];
 
+const RATING_DESC = ['Damaged / Poor', 'Below Average', 'Fair / Minor Wear', 'Good Condition', 'Excellent / Like New'];
+
 export default function DeviceManage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('loans');
@@ -46,15 +52,26 @@ export default function DeviceManage() {
   const [approvingLoan, setApprovingLoan] = useState(null);
   const [approvalForm] = Form.useForm();
 
+  // Receive & Rate Returned Device modal state
+  const [returningLoan, setReturningLoan] = useState(null);
+  const [returnForm] = Form.useForm();
+
   // Filter state for inventory
   const [inventorySearch, setInventorySearch] = useState('');
   const [inventoryCategory, setInventoryCategory] = useState('All');
   const [inventoryStatus, setInventoryStatus] = useState('All');
 
+  // Filter state for borrowing history tab
+  const [historyDeviceFilter, setHistoryDeviceFilter] = useState('All');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('All');
+  const [historySearch, setHistorySearch] = useState('');
+
   // Modal states
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState(null);
   const [viewingDevice, setViewingDevice] = useState(null);
+  const [viewingDeviceTab, setViewingDeviceTab] = useState('details');
+  const [viewingLoanRecord, setViewingLoanRecord] = useState(null);
   const [addForm] = Form.useForm();
   const [addMode, setAddMode] = useState('pool');
   const [addHasAccessories, setAddHasAccessories] = useState(false);
@@ -98,7 +115,33 @@ export default function DeviceManage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      message.success(`Loan status updated to ${action}`);
+      message.success(data.message || `Loan status updated to ${action}`);
+      fetchData();
+      return true;
+    } catch (err) {
+      message.error(err.message);
+      return false;
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function handleRateAlreadyReturnedLoan(loanId, values) {
+    setActionLoadingId(loanId);
+    try {
+      const res = await fetch(`/api/device-loans/${loanId}/rating`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          rating: values.return_rating,
+          return_condition: values.return_condition,
+          review: values.return_notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      message.success(data.message || 'Return rating saved!');
       fetchData();
       return true;
     } catch (err) {
@@ -172,6 +215,15 @@ export default function DeviceManage() {
     }
   }
 
+  const openReturnAndRateModal = (record) => {
+    setReturningLoan(record);
+    returnForm.setFieldsValue({
+      return_rating: record.return_rating || record.device_rating || 5,
+      return_condition: record.return_condition || 'Excellent',
+      return_notes: record.return_notes || '',
+    });
+  };
+
   // Filtered inventory
   const filteredDevices = useMemo(() => {
     return devices.filter(d => {
@@ -191,9 +243,148 @@ export default function DeviceManage() {
     });
   }, [devices, inventoryCategory, inventoryStatus, inventorySearch]);
 
+  // Filtered borrowing history log
+  const filteredHistoryLoans = useMemo(() => {
+    return loans.filter(l => {
+      if (historyDeviceFilter !== 'All' && Number(l.device_id) !== Number(historyDeviceFilter)) return false;
+      if (historyStatusFilter !== 'All' && l.status !== historyStatusFilter) return false;
+      if (historySearch) {
+        const q = historySearch.toLowerCase();
+        const accMatch = Array.isArray(l.selected_accessories) && l.selected_accessories.some((a) => a.toLowerCase().includes(q));
+        return (
+          (l.device_name && l.device_name.toLowerCase().includes(q)) ||
+          (l.serial_number && l.serial_number.toLowerCase().includes(q)) ||
+          (l.borrower_name && l.borrower_name.toLowerCase().includes(q)) ||
+          (l.borrower_email && l.borrower_email.toLowerCase().includes(q)) ||
+          (l.matric_or_staff_id && l.matric_or_staff_id.toLowerCase().includes(q)) ||
+          (l.purpose && l.purpose.toLowerCase().includes(q)) ||
+          accMatch
+        );
+      }
+      return true;
+    });
+  }, [loans, historyDeviceFilter, historyStatusFilter, historySearch]);
+
   const categories = useMemo(() => {
     return ['All', ...new Set(devices.map(d => d.category).filter(Boolean))];
   }, [devices]);
+
+  const renderExpandedLoanDetails = (record) => {
+    const selAcc = Array.isArray(record.selected_accessories) ? record.selected_accessories : [];
+    const lecturerName = record.lecturer_approved_by_name || record.lecturer_approver_name;
+    const lecturerEmail = record.lecturer_approved_by_email || record.lecturer_approver_email;
+    const techName = record.technician_approver_name || record.approver_name;
+    const techEmail = record.technician_approver_email;
+    const effectiveRating = record.return_rating || record.device_rating;
+
+    return (
+      <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 16px' }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: '#0F172A', marginBottom: 10 }}>
+          Complete Borrowing History Record — Loan #{record.loan_id}
+        </div>
+        <Descriptions bordered size="small" column={{ xs: 1, sm: 2, md: 3 }} style={{ background: '#FFFFFF' }}>
+          <Descriptions.Item label="Device Name">
+            <Text strong>{record.device_name}</Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Serial Number">
+            <Text code>{record.serial_number}</Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Category">
+            <Tag color="blue">{record.device_category || 'Hardware'}</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="Borrower Name">
+            <Text strong>{record.borrower_name}</Text> ({record.user_role})
+          </Descriptions.Item>
+          <Descriptions.Item label="Matric / Staff ID">
+            <Text code>{record.matric_or_staff_id || '—'}</Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Borrower Email">
+            {record.borrower_email || '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Requested At">
+            {record.created_at ? formatDateTime(record.created_at) : '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Checked Out At">
+            {record.checkout_time ? formatDateTime(record.checkout_time) : <Text type="secondary">Not checked out yet</Text>}
+          </Descriptions.Item>
+          <Descriptions.Item label="Expected Return">
+            {record.expected_return_time ? formatDateTime(record.expected_return_time) : '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Actual Return Time">
+            {record.actual_return_time ? (
+              <Tag color="success">{formatDateTime(record.actual_return_time)}</Tag>
+            ) : record.status === 'checked_out' ? (
+              <Tag color="processing">Currently Checked Out</Tag>
+            ) : (
+              '—'
+            )}
+          </Descriptions.Item>
+          <Descriptions.Item label="Pickup Location">
+            {record.pickup_location || <Text type="secondary">Not assigned</Text>}
+          </Descriptions.Item>
+          <Descriptions.Item label="Loan Status">
+            <Space size={4}>
+              <StatusTag status={record.status} />
+              {record.is_overdue && <Tag color="error">OVERDUE</Tag>}
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label="Borrowed Accessories" span={3}>
+            {selAcc.length > 0 ? (
+              <Space wrap size={4}>
+                {selAcc.map((acc) => (
+                  <Tag key={acc} color="geekblue" style={{ margin: 0 }}>
+                    + {acc}
+                  </Tag>
+                ))}
+              </Space>
+            ) : (
+              <Text type="secondary" style={{ fontStyle: 'italic' }}>
+                Device only (no optional accessories selected)
+              </Text>
+            )}
+          </Descriptions.Item>
+          <Descriptions.Item label="Academic Purpose / Project" span={3}>
+            {record.purpose || '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Return Rating & Condition" span={3}>
+            {effectiveRating ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <Space align="center" wrap>
+                  <Rate disabled value={Number(effectiveRating)} style={{ fontSize: 14 }} />
+                  <Tag color="gold" style={{ fontWeight: 700 }}>{effectiveRating} / 5</Tag>
+                  {record.return_condition && (
+                    <Tag color={record.return_condition === 'Damaged' ? 'error' : 'cyan'}>
+                      Condition: {record.return_condition}
+                    </Tag>
+                  )}
+                </Space>
+                {record.return_notes && (
+                  <div style={{ fontSize: 12, color: '#334155' }}>
+                    <strong>Technician Return Notes:</strong> {record.return_notes}
+                  </div>
+                )}
+                {record.device_review && (
+                  <div style={{ fontSize: 12, color: '#334155' }}>
+                    <strong>Borrower Review:</strong> {record.device_review} (★ {record.device_rating}/5)
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Text type="secondary" style={{ fontStyle: 'italic' }}>
+                {record.status === 'returned' ? 'Returned (not rated yet)' : 'Available after device is returned'}
+              </Text>
+            )}
+          </Descriptions.Item>
+          <Descriptions.Item label="Lecturer Approver" span={1}>
+            {lecturerName ? `${lecturerName}${lecturerEmail ? ` (${lecturerEmail})` : ''}` : 'N/A'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Staff / Technician Approver" span={2}>
+            {techName ? `${techName}${techEmail ? ` (${techEmail})` : ''}` : 'Pending / N/A'}
+          </Descriptions.Item>
+        </Descriptions>
+      </div>
+    );
+  };
 
   // Loan Columns
   const loanColumns = [
@@ -212,6 +403,9 @@ export default function DeviceManage() {
           <div style={{ fontSize: 11, color: '#64748B' }}>
             {record.matric_or_staff_id} • {record.user_role}
           </div>
+          <div style={{ fontSize: 11, color: '#94A3B8' }}>
+            {record.borrower_email}
+          </div>
         </div>
       ),
     },
@@ -222,7 +416,24 @@ export default function DeviceManage() {
         const selAcc = Array.isArray(record.selected_accessories) ? record.selected_accessories : [];
         return (
           <div>
-            <Text strong>{record.device_name}</Text>
+            <Text
+              strong
+              style={{ color: '#1E3A8A', cursor: 'pointer' }}
+              onClick={() => {
+                const dev = devices.find((d) => Number(d.device_id) === Number(record.device_id)) || {
+                  device_id: record.device_id,
+                  name: record.device_name,
+                  serial_number: record.serial_number,
+                  category: record.device_category,
+                  status: 'available',
+                };
+                setViewingDeviceTab('history');
+                setViewingDevice(dev);
+              }}
+              title="Click to view full borrowing history for this device"
+            >
+              {record.device_name}
+            </Text>
             <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>
               SN: {record.serial_number}
             </div>
@@ -240,19 +451,30 @@ export default function DeviceManage() {
       },
     },
     {
-      title: 'Expected Return',
+      title: 'Timeline (Checkout / Return)',
       key: 'return_time',
       render: (_, record) => {
-        // Section 8 Rule 3: Overdue devices red Tag with "Overdue" and days late
         const returnDate = dayjs(record.expected_return_time);
         const isLate = record.status === 'checked_out' && dayjs().isAfter(returnDate);
         const daysLate = dayjs().diff(returnDate, 'day');
 
         return (
-          <Space orientation="vertical" size={2}>
-            <span style={{ fontSize: 12 }}>{formatDateTime(record.expected_return_time)}</span>
+          <Space orientation="vertical" size={2} style={{ fontSize: 11 }}>
+            {record.checkout_time && (
+              <div style={{ color: '#2563EB' }}>
+                <strong>Out:</strong> {formatDateTime(record.checkout_time)}
+              </div>
+            )}
+            <div>
+              <strong>Due:</strong> {formatDateTime(record.expected_return_time)}
+            </div>
+            {record.actual_return_time && (
+              <div style={{ color: '#059669' }}>
+                <strong>Returned:</strong> {formatDateTime(record.actual_return_time)}
+              </div>
+            )}
             {isLate && (
-              <Tag color="error">
+              <Tag color="error" style={{ marginTop: 2 }}>
                 Overdue {daysLate > 0 ? `${daysLate} day${daysLate > 1 ? 's' : ''}` : 'Today'}
               </Tag>
             )}
@@ -261,10 +483,23 @@ export default function DeviceManage() {
       },
     },
     {
-      title: 'Status',
+      title: 'Status & Rating',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => <StatusTag status={status} />,
+      render: (status, record) => {
+        const ratingVal = record.return_rating || record.device_rating;
+        return (
+          <Space direction="vertical" size={4}>
+            <StatusTag status={status} />
+            {ratingVal && (
+              <Tag color="gold" style={{ margin: 0, fontWeight: 700, fontSize: 11 }}>
+                <StarFilled style={{ color: '#F59E0B', marginRight: 3 }} />
+                {ratingVal} / 5 {record.return_condition ? `(${record.return_condition})` : ''}
+              </Tag>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: 'Counter Actions',
@@ -272,7 +507,16 @@ export default function DeviceManage() {
       render: (_, record) => {
         const isLoading = actionLoadingId === record.loan_id;
         return (
-          <Space size="small">
+          <Space size="small" wrap>
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => setViewingLoanRecord(record)}
+              title="View Full Loan Record Details"
+            >
+              Full Info
+            </Button>
+
             {['pending', 'pending_technician'].includes(record.status) && (
               <>
                 <Button
@@ -310,10 +554,21 @@ export default function DeviceManage() {
               <Button
                 size="small"
                 loading={isLoading}
-                onClick={() => handleLoanAction(record.loan_id, 'return')}
-                style={{ background: '#059669', borderColor: '#059669', color: '#fff' }}
+                onClick={() => openReturnAndRateModal(record)}
+                style={{ background: '#059669', borderColor: '#059669', color: '#fff', fontWeight: 600 }}
               >
-                Mark Returned
+                Receive &amp; Rate Return
+              </Button>
+            )}
+
+            {record.status === 'returned' && (
+              <Button
+                size="small"
+                icon={<StarOutlined />}
+                onClick={() => openReturnAndRateModal(record)}
+                style={{ color: '#B45309', borderColor: '#FDE68A', background: '#FFFBEB', fontWeight: 600 }}
+              >
+                {record.return_rating ? 'Edit Rating' : 'Rate Return'}
               </Button>
             )}
           </Space>
@@ -329,10 +584,14 @@ export default function DeviceManage() {
       key: 'name',
       render: (_, record) => {
         const accessories = Array.isArray(record.accessories) ? record.accessories : [];
+        const loanCount = Number(record.loan_count || 0);
         return (
           <div
             style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
-            onClick={() => setViewingDevice(record)}
+            onClick={() => {
+              setViewingDeviceTab('details');
+              setViewingDevice(record);
+            }}
             title="Click to view full specs & asset details"
           >
             {record.image_url ? (
@@ -366,6 +625,18 @@ export default function DeviceManage() {
                   <span style={{ fontSize: 10, color: '#1E40AF', background: '#DBEAFE', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
                     <AppstoreAddOutlined style={{ marginRight: 3 }} />
                     {accessories.length} {accessories.length === 1 ? 'Accessory' : 'Accessories'}
+                  </span>
+                )}
+                {loanCount > 0 && (
+                  <span style={{ fontSize: 10, color: '#065F46', background: '#D1FAE5', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                    <HistoryOutlined style={{ marginRight: 3 }} />
+                    {loanCount} {loanCount === 1 ? 'Loan Record' : 'Loan Records'}
+                  </span>
+                )}
+                {record.avg_rating && (
+                  <span style={{ fontSize: 10, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                    <StarFilled style={{ color: '#F59E0B', marginRight: 3 }} />
+                    {record.avg_rating} ({record.rating_count})
                   </span>
                 )}
               </div>
@@ -423,8 +694,23 @@ export default function DeviceManage() {
         <Space size="small">
           <Button
             size="small"
+            icon={<HistoryOutlined />}
+            onClick={() => {
+              setViewingDeviceTab('history');
+              setViewingDevice(record);
+            }}
+            title="View Device Borrowing History"
+            style={{ color: '#1E3A8A', borderColor: '#BFDBFE', background: '#EFF6FF', fontWeight: 600 }}
+          >
+            History ({record.loan_count || 0})
+          </Button>
+          <Button
+            size="small"
             icon={<EyeOutlined />}
-            onClick={() => setViewingDevice(record)}
+            onClick={() => {
+              setViewingDeviceTab('details');
+              setViewingDevice(record);
+            }}
             title="View Specs & Details"
           >
             Specs
@@ -454,7 +740,7 @@ export default function DeviceManage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="Device Inventory & Loan Counter"
-        subtitle="Manage hardware checkout approvals, track returns, and maintain faculty equipment assets."
+        subtitle="Manage hardware checkout approvals, track returns, rate returned equipment, and inspect per-device borrowing history."
         extra={
           <Space>
             <Button icon={<ReloadOutlined />} onClick={fetchData}>
@@ -486,7 +772,7 @@ export default function DeviceManage() {
               label: (
                 <span>
                   <ClockCircleOutlined style={{ marginRight: 6 }} />
-                  Loan Requests & Active Loans ({loans.length})
+                  Loan Requests &amp; Active Loans ({loans.length})
                 </span>
               ),
               children: (
@@ -496,6 +782,10 @@ export default function DeviceManage() {
                   rowKey="loan_id"
                   loading={loading}
                   pagination={false}
+                  expandable={{
+                    expandedRowRender: renderExpandedLoanDetails,
+                    rowExpandable: () => true,
+                  }}
                   locale={{ emptyText: <Empty description="No equipment loan records" /> }}
                   size="small"
                 />
@@ -556,6 +846,7 @@ export default function DeviceManage() {
                     onRow={(record) => ({
                       onClick: (e) => {
                         if (e.target.closest('button') || e.target.closest('.ant-popover') || e.target.closest('.ant-popconfirm')) return;
+                        setViewingDeviceTab('details');
                         setViewingDevice(record);
                       },
                       style: { cursor: 'pointer' },
@@ -564,9 +855,199 @@ export default function DeviceManage() {
                 </div>
               ),
             },
+            {
+              key: 'history',
+              label: (
+                <span>
+                  <HistoryOutlined style={{ marginRight: 6 }} />
+                  Device Borrowing History Log ({loans.length})
+                </span>
+              ),
+              children: (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} md={9}>
+                      <Input
+                        prefix={<SearchOutlined style={{ color: '#94A3B8' }} />}
+                        placeholder="Search history by borrower, matric ID, device, purpose, or accessory..."
+                        value={historySearch}
+                        onChange={(e) => setHistorySearch(e.target.value)}
+                        allowClear
+                      />
+                    </Col>
+                    <Col xs={12} md={9}>
+                      <Select
+                        showSearch
+                        optionFilterProp="label"
+                        style={{ width: '100%' }}
+                        value={historyDeviceFilter}
+                        onChange={setHistoryDeviceFilter}
+                        options={[
+                          { value: 'All', label: 'All Devices (Complete History)' },
+                          ...devices.map((d) => ({
+                            value: d.device_id,
+                            label: `${d.name} (${d.serial_number}) — ${d.loan_count || 0} record(s)`,
+                          })),
+                        ]}
+                      />
+                    </Col>
+                    <Col xs={12} md={6}>
+                      <Select
+                        style={{ width: '100%' }}
+                        value={historyStatusFilter}
+                        onChange={setHistoryStatusFilter}
+                        options={[
+                          { value: 'All', label: 'All Loan Statuses' },
+                          { value: 'checked_out', label: 'Checked Out' },
+                          { value: 'returned', label: 'Returned' },
+                          { value: 'approved', label: 'Approved' },
+                          { value: 'pending_lecturer', label: 'Pending Lecturer' },
+                          { value: 'pending_technician', label: 'Pending Technician' },
+                          { value: 'rejected', label: 'Rejected' },
+                        ]}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Table
+                    dataSource={filteredHistoryLoans}
+                    columns={loanColumns}
+                    rowKey="loan_id"
+                    loading={loading}
+                    pagination={{ pageSize: 10 }}
+                    expandable={{
+                      expandedRowRender: renderExpandedLoanDetails,
+                      defaultExpandAllRows: false,
+                    }}
+                    locale={{ emptyText: <Empty description="No device borrowing history records matching your filter" /> }}
+                    size="small"
+                  />
+                </div>
+              ),
+            },
           ]}
         />
       </Card>
+
+      {/* Receive Returned Device & Rate Condition Modal */}
+      <Modal
+        open={Boolean(returningLoan)}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircleOutlined style={{ color: '#059669' }} />
+            <span>
+              {returningLoan?.status === 'returned'
+                ? `Rate Returned Device — Loan #${returningLoan?.loan_id}`
+                : `Receive Returned Device & Rate Condition — Loan #${returningLoan?.loan_id}`}
+            </span>
+          </div>
+        }
+        okText={returningLoan?.status === 'returned' ? 'Save Rating' : 'Confirm Return & Save Rating'}
+        cancelText="Cancel"
+        confirmLoading={actionLoadingId === returningLoan?.loan_id}
+        onCancel={() => setReturningLoan(null)}
+        onOk={() => returnForm.submit()}
+        destroyOnClose
+        centered
+      >
+        {returningLoan && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>{returningLoan.device_name}</div>
+              <div style={{ fontSize: 12, color: '#64748B', fontFamily: 'monospace' }}>
+                SN: {returningLoan.serial_number} • Borrower: {returningLoan.borrower_name} ({returningLoan.matric_or_staff_id})
+              </div>
+              {Array.isArray(returningLoan.selected_accessories) && returningLoan.selected_accessories.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1E293B', marginBottom: 4 }}>
+                    Verify Borrowed Accessories Returned:
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {returningLoan.selected_accessories.map((acc) => (
+                      <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 11 }}>
+                        ✓ {acc}
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Form
+              form={returnForm}
+              layout="vertical"
+              initialValues={{
+                return_rating: 5,
+                return_condition: 'Excellent',
+                return_notes: '',
+              }}
+              onFinish={async (values) => {
+                if (returningLoan.status === 'returned') {
+                  const ok = await handleRateAlreadyReturnedLoan(returningLoan.loan_id, values);
+                  if (ok) setReturningLoan(null);
+                } else {
+                  const ok = await handleLoanAction(returningLoan.loan_id, 'return', values);
+                  if (ok) setReturningLoan(null);
+                }
+              }}
+            >
+              <Form.Item
+                name="return_rating"
+                label="Rate Returned Device Condition (1–5 Stars)"
+                rules={[{ required: true, message: 'Please select a star rating for the returned device' }]}
+              >
+                <Rate tooltips={RATING_DESC} style={{ fontSize: 28 }} />
+              </Form.Item>
+
+              <Form.Item
+                name="return_condition"
+                label="Returned Equipment Condition"
+                rules={[{ required: true }]}
+              >
+                <Select>
+                  <Select.Option value="Excellent">Excellent / Like New (All items complete)</Select.Option>
+                  <Select.Option value="Good">Good / Normal Operational Condition</Select.Option>
+                  <Select.Option value="Fair / Minor Wear">Fair / Minor Cosmetic Wear</Select.Option>
+                  <Select.Option value="Missing Accessory">Missing Optional Accessory</Select.Option>
+                  <Select.Option value="Damaged">Damaged / Requires Maintenance</Select.Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                name="return_notes"
+                label="Technician Return Inspection Notes (optional)"
+              >
+                <Input.TextArea
+                  rows={3}
+                  placeholder="e.g. Device and all borrowed accessories returned in great working order."
+                />
+              </Form.Item>
+            </Form>
+          </div>
+        )}
+      </Modal>
+
+      {/* Full Loan Record Detail Modal */}
+      <Modal
+        open={Boolean(viewingLoanRecord)}
+        onCancel={() => setViewingLoanRecord(null)}
+        footer={[
+          <Button key="close" type="primary" onClick={() => setViewingLoanRecord(null)}>
+            Close
+          </Button>,
+        ]}
+        width={720}
+        centered
+        destroyOnClose
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <HistoryOutlined style={{ color: '#1E3A8A' }} />
+            <span>Borrowing History Record — Loan #{viewingLoanRecord?.loan_id}</span>
+          </div>
+        }
+      >
+        {viewingLoanRecord && renderExpandedLoanDetails(viewingLoanRecord)}
+      </Modal>
 
       <Modal
         open={Boolean(approvingLoan)}
@@ -789,11 +1270,12 @@ export default function DeviceManage() {
         </Form>
       </Modal>
 
-      {/* Device Detail Modal */}
+      {/* Device Detail & Borrowing History Modal */}
       {viewingDevice && (
         <DeviceDetailModal
           isOpen={Boolean(viewingDevice)}
           device={viewingDevice}
+          initialTab={viewingDeviceTab}
           onClose={() => setViewingDevice(null)}
           onEdit={(dev) => {
             setViewingDevice(null);

@@ -28,6 +28,12 @@ async function seedDatabase() {
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS lecturer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL;
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS pickup_location TEXT;
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_rating INT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_condition VARCHAR(100);
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_notes TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_rating INT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_review TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS rated_at TIMESTAMP WITH TIME ZONE;
       ALTER TABLE device_bookings DROP CONSTRAINT IF EXISTS device_bookings_status_check;
       ALTER TABLE device_bookings ADD CONSTRAINT device_bookings_status_check CHECK (status IN ('pending', 'pending_lecturer', 'pending_technician', 'approved', 'checked_out', 'returned', 'rejected'));
       ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url TEXT;

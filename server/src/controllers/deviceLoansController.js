@@ -9,6 +9,12 @@ async function ensureLoanColumns() {
     await exec(`
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS accessories TEXT;
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_rating INT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_condition VARCHAR(100);
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_notes TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_rating INT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_review TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS rated_at TIMESTAMP WITH TIME ZONE;
     `);
     loanAccessoriesColumnEnsured = true;
   } catch (err) {
@@ -85,6 +91,12 @@ async function getDeviceLoans(req, res) {
         dl.lecturer_approver_id,
         dl.lecturer_approved_by,
         dl.pickup_location,
+        dl.return_rating,
+        dl.return_condition,
+        dl.return_notes,
+        dl.device_rating,
+        dl.device_review,
+        dl.rated_at,
         dl.created_at,
         d.name AS device_name,
         d.category AS device_category,
@@ -226,7 +238,7 @@ async function updateLoanStatus(req, res) {
   try {
     await ensureLoanColumns();
     const { id } = req.params;
-    const { action, pickup_location } = req.body; // lecturer_approve, approve, reject, checkout, return
+    const { action, pickup_location, return_rating, return_condition, return_notes } = req.body; // lecturer_approve, approve, reject, checkout, return
     const staffId = req.user.user_id;
 
     const loanRes = await query(
@@ -332,15 +344,39 @@ async function updateLoanStatus(req, res) {
       if (!['technician', 'manager'].includes(req.user.role) || loan.status !== 'checked_out') {
         return res.status(400).json({ error: 'Only checked out loans can be returned.' });
       }
+      const parsedRating = return_rating ? Math.min(5, Math.max(1, parseInt(return_rating, 10))) : null;
+      const condVal = return_condition ? String(return_condition).trim() : null;
+      const notesVal = return_notes ? String(return_notes).trim() : null;
+
       await query(
         `UPDATE device_bookings 
-         SET status = 'returned', actual_return_time = CURRENT_TIMESTAMP 
+         SET status = 'returned',
+             actual_return_time = CURRENT_TIMESTAMP,
+             return_rating = COALESCE($2, return_rating),
+             return_condition = COALESCE($3, return_condition),
+             return_notes = COALESCE($4, return_notes),
+             rated_at = CASE WHEN $2 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE rated_at END
          WHERE loan_id = $1`,
-        [id]
+        [id, parsedRating, condVal, notesVal]
       );
-      // Return device to available
-      await query(`UPDATE devices SET status = 'available' WHERE device_id = $1`, [loan.device_id]);
-      return res.json({ success: true, message: 'Device returned and marked available in inventory.' });
+
+      // Return device to available (or maintenance if returned damaged)
+      const nextDeviceStatus = condVal === 'Damaged' ? 'maintenance' : 'available';
+      await query(`UPDATE devices SET status = $1 WHERE device_id = $2`, [nextDeviceStatus, loan.device_id]);
+
+      await createUserNotification({
+        userId: loan.user_id,
+        type: 'device_loan',
+        title: 'Device return confirmed — Rate your experience',
+        message: `${loan.device_name}${accSuffix} has been received by the technician${parsedRating ? ` (Condition Rated: ${parsedRating}/5 ★)` : ''}. You can now rate the device from your dashboard!`,
+        entityType: 'device_loan',
+        entityId: id,
+      });
+
+      return res.json({
+        success: true,
+        message: `Device returned${parsedRating ? ` with ${parsedRating}/5 ★ rating` : ''} and marked ${nextDeviceStatus} in inventory.`,
+      });
     }
 
     return res.status(400).json({ error: 'Invalid action. Must be approve, reject, checkout, or return.' });
@@ -350,9 +386,86 @@ async function updateLoanStatus(req, res) {
   }
 }
 
+// POST /api/device-loans/:id/rating (Rate device after it is returned and received by technician)
+async function rateReturnedLoan(req, res) {
+  try {
+    await ensureLoanColumns();
+    const { id } = req.params;
+    const { rating, review, return_condition } = req.body;
+    const currentUser = req.user;
+
+    const numRating = parseInt(rating, 10);
+    if (!numRating || numRating < 1 || numRating > 5) {
+      return res.status(400).json({ error: 'Please select a valid star rating between 1 and 5.' });
+    }
+
+    const loanRes = await query(
+      `SELECT dl.*, d.name AS device_name
+       FROM device_bookings dl JOIN devices d ON d.device_id = dl.device_id
+       WHERE dl.loan_id = $1`,
+      [id]
+    );
+    if (loanRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Loan record not found.' });
+    }
+
+    const loan = loanRes.rows[0];
+    if (loan.status !== 'returned') {
+      return res.status(400).json({
+        error: 'This device can only be rated after it has been returned and received by the technician.',
+      });
+    }
+
+    const isStaff = ['technician', 'manager'].includes(currentUser.role);
+    const isBorrower = Number(loan.user_id) === Number(currentUser.user_id);
+
+    if (!isStaff && !isBorrower) {
+      return res.status(403).json({ error: 'You are not authorized to rate this loan record.' });
+    }
+
+    const cleanReview = review ? String(review).trim() : null;
+    const cleanCondition = return_condition ? String(return_condition).trim() : null;
+
+    if (isBorrower) {
+      await query(
+        `UPDATE device_bookings
+         SET device_rating = $1,
+             device_review = COALESCE($2, device_review),
+             rated_at = CURRENT_TIMESTAMP
+         WHERE loan_id = $3`,
+        [numRating, cleanReview, id]
+      );
+    }
+
+    if (isStaff) {
+      await query(
+        `UPDATE device_bookings
+         SET return_rating = $1,
+             return_condition = COALESCE($2, return_condition),
+             return_notes = COALESCE($3, return_notes),
+             rated_at = CURRENT_TIMESTAMP
+         WHERE loan_id = $4`,
+        [numRating, cleanCondition, cleanReview, id]
+      );
+    }
+
+    const updatedRes = await query(`SELECT * FROM device_bookings WHERE loan_id = $1`, [id]);
+
+    return res.json({
+      success: true,
+      message: 'Device rating submitted successfully!',
+      loan: formatLoanRow(updatedRes.rows[0]),
+    });
+  } catch (err) {
+    console.error('rateReturnedLoan error:', err);
+    return res.status(500).json({ error: 'Failed to submit device rating.' });
+  }
+}
+
 module.exports = {
   getLecturers,
   getDeviceLoans,
   requestDeviceLoan,
-  updateLoanStatus
+  updateLoanStatus,
+  rateReturnedLoan,
 };

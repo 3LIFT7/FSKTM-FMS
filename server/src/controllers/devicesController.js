@@ -8,6 +8,12 @@ async function ensureAccessoriesColumn() {
     await exec(`
       ALTER TABLE devices ADD COLUMN IF NOT EXISTS accessories TEXT;
       ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_rating INT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_condition VARCHAR(100);
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_notes TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_rating INT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_review TEXT;
+      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS rated_at TIMESTAMP WITH TIME ZONE;
     `);
     await exec(`UPDATE devices SET accessories = '["Touch Controllers (L & R)","USB-C Charging Cable","Carrying Case"]' WHERE serial_number IN ('VR-MQ2-001', 'VR-MQ2-002') AND accessories IS NULL`);
     await exec(`UPDATE devices SET accessories = '["Base Stations 2.0 (Pair)","Wireless Adapter","Controllers (L & R)","Link Box & Cables"]' WHERE serial_number = 'VR-VIVE-001' AND accessories IS NULL`);
@@ -16,6 +22,7 @@ async function ensureAccessoriesColumn() {
     await exec(`UPDATE devices SET accessories = '["140W USB-C Power Adapter","MagSafe 3 Cable","USB-C Multiport Hub","Protective Laptop Sleeve","Wireless Mouse"]' WHERE serial_number = 'LAP-APL-MBP16' AND accessories IS NULL`);
     await exec(`UPDATE devices SET accessories = '["130W USB-C Power Adapter","USB-C to HDMI/USB Adapter","Laptop Carrying Bag","Wireless Mouse"]' WHERE serial_number = 'LAP-DEL-XPS15' AND accessories IS NULL`);
     await exec(`UPDATE devices SET accessories = '["Remote Control","HDMI Cable","Power Cord"]' WHERE serial_number = 'PRJ-EPS-2250' AND accessories IS NULL`);
+    await exec(`UPDATE device_bookings SET selected_accessories = '["24-70mm GM Lens","Extra NP-FZ100 Battery","Camera Hard Case"]' WHERE selected_accessories IS NULL AND device_id IN (SELECT device_id FROM devices WHERE serial_number = 'CAM-SNY-A7IV')`);
     accessoriesColumnEnsured = true;
   } catch (err) {
     console.warn('ensureAccessoriesColumn notice:', err.message);
@@ -55,6 +62,9 @@ function formatDeviceRow(row) {
   return {
     ...row,
     accessories: parseAccessories(row.accessories),
+    loan_count: row.loan_count !== undefined ? Number(row.loan_count) : 0,
+    rating_count: row.rating_count !== undefined ? Number(row.rating_count) : 0,
+    avg_rating: row.avg_rating !== null && row.avg_rating !== undefined ? Number(Number(row.avg_rating).toFixed(1)) : null,
   };
 }
 
@@ -80,7 +90,10 @@ async function getAllDevices(req, res) {
         d.created_at,
         l.name AS location_name,
         l.code AS location_code,
-        l.floor AS location_floor
+        l.floor AS location_floor,
+        (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id) AS loan_count,
+        (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
+        (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
       FROM devices d
       LEFT JOIN locations l ON d.location_id = l.location_id
       WHERE 1=1
@@ -137,7 +150,10 @@ async function getDeviceById(req, res) {
     const devRes = await query(
       `SELECT d.*, 
               COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
-              l.name AS location_name, l.code AS location_code, l.floor AS location_floor
+              l.name AS location_name, l.code AS location_code, l.floor AS location_floor,
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id) AS loan_count,
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
+              (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
        FROM devices d
        LEFT JOIN locations l ON d.location_id = l.location_id
        WHERE d.device_id = $1`,
@@ -148,14 +164,36 @@ async function getDeviceById(req, res) {
       return res.status(404).json({ error: 'Device not found.' });
     }
 
-    // Recent loans
+    // Complete borrowing history for this device with all borrower, approver, and rating details
     const loanRes = await query(
-      `SELECT dl.*, u.name AS borrower_name, u.email AS borrower_email, app.name AS approver_name
+      `SELECT 
+         dl.*,
+         u.name AS borrower_name,
+         u.email AS borrower_email,
+         u.matric_or_staff_id,
+         u.role AS user_role,
+         u.department AS borrower_department,
+         u.specialization AS borrower_specialization,
+         app.name AS approver_name,
+         app.email AS approver_email,
+         lecturer.name AS lecturer_approver_name,
+         lecturer.email AS lecturer_approver_email,
+         lecturer_approver.name AS lecturer_approved_by_name,
+         lecturer_approver.email AS lecturer_approved_by_email,
+         technician.name AS technician_approver_name,
+         technician.email AS technician_approver_email,
+         CASE 
+           WHEN dl.status = 'checked_out' AND dl.expected_return_time < CURRENT_TIMESTAMP THEN TRUE
+           ELSE FALSE
+         END AS is_overdue
        FROM device_bookings dl
        JOIN users u ON dl.user_id = u.user_id
        LEFT JOIN users app ON dl.approved_by = app.user_id
+       LEFT JOIN users lecturer ON dl.lecturer_approver_id = lecturer.user_id
+       LEFT JOIN users lecturer_approver ON dl.lecturer_approved_by = lecturer_approver.user_id
+       LEFT JOIN users technician ON dl.approved_by = technician.user_id
        WHERE dl.device_id = $1
-       ORDER BY dl.created_at DESC LIMIT 5`,
+       ORDER BY dl.created_at DESC`,
       [id]
     );
 
@@ -165,18 +203,21 @@ async function getDeviceById(req, res) {
        FROM maintenance_logs m
        JOIN users u ON m.technician_id = u.user_id
        WHERE m.device_id = $1
-       ORDER BY m.date_performed DESC LIMIT 5`,
+       ORDER BY m.date_performed DESC`,
       [id]
     );
+
+    const formattedLoans = loanRes.rows.map((l) => ({
+      ...l,
+      selected_accessories: parseAccessories(l.selected_accessories),
+    }));
 
     return res.json({
       success: true,
       device: {
         ...formatDeviceRow(devRes.rows[0]),
-        recent_loans: loanRes.rows.map((l) => ({
-          ...l,
-          selected_accessories: parseAccessories(l.selected_accessories),
-        })),
+        loan_history: formattedLoans,
+        recent_loans: formattedLoans,
         maintenance_logs: maintRes.rows
       }
     });
@@ -304,7 +345,10 @@ async function updateDevice(req, res) {
     const devWithLoc = await query(
       `SELECT d.*, 
               COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
-              l.name AS location_name, l.code AS location_code, l.floor AS location_floor
+              l.name AS location_name, l.code AS location_code, l.floor AS location_floor,
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id) AS loan_count,
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
+              (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
        FROM devices d
        LEFT JOIN locations l ON d.location_id = l.location_id
        WHERE d.device_id = $1`,

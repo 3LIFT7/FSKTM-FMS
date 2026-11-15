@@ -5,9 +5,12 @@ import {
   SearchOutlined,
   AppstoreAddOutlined,
   EnvironmentOutlined,
+  HistoryOutlined,
+  StarFilled,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import BorrowDeviceModal from './BorrowDeviceModal';
+import DeviceDetailModal from '../../components/DeviceDetailModal';
 import StatusTag from '../../components/StatusTag';
 import PageHeader from '../../components/PageHeader';
 
@@ -21,6 +24,7 @@ export default function DeviceCatalog() {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedDeviceForLoan, setSelectedDeviceForLoan] = useState(null);
+  const [viewingDeviceHistory, setViewingDeviceHistory] = useState(null);
 
   useEffect(() => {
     fetchDevices();
@@ -125,6 +129,7 @@ export default function DeviceCatalog() {
           {filteredDevices.map(d => {
             const isAvailable = d.status === 'available';
             const accessories = Array.isArray(d.accessories) ? d.accessories : [];
+            const loanCount = Number(d.loan_count || 0);
             return (
               <Col xs={24} sm={12} lg={8} xl={6} key={d.device_id}>
                 <Card
@@ -178,7 +183,15 @@ export default function DeviceCatalog() {
                         <LaptopOutlined />
                       </div>
                     )}
-                    <StatusTag status={d.status} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <StatusTag status={d.status} />
+                      {d.avg_rating && (
+                        <Tag color="gold" style={{ margin: 0, fontWeight: 700, fontSize: 11, borderRadius: 6 }}>
+                          <StarFilled style={{ color: '#F59E0B', marginRight: 3 }} />
+                          {d.avg_rating} ({d.rating_count})
+                        </Tag>
+                      )}
+                    </div>
                   </div>
 
                   <Text strong style={{ fontSize: 15, color: '#0F172A', lineHeight: 1.3 }}>
@@ -231,15 +244,23 @@ export default function DeviceCatalog() {
                       </Text>
                     </div>
 
-                    <Button
-                      type="primary"
-                      block
-                      disabled={!isAvailable}
-                      onClick={() => setSelectedDeviceForLoan(d)}
-                      style={{ fontWeight: 600 }}
-                    >
-                      {isAvailable ? 'Request Loan' : d.status === 'checked_out' ? 'Checked Out' : 'Unavailable'}
-                    </Button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <Button
+                        icon={<HistoryOutlined />}
+                        onClick={() => setViewingDeviceHistory(d)}
+                        title="View Device Borrowing History & Specs"
+                      >
+                        History ({loanCount})
+                      </Button>
+                      <Button
+                        type="primary"
+                        style={{ flex: 1, fontWeight: 600 }}
+                        disabled={!isAvailable}
+                        onClick={() => setSelectedDeviceForLoan(d)}
+                      >
+                        {isAvailable ? 'Request Loan' : d.status === 'checked_out' ? 'Checked Out' : 'Unavailable'}
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               </Col>
@@ -254,6 +275,16 @@ export default function DeviceCatalog() {
         onClose={() => setSelectedDeviceForLoan(null)}
         onRequested={() => fetchDevices()}
       />
+
+      {viewingDeviceHistory && (
+        <DeviceDetailModal
+          isOpen={Boolean(viewingDeviceHistory)}
+          device={viewingDeviceHistory}
+          initialTab="history"
+          canEdit={false}
+          onClose={() => setViewingDeviceHistory(null)}
+        />
+      )}
     </div>
   );
 }

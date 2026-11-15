@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Row, Col, Card, Statistic, Table, Button, Popconfirm, Empty, Space, Typography, Tag, message } from 'antd';
+import { Row, Col, Card, Statistic, Table, Button, Popconfirm, Empty, Space, Typography, Tag, Modal, Form, Rate, Input, message } from 'antd';
 import {
   CalendarOutlined,
   LaptopOutlined,
   AlertOutlined,
   CompassOutlined,
   PlusOutlined,
+  StarFilled,
+  StarOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import BookRoomModal from '../booking/BookRoomModal';
@@ -14,6 +16,7 @@ import StatusTag from '../../components/StatusTag';
 import { formatDateTime } from '../../utils/date';
 
 const { Title, Text, Paragraph } = Typography;
+const RATING_DESC = ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -22,6 +25,11 @@ export default function StudentDashboard() {
   const [myReports, setMyReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+
+  // Rating modal state for returned devices
+  const [ratingLoan, setRatingLoan] = useState(null);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingForm] = Form.useForm();
 
   useEffect(() => {
     fetchStudentData();
@@ -71,6 +79,31 @@ export default function StudentDashboard() {
       }
     } catch (err) {
       message.error(err.message);
+    }
+  }
+
+  async function handleSubmitRating(values) {
+    if (!ratingLoan) return;
+    setRatingSubmitting(true);
+    try {
+      const res = await fetch(`/api/device-loans/${ratingLoan.loan_id}/rating`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          rating: values.rating,
+          review: values.review,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit rating');
+      message.success('Thank you! Your device rating has been saved.');
+      setRatingLoan(null);
+      fetchStudentData();
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setRatingSubmitting(false);
     }
   }
 
@@ -172,10 +205,50 @@ export default function StudentDashboard() {
       ),
     },
     {
-      title: 'Status',
+      title: 'Status & Rating',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => <StatusTag status={status} />,
+      render: (status, record) => {
+        const ratingVal = record.device_rating || record.return_rating;
+        return (
+          <Space direction="vertical" size={4}>
+            <StatusTag status={status} />
+            {status === 'returned' && (
+              <div>
+                {ratingVal ? (
+                  <Tag
+                    color="gold"
+                    style={{ margin: 0, cursor: 'pointer', fontWeight: 700, fontSize: 11 }}
+                    onClick={() => {
+                      setRatingLoan(record);
+                      ratingForm.setFieldsValue({
+                        rating: record.device_rating || record.return_rating || 5,
+                        review: record.device_review || '',
+                      });
+                    }}
+                    title="Click to update your device rating"
+                  >
+                    <StarFilled style={{ color: '#F59E0B', marginRight: 3 }} />
+                    {ratingVal} / 5
+                  </Tag>
+                ) : (
+                  <Button
+                    size="small"
+                    icon={<StarOutlined />}
+                    onClick={() => {
+                      setRatingLoan(record);
+                      ratingForm.setFieldsValue({ rating: 5, review: '' });
+                    }}
+                    style={{ color: '#B45309', borderColor: '#FDE68A', background: '#FFFBEB', fontWeight: 600, fontSize: 11 }}
+                  >
+                    Rate Device
+                  </Button>
+                )}
+              </div>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: 'Pickup Location',
@@ -327,6 +400,58 @@ export default function StudentDashboard() {
         onClose={() => setIsBookModalOpen(false)}
         onBookingCreated={() => fetchStudentData()}
       />
+
+      {/* Rate Returned Device Modal */}
+      <Modal
+        open={Boolean(ratingLoan)}
+        onCancel={() => setRatingLoan(null)}
+        onOk={() => ratingForm.submit()}
+        okText="Submit Rating"
+        confirmLoading={ratingSubmitting}
+        centered
+        destroyOnClose
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <StarFilled style={{ color: '#F59E0B' }} />
+            <span>Rate Returned Device — {ratingLoan?.device_name}</span>
+          </div>
+        }
+      >
+        {ratingLoan && (
+          <Form form={ratingForm} layout="vertical" onFinish={handleSubmitRating} style={{ marginTop: 12 }}>
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: '10px 12px', marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, color: '#0F172A' }}>{ratingLoan.device_name}</div>
+              <div style={{ fontSize: 12, color: '#64748B', fontFamily: 'monospace' }}>
+                SN: {ratingLoan.serial_number} • Loan #{ratingLoan.loan_id}
+              </div>
+              {ratingLoan.return_condition && (
+                <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>
+                  Technician Return Condition: <strong>{ratingLoan.return_condition}</strong>
+                  {ratingLoan.return_rating ? ` (${ratingLoan.return_rating}/5 ★)` : ''}
+                </div>
+              )}
+            </div>
+
+            <Form.Item
+              name="rating"
+              label="Your Rating for This Device (1–5 Stars)"
+              rules={[{ required: true, message: 'Please select a star rating' }]}
+            >
+              <Rate tooltips={RATING_DESC} style={{ fontSize: 28 }} />
+            </Form.Item>
+
+            <Form.Item
+              name="review"
+              label="Feedback / Review on Device Performance (optional)"
+            >
+              <Input.TextArea
+                rows={3}
+                placeholder="Share how well the device and accessories worked during your loan..."
+              />
+            </Form.Item>
+          </Form>
+        )}
+      </Modal>
     </div>
   );
 }
