@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Empty, Checkbox, Descriptions, Rate, message } from 'antd';
+import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Empty, Checkbox, Descriptions, message } from 'antd';
 import {
   LaptopOutlined,
   PlusOutlined,
@@ -39,7 +39,6 @@ const ACCESSORY_PRESETS = [
   'Extra Battery',
 ];
 
-const RATING_DESC = ['Damaged / Poor', 'Below Average', 'Fair / Minor Wear', 'Good Condition', 'Excellent / Like New'];
 
 export default function DeviceManage() {
   const { user } = useAuth();
@@ -92,8 +91,21 @@ export default function DeviceManage() {
       const devData = await devRes.json();
       const locData = await locRes.json();
 
-      if (loanData.success) setLoans(loanData.loans);
-      if (devData.success) setDevices(devData.devices);
+      const allLoans = loanData.success ? loanData.loans : [];
+      const approvedCountByDevice = allLoans.reduce((counts, loan) => {
+        if (['approved', 'checked_out', 'returned'].includes(loan.status)) {
+          counts[loan.device_id] = (counts[loan.device_id] || 0) + 1;
+        }
+        return counts;
+      }, {});
+
+      if (loanData.success) setLoans(allLoans);
+      if (devData.success) {
+        setDevices(devData.devices.map((device) => ({
+          ...device,
+          approved_loan_count: approvedCountByDevice[device.device_id] || 0,
+        })));
+      }
       if (locData.success) setLocations(locData.locations);
     } catch (err) {
       console.error(err);
@@ -217,7 +229,6 @@ export default function DeviceManage() {
   const openReturnAndRateModal = (record) => {
     setReturningLoan(record);
     returnForm.setFieldsValue({
-      return_rating: record.return_rating || record.device_rating || 5,
       return_condition: record.return_condition || 'Excellent',
       return_notes: record.return_notes || '',
     });
@@ -274,7 +285,6 @@ export default function DeviceManage() {
     const lecturerEmail = record.lecturer_approved_by_email || record.lecturer_approver_email;
     const techName = record.technician_approver_name || record.approver_name;
     const techEmail = record.technician_approver_email;
-    const effectiveRating = record.return_rating || record.device_rating;
 
     return (
       <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 16px' }}>
@@ -578,7 +588,7 @@ export default function DeviceManage() {
       key: 'name',
       render: (_, record) => {
         const accessories = Array.isArray(record.accessories) ? record.accessories : [];
-        const loanCount = Number(record.loan_count || 0);
+        const loanCount = Number(record.approved_loan_count || 0);
         return (
           <div
             style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
@@ -696,7 +706,7 @@ export default function DeviceManage() {
             title="View Device Borrowing History"
             style={{ color: '#1E3A8A', borderColor: '#BFDBFE', background: '#EFF6FF', fontWeight: 600 }}
           >
-            History ({record.loan_count || 0})
+            History ({record.approved_loan_count || 0})
           </Button>
           <Button
             size="small"
@@ -880,7 +890,7 @@ export default function DeviceManage() {
                           { value: 'All', label: 'All Devices (Complete History)' },
                           ...devices.map((d) => ({
                             value: d.device_id,
-                            label: `${d.name} (${d.serial_number}) — ${d.loan_count || 0} record(s)`,
+                            label: `${d.name} (${d.serial_number}) — ${d.approved_loan_count || 0} record(s)`,
                           })),
                         ]}
                       />
@@ -923,7 +933,7 @@ export default function DeviceManage() {
         />
       </Card>
 
-      {/* Receive Returned Device & Rate Condition Modal */}
+      {/* Receive Returned Device Modal */}
       <Modal
         open={Boolean(returningLoan)}
         title={
@@ -931,12 +941,12 @@ export default function DeviceManage() {
             <CheckCircleOutlined style={{ color: '#059669' }} />
             <span>
               {returningLoan?.status === 'returned'
-                ? `Rate Returned Device — Loan #${returningLoan?.loan_id}`
-                : `Receive Returned Device & Rate Condition — Loan #${returningLoan?.loan_id}`}
+                ? `Update Returned Device — Loan #${returningLoan?.loan_id}`
+                : `Receive Returned Device — Loan #${returningLoan?.loan_id}`}
             </span>
           </div>
         }
-        okText={returningLoan?.status === 'returned' ? 'Save Rating' : 'Confirm Return & Save Rating'}
+        okText={returningLoan?.status === 'returned' ? 'Save Return Details' : 'Confirm Return'}
         cancelText="Cancel"
         confirmLoading={actionLoadingId === returningLoan?.loan_id}
         onCancel={() => setReturningLoan(null)}
@@ -971,7 +981,6 @@ export default function DeviceManage() {
               form={returnForm}
               layout="vertical"
               initialValues={{
-                return_rating: 5,
                 return_condition: 'Excellent',
                 return_notes: '',
               }}
@@ -986,24 +995,16 @@ export default function DeviceManage() {
               }}
             >
               <Form.Item
-                name="return_rating"
-                label="Rate Returned Device Condition (1–5 Stars)"
-                rules={[{ required: true, message: 'Please select a star rating for the returned device' }]}
-              >
-                <Rate tooltips={RATING_DESC} style={{ fontSize: 28 }} />
-              </Form.Item>
-
-              <Form.Item
                 name="return_condition"
                 label="Returned Equipment Condition"
                 rules={[{ required: true }]}
               >
                 <Select>
-                  <Select.Option value="Excellent">Excellent / Like New (All items complete)</Select.Option>
-                  <Select.Option value="Good">Good / Normal Operational Condition</Select.Option>
-                  <Select.Option value="Fair / Minor Wear">Fair / Minor Cosmetic Wear</Select.Option>
-                  <Select.Option value="Missing Accessory">Missing Optional Accessory</Select.Option>
-                  <Select.Option value="Damaged">Damaged / Requires Maintenance</Select.Option>
+                  <Select.Option value="Excellent">Excellent</Select.Option>
+                  <Select.Option value="Good">Good</Select.Option>
+                  <Select.Option value="Fair / Minor Wear">Fair</Select.Option>
+                  <Select.Option value="Missing Accessory">Missing accessory</Select.Option>
+                  <Select.Option value="Damaged">Damaged</Select.Option>
                 </Select>
               </Form.Item>
 

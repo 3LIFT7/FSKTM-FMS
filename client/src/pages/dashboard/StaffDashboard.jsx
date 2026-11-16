@@ -467,12 +467,13 @@ export default function StaffDashboard() {
           pagination={{ pageSize: 5 }}
           locale={{ emptyText: <Empty description="No pending room reservations awaiting approval" /> }}
           size="small"
+          scroll={{ x: 'max-content' }}
         />
       </Card>
 
       {/* Two Columns: Active Breakdown Tickets & Maintenance Locations */}
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={14}>
+        <Col xs={24} xl={14} lg={24}>
           <Card
             title={
               <Space>
@@ -493,11 +494,12 @@ export default function StaffDashboard() {
               pagination={{ pageSize: 4, simple: true }}
               locale={{ emptyText: <Empty description="No open breakdown tickets" /> }}
               size="small"
+              scroll={{ x: 'max-content' }}
             />
           </Card>
         </Col>
 
-        <Col xs={24} lg={10}>
+        <Col xs={24} xl={10} lg={24}>
           <Card
             title={
               <Space>

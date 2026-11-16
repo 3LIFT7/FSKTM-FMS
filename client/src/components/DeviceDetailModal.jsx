@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Modal, Descriptions, Tag, Button, Typography, Space, message, Tabs, Empty, Spin, Row, Col, Rate } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { Modal, Descriptions, Tag, Button, Typography, Space, message, Tabs, Empty, Spin, Rate, Table } from 'antd';
 import {
   LaptopOutlined,
   EditOutlined,
@@ -9,13 +9,8 @@ import {
   CopyOutlined,
   AppstoreAddOutlined,
   HistoryOutlined,
-  UserOutlined,
-  ClockCircleOutlined,
-  CheckCircleOutlined,
-  SafetyCertificateOutlined,
-  MailOutlined,
-  IdcardOutlined,
   StarFilled,
+  PrinterOutlined,
 } from '@ant-design/icons';
 import StatusTag from './StatusTag';
 import { formatDateTime } from '../utils/date';
@@ -36,6 +31,7 @@ export default function DeviceDetailModal({
   const [activeTab, setActiveTab] = useState(isStaff ? initialTab : 'details');
   const [fullDevice, setFullDevice] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const historyPrintRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && device) {
@@ -73,10 +69,53 @@ export default function DeviceDetailModal({
     ? currentDevice.recent_loans
     : [];
 
-  const totalBorrowed = loanHistory.length;
-  const activeCount = loanHistory.filter((l) => ['checked_out', 'approved'].includes(l.status)).length;
-  const returnedCount = loanHistory.filter((l) => l.status === 'returned').length;
-  const pendingCount = loanHistory.filter((l) => ['pending', 'pending_lecturer', 'pending_technician'].includes(l.status)).length;
+  // Keep the complete approved loan lifecycle; omit requests still awaiting approval and rejected loans.
+  const approvedLoanHistory = loanHistory.filter((loan) =>
+    ['approved', 'checked_out', 'returned'].includes(loan.status)
+  );
+  const totalBorrowed = approvedLoanHistory.length;
+
+  function printBorrowingHistory() {
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+    if (!printWindow) {
+      message.error('Allow pop-ups to print the borrowing history.');
+      return;
+    }
+
+    const doc = printWindow.document;
+    doc.title = `${currentDevice.name || 'Device'} - Borrowing History`;
+    const style = doc.createElement('style');
+    style.textContent = `
+      @page { margin: 16mm; }
+      body { font-family: Arial, sans-serif; color: #172033; font-size: 12px; margin: 0; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .print-subtitle { color: #64748b; margin-bottom: 18px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 8px; border: 1px solid #d9d9d9; text-align: left; vertical-align: top; }
+      th { background: #fafafa; font-weight: 600; }
+      .ant-pagination { display: none; }
+    `;
+    doc.head.appendChild(style);
+
+    const header = doc.createElement('header');
+    const title = doc.createElement('h1');
+    title.textContent = `${currentDevice.name || 'Device'} - Borrowing History`;
+    const subtitle = doc.createElement('div');
+    subtitle.className = 'print-subtitle';
+    subtitle.textContent = `Serial: ${currentDevice.serial_number || '—'}  |  Asset ID: #${currentDevice.device_id}  |  ${totalBorrowed} record${totalBorrowed === 1 ? '' : 's'}`;
+    header.append(title, subtitle);
+
+    const content = doc.createElement('main');
+    content.innerHTML = historyPrintRef.current?.innerHTML || '';
+    doc.body.append(header, content);
+
+    printWindow.addEventListener('load', () => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    }, { once: true });
+    doc.close();
+  }
 
   const copyBarcode = () => {
     if (currentDevice.barcode) {
@@ -91,6 +130,55 @@ export default function DeviceDetailModal({
       message.success(`Copied serial number "${currentDevice.serial_number}" to clipboard!`);
     }
   };
+
+  const historyColumns = [
+    {
+      title: 'Loan',
+      dataIndex: 'loan_id',
+      key: 'loan_id',
+      width: 78,
+      render: (loanId) => <Text code>#{loanId}</Text>,
+    },
+    {
+      title: 'Borrower',
+      key: 'borrower',
+      width: 190,
+      render: (_, loan) => (
+        <div>
+          <Text strong>{loan.borrower_name || '—'}</Text>
+          <div><Text type="secondary" style={{ fontSize: 12 }}>{loan.matric_or_staff_id || loan.user_role || '—'}</Text></div>
+        </div>
+      ),
+    },
+    {
+      title: 'Purpose',
+      dataIndex: 'purpose',
+      key: 'purpose',
+      ellipsis: true,
+      render: (purpose) => purpose || '—',
+    },
+    {
+      title: 'Borrowed',
+      dataIndex: 'checkout_time',
+      key: 'checkout_time',
+      width: 132,
+      render: (time) => time ? formatDateTime(time) : 'Approved, not collected',
+    },
+    {
+      title: 'Returned',
+      dataIndex: 'actual_return_time',
+      key: 'actual_return_time',
+      width: 132,
+      render: (time, loan) => time ? formatDateTime(time) : loan.status === 'checked_out' ? 'On loan' : '—',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 110,
+      render: (status) => <StatusTag status={status} />,
+    },
+  ];
 
   return (
     <Modal
@@ -436,260 +524,30 @@ export default function DeviceDetailModal({
                     </span>
                   ),
                   children: (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 4 }}>
-                {/* Summary KPI Strip */}
-                <Row gutter={[12, 12]}>
-                  <Col xs={12} sm={6}>
-                    <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B', textTransform: 'uppercase' }}>Total Records</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#0F172A' }}>{totalBorrowed}</div>
-                    </div>
-                  </Col>
-                  <Col xs={12} sm={6}>
-                    <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#1E40AF', textTransform: 'uppercase' }}>Active / Checked Out</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#1D4ED8' }}>{activeCount}</div>
-                    </div>
-                  </Col>
-                  <Col xs={12} sm={6}>
-                    <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#065F46', textTransform: 'uppercase' }}>Returned</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>{returnedCount}</div>
-                    </div>
-                  </Col>
-                  <Col xs={12} sm={6}>
-                    <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#92400E', textTransform: 'uppercase' }}>Avg Rating</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#D97706' }}>
-                        {currentDevice.avg_rating ? `★ ${currentDevice.avg_rating}` : '—'}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                        <Text type="secondary">{totalBorrowed} approved record{totalBorrowed === 1 ? '' : 's'}</Text>
+                        <Button icon={<PrinterOutlined />} onClick={printBorrowingHistory} disabled={loadingDetails || totalBorrowed === 0}>
+                          Print History
+                        </Button>
+                      </div>
+
+                      <div ref={historyPrintRef}>
+                        {loadingDetails ? (
+                          <div style={{ textAlign: 'center', padding: '40px 0' }}><Spin /></div>
+                        ) : (
+                          <Table
+                            columns={historyColumns}
+                            dataSource={approvedLoanHistory}
+                            rowKey="loan_id"
+                            size="small"
+                            pagination={{ pageSize: 6, hideOnSinglePage: true, showSizeChanger: false }}
+                            scroll={{ x: 720 }}
+                            locale={{ emptyText: <Empty description="No approved borrowing history for this device." /> }}
+                          />
+                        )}
                       </div>
                     </div>
-                  </Col>
-                </Row>
-
-                {loadingDetails ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <Spin />
-                  </div>
-                ) : loanHistory.length === 0 ? (
-                  <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '32px 16px', border: '1px dashed #CBD5E1' }}>
-                    <Empty description="This device has not been borrowed yet. Borrowing records will appear here automatically." />
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 460, overflowY: 'auto', paddingRight: 4 }}>
-                    {loanHistory.map((loan) => {
-                      const selAcc = Array.isArray(loan.selected_accessories) ? loan.selected_accessories : [];
-                      const lecturerName = loan.lecturer_approved_by_name || loan.lecturer_approver_name;
-                      const lecturerEmail = loan.lecturer_approved_by_email || loan.lecturer_approver_email;
-                      const techName = loan.technician_approver_name || loan.approver_name;
-                      const techEmail = loan.technician_approver_email || loan.approver_email;
-                      const effectiveRating = loan.return_rating || loan.device_rating;
-
-                      return (
-                        <div
-                          key={loan.loan_id}
-                          style={{
-                            background: '#FFFFFF',
-                            border: '1px solid #E2E8F0',
-                            borderRadius: 12,
-                            padding: '14px 16px',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                          }}
-                        >
-                          {/* Top Header Row: Loan ID, Borrower, Status */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #F1F5F9' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                              <Tag color="blue" style={{ margin: 0, fontFamily: 'monospace', fontWeight: 700 }}>
-                                Loan #{loan.loan_id}
-                              </Tag>
-                              <div>
-                                <Text strong style={{ fontSize: 14, color: '#0F172A' }}>
-                                  <UserOutlined style={{ marginRight: 5, color: '#2563EB' }} />
-                                  {loan.borrower_name}
-                                </Text>
-                                <Tag color={loan.user_role === 'lecturer' ? 'gold' : 'cyan'} style={{ marginLeft: 8, fontSize: 11, textTransform: 'capitalize' }}>
-                                  {loan.user_role || 'Borrower'}
-                                </Tag>
-                              </div>
-                            </div>
-                            <Space size={6} wrap>
-                              {effectiveRating && (
-                                <Tag color="gold" style={{ margin: 0, fontWeight: 700 }}>
-                                  <StarFilled style={{ color: '#F59E0B', marginRight: 3 }} />
-                                  {effectiveRating} / 5 {loan.return_condition ? `• ${loan.return_condition}` : ''}
-                                </Tag>
-                              )}
-                              {loan.is_overdue && <Tag color="error">OVERDUE</Tag>}
-                              <StatusTag status={loan.status} />
-                            </Space>
-                          </div>
-
-                          {/* Borrower Details Grid */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8, marginBottom: 10, fontSize: 12, color: '#475569', background: '#F8FAFC', padding: '8px 12px', borderRadius: 8 }}>
-                            <div>
-                              <IdcardOutlined style={{ marginRight: 5, color: '#64748B' }} />
-                              <strong>Matric / Staff ID:</strong> <span style={{ fontFamily: 'monospace' }}>{loan.matric_or_staff_id || '—'}</span>
-                            </div>
-                            <div>
-                              <MailOutlined style={{ marginRight: 5, color: '#64748B' }} />
-                              <strong>Email:</strong> {loan.borrower_email || '—'}
-                            </div>
-                            {loan.borrower_department && (
-                              <div>
-                                <strong>Department:</strong> {loan.borrower_department}
-                                {loan.borrower_specialization ? ` (${loan.borrower_specialization})` : ''}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Purpose & Accessories */}
-                          <div style={{ marginBottom: 10, fontSize: 12 }}>
-                            <div style={{ marginBottom: 6 }}>
-                              <strong style={{ color: '#1E293B' }}>Purpose / Project: </strong>
-                              <span style={{ color: '#334155' }}>{loan.purpose || '—'}</span>
-                            </div>
-
-                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                              <strong style={{ color: '#1E293B' }}>Borrowed Accessories: </strong>
-                              {selAcc.length > 0 ? (
-                                selAcc.map((acc) => (
-                                  <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 11, borderRadius: 4 }}>
-                                    + {acc}
-                                  </Tag>
-                                ))
-                              ) : (
-                                <Text type="secondary" style={{ fontSize: 12, fontStyle: 'italic' }}>
-                                  None (Device only)
-                                </Text>
-                              )}
-                            </div>
-
-                            {loan.pickup_location && (
-                              <div style={{ marginBottom: 6 }}>
-                                <EnvironmentOutlined style={{ marginRight: 5, color: '#16A34A' }} />
-                                <strong style={{ color: '#1E293B' }}>Pickup Location: </strong>
-                                <span style={{ color: '#0F172A' }}>{loan.pickup_location}</span>
-                              </div>
-                            )}
-
-                            {/* Post-Return Rating & Feedback Box */}
-                            {(loan.return_rating || loan.device_rating || loan.return_notes || loan.device_review) && (
-                              <div
-                                style={{
-                                  background: '#FFFBEB',
-                                  border: '1px solid #FDE68A',
-                                  borderRadius: 8,
-                                  padding: '8px 12px',
-                                  marginTop: 6,
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                  <strong style={{ color: '#92400E', fontSize: 12 }}>Post-Return Device Rating:</strong>
-                                  <Rate disabled value={Number(effectiveRating || 5)} style={{ fontSize: 13 }} />
-                                  {loan.return_condition && (
-                                    <Tag color="cyan" style={{ margin: 0, fontSize: 11 }}>
-                                      Condition: {loan.return_condition}
-                                    </Tag>
-                                  )}
-                                </div>
-                                {loan.return_notes && (
-                                  <div style={{ fontSize: 12, color: '#78350F', marginTop: 4 }}>
-                                    <strong>Technician Notes:</strong> {loan.return_notes}
-                                  </div>
-                                )}
-                                {loan.device_review && (
-                                  <div style={{ fontSize: 12, color: '#78350F', marginTop: 4 }}>
-                                    <strong>Borrower Review ({loan.device_rating}/5 ★):</strong> {loan.device_review}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Timestamps Grid */}
-                          <div
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))',
-                              gap: 8,
-                              background: '#F0F9FF',
-                              border: '1px solid #E0F2FE',
-                              borderRadius: 8,
-                              padding: '8px 12px',
-                              fontSize: 11,
-                              marginBottom: (lecturerName || techName) ? 10 : 0,
-                            }}
-                          >
-                            <div>
-                              <div style={{ color: '#64748B', fontWeight: 600 }}>
-                                <ClockCircleOutlined style={{ marginRight: 4 }} />
-                                Requested At
-                              </div>
-                              <div style={{ fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>
-                                {loan.created_at ? formatDateTime(loan.created_at) : '—'}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div style={{ color: '#64748B', fontWeight: 600 }}>
-                                <CheckCircleOutlined style={{ marginRight: 4, color: '#2563EB' }} />
-                                Checked Out At
-                              </div>
-                              <div style={{ fontWeight: 700, color: '#1E3A8A', fontFamily: 'monospace' }}>
-                                {loan.checkout_time ? formatDateTime(loan.checkout_time) : 'Not checked out'}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div style={{ color: '#64748B', fontWeight: 600 }}>
-                                <ClockCircleOutlined style={{ marginRight: 4, color: '#D97706' }} />
-                                Expected Return
-                              </div>
-                              <div style={{ fontWeight: 700, color: '#92400E', fontFamily: 'monospace' }}>
-                                {loan.expected_return_time ? formatDateTime(loan.expected_return_time) : '—'}
-                              </div>
-                            </div>
-
-                            <div>
-                              <div style={{ color: '#64748B', fontWeight: 600 }}>
-                                <CheckCircleOutlined style={{ marginRight: 4, color: '#059669' }} />
-                                Actual Returned At
-                              </div>
-                              <div style={{ fontWeight: 700, color: loan.actual_return_time ? '#065F46' : '#64748B', fontFamily: 'monospace' }}>
-                                {loan.actual_return_time
-                                  ? formatDateTime(loan.actual_return_time)
-                                  : loan.status === 'checked_out'
-                                  ? 'Currently on loan'
-                                  : '—'}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Approval Chain */}
-                          {(lecturerName || techName) && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 11, color: '#475569', paddingTop: 6 }}>
-                              {lecturerName && (
-                                <div>
-                                  <SafetyCertificateOutlined style={{ marginRight: 4, color: '#D97706' }} />
-                                  <strong>Lecturer Approver:</strong> {lecturerName}
-                                  {lecturerEmail ? ` (${lecturerEmail})` : ''}
-                                </div>
-                              )}
-                              {techName && (
-                                <div>
-                                  <SafetyCertificateOutlined style={{ marginRight: 4, color: '#16A34A' }} />
-                                  <strong>Staff / Technician Approver:</strong> {techName}
-                                  {techEmail ? ` (${techEmail})` : ''}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             ),
           },
               ]

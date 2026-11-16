@@ -149,7 +149,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
       {/* Responsive Sidebar Container: Fixed slide-over drawer on phones/tablets (<1024px), docked sidebar on desktops (>=1024px) */}
       <aside
-        className={`fixed lg:static top-0 bottom-0 left-0 z-50 lg:z-auto w-72 lg:w-64 bg-white border-r border-slate-200 flex-shrink-0 min-h-screen lg:min-h-[calc(100vh-4rem)] p-4 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
+        className={`fixed lg:sticky top-0 bottom-0 left-0 z-50 lg:z-auto w-72 lg:w-64 bg-white border-r border-slate-200 flex-shrink-0 h-screen p-4 flex flex-col justify-between transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         }`}
       >

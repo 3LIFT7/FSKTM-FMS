@@ -153,10 +153,13 @@ export default function StaffLayout() {
           collapsedWidth={80}
           style={{
             background: '#172554',
-            position: 'sticky',
+            position: 'fixed',
+            left: 0,
             top: 0,
+            bottom: 0,
             height: '100vh',
             zIndex: 101,
+            boxShadow: '2px 0 8px rgba(0,0,0,0.15)',
           }}
         >
           {/* Brand header */}
@@ -267,7 +270,13 @@ export default function StaffLayout() {
         </div>
       </Drawer>
 
-      <Layout>
+      <Layout
+        style={{
+          marginLeft: !isPhone ? (collapsed ? 80 : 250) : 0,
+          transition: 'margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          minHeight: '100vh',
+        }}
+      >
         <Header
           style={{
             padding: '0 16px',

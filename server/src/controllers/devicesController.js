@@ -91,7 +91,7 @@ async function getAllDevices(req, res) {
         l.name AS location_name,
         l.code AS location_code,
         l.floor AS location_floor,
-        (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id) AS loan_count,
+        (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND db.status IN ('approved', 'checked_out', 'returned')) AS loan_count,
         (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
         (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
       FROM devices d
@@ -152,7 +152,7 @@ async function getDeviceById(req, res) {
       `SELECT d.*, 
               COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
               l.name AS location_name, l.code AS location_code, l.floor AS location_floor,
-              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id) AS loan_count,
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND db.status IN ('approved', 'checked_out', 'returned')) AS loan_count,
               (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
               (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
        FROM devices d
@@ -361,7 +361,7 @@ async function updateDevice(req, res) {
       `SELECT d.*, 
               COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
               l.name AS location_name, l.code AS location_code, l.floor AS location_floor,
-              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id) AS loan_count,
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND db.status IN ('approved', 'checked_out', 'returned')) AS loan_count,
               (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
               (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
        FROM devices d

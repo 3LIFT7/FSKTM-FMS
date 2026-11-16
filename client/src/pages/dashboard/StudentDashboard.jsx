@@ -96,6 +96,7 @@ export default function StudentDashboard() {
       title: 'Facility',
       dataIndex: 'location_name',
       key: 'location_name',
+      width: '22%',
       render: (text, record) => (
         <div>
           <Text strong>{text}</Text>
@@ -108,14 +109,16 @@ export default function StudentDashboard() {
       dataIndex: 'purpose',
       key: 'purpose',
       ellipsis: true,
+      width: '18%',
     },
     {
       title: 'Time Window',
       key: 'time',
+      width: '30%',
       sorter: (a, b) => new Date(a.start_time) - new Date(b.start_time),
       defaultSortOrder: 'descend',
       render: (_, record) => (
-        <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
+        <span style={{ fontSize: 12, fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
           {formatDateTime(record.start_time)} &rarr; {formatDateTime(record.end_time)}
         </span>
       ),
@@ -124,11 +127,13 @@ export default function StudentDashboard() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
+      width: '16%',
       render: (status) => <StatusTag status={status} />,
     },
     {
       title: 'Action',
       key: 'action',
+      width: '14%',
       render: (_, record) => {
         if (record.status === 'rejected' || record.status === 'cancelled') return null;
         return (
@@ -154,6 +159,7 @@ export default function StudentDashboard() {
       title: 'Device',
       dataIndex: 'device_name',
       key: 'device_name',
+      width: '30%',
       render: (text, record) => {
         const selAcc = Array.isArray(record.selected_accessories) ? record.selected_accessories : [];
         return (
@@ -179,11 +185,12 @@ export default function StudentDashboard() {
       title: 'Return Deadline',
       dataIndex: 'expected_return_time',
       key: 'expected_return_time',
+      width: '22%',
       sorter: (a, b) => new Date(a.expected_return_time) - new Date(b.expected_return_time),
       defaultSortOrder: 'descend',
       render: (time, record) => (
-        <Space orientation="vertical" size={2}>
-          <span style={{ fontSize: 12 }}>{formatDateTime(time)}</span>
+        <Space direction="vertical" size={2}>
+          <span style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{formatDateTime(time)}</span>
           {record.is_overdue && <Tag color="error">Overdue</Tag>}
         </Space>
       ),
@@ -192,13 +199,19 @@ export default function StudentDashboard() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
+      width: '27%',
       render: (status) => <StatusTag status={status} />,
     },
     {
       title: 'Pickup Location',
       dataIndex: 'pickup_location',
       key: 'pickup_location',
-      render: (location) => location || <Text type="secondary">Pending technician approval</Text>,
+      width: '21%',
+      render: (location) => (
+        <Text type="secondary" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+          {location || 'Pending technician approval'}
+        </Text>
+      ),
     },
   ];
 
@@ -290,7 +303,7 @@ export default function StudentDashboard() {
 
       {/* Two Column Layout: Reservations & Equipment Loans */}
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={14}>
+        <Col xs={24} xl={13} lg={24}>
           <Card
             title={
               <Space>
@@ -306,15 +319,17 @@ export default function StudentDashboard() {
               dataSource={myBookings}
               columns={bookingColumns}
               rowKey="booking_id"
+              className="dashboard-compact-table"
               loading={loading}
               pagination={{ pageSize: 4, simple: true }}
               locale={{ emptyText: <Empty description="No room reservations scheduled" /> }}
               size="small"
+              tableLayout="fixed"
             />
           </Card>
         </Col>
 
-        <Col xs={24} lg={10}>
+        <Col xs={24} xl={11} lg={24}>
           <Card
             title={
               <Space>
@@ -330,10 +345,12 @@ export default function StudentDashboard() {
               dataSource={myLoans}
               columns={loanColumns}
               rowKey="loan_id"
+              className="dashboard-compact-table"
               loading={loading}
               pagination={{ pageSize: 4, simple: true }}
               locale={{ emptyText: <Empty description="No hardware loans on record" /> }}
               size="small"
+              tableLayout="fixed"
             />
           </Card>
         </Col>

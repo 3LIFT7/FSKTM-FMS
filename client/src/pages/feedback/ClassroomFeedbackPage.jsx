@@ -24,7 +24,8 @@ import {
   DatePicker,
   TimePicker,
   Checkbox,
-  InputNumber
+  InputNumber,
+  Statistic
 } from 'antd';
 import {
   AlertOutlined,
@@ -325,11 +326,12 @@ export default function ClassroomFeedbackPage() {
 
   return (
     <div
+      className="qr-portal-page"
       style={{
-        maxWidth: 720,
+        maxWidth: 760,
         margin: '0 auto',
-        padding: '16px 14px 60px 14px',
-        fontFamily: "'Inter', sans-serif"
+        padding: '28px 18px 64px',
+        fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
       }}
     >
       {/* Top Mobile Faculty Header */}
@@ -338,8 +340,8 @@ export default function ClassroomFeedbackPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 16,
-          padding: '8px 4px'
+        marginBottom: 20,
+          padding: '8px 2px'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -388,83 +390,35 @@ export default function ClassroomFeedbackPage() {
 
       {/* Classroom Hero Card */}
       <Card
-        style={{
-          borderRadius: 20,
-          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 70%, #1E3A8A 100%)',
-          color: '#FFFFFF',
-          border: 'none',
-          boxShadow: '0 12px 28px rgba(15, 23, 42, 0.25)',
-          marginBottom: 20
-        }}
-        bodyStyle={{ padding: '20px 22px' }}
+        style={{ marginBottom: 16 }}
+        styles={{ body: { padding: 20 } }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <Space size={6} wrap style={{ marginBottom: 6 }}>
-              <Tag
-                color="blue"
-                style={{
-                  background: '#3B82F6',
-                  color: '#FFFFFF',
-                  fontWeight: 800,
-                  fontSize: 13,
-                  border: 'none',
-                  padding: '2px 10px',
-                  borderRadius: 6
-                }}
-              >
-                {location.code}
-              </Tag>
-              <Tag
-                style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  color: '#FFFFFF',
-                  fontWeight: 600,
-                  border: 'none',
-                  borderRadius: 6
-                }}
-              >
-                {location.category || 'Classroom'}
-              </Tag>
+            <Space size={6} wrap style={{ marginBottom: 4 }}>
+              <Tag color="processing">{location.code}</Tag>
+              <Tag>{location.category || 'Classroom'}</Tag>
               <StatusTag status={location.status} />
             </Space>
 
-            <Title level={2} style={{ color: '#FFFFFF', margin: '4px 0 6px 0', fontWeight: 800, fontSize: 'clamp(20px, 5vw, 26px)' }}>
-              {location.name}
-            </Title>
+            <Title level={3} style={{ margin: '4px 0 6px' }}>{location.name}</Title>
 
-            <div style={{ color: '#93C5FD', fontSize: 13, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <Space size={12} wrap>
               <span>
-                <CompassOutlined style={{ marginRight: 4 }} />
+                <CompassOutlined />{' '}
                 {location.floor?.startsWith('Blok') ? location.floor : `Floor ${location.floor}`}
               </span>
-              {location.capacity && (
-                <span>• Capacity: <strong>{location.capacity} seats</strong></span>
-              )}
-            </div>
+              {location.capacity && <Text type="secondary">Capacity: {location.capacity} seats</Text>}
+            </Space>
           </div>
 
-          {/* Average Rating Capsule */}
-          <div
-            style={{
-              background: 'rgba(255, 255, 255, 0.12)',
-              backdropFilter: 'blur(10px)',
-              borderRadius: 14,
-              padding: '10px 16px',
-              textAlign: 'center',
-              border: '1px solid rgba(255, 255, 255, 0.2)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-              <StarOutlined style={{ color: '#FBBF24', fontSize: 18 }} />
-              <span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF' }}>
-                {summary.average_rating > 0 ? summary.average_rating.toFixed(1) : '5.0'}
-              </span>
-            </div>
-            <div style={{ fontSize: 10, color: '#CBD5E1', marginTop: 2 }}>
-              {summary.total_feedback} feedback reviews
-            </div>
-          </div>
+          <Statistic
+            title="Room rating"
+            value={summary.average_rating > 0 ? summary.average_rating : 5}
+            precision={1}
+            prefix={<StarOutlined />}
+            suffix={<Text type="secondary">({summary.total_feedback})</Text>}
+          />
         </div>
 
         {/* Maintenance / Unresolved Issues Warning Banner */}
@@ -472,9 +426,9 @@ export default function ClassroomFeedbackPage() {
           <Alert
             type="warning"
             showIcon
-            style={{ marginTop: 16, borderRadius: 10, background: 'rgba(245, 158, 11, 0.2)', border: '1px solid rgba(245, 158, 11, 0.4)', color: '#FEF3C7' }}
-            message={<span style={{ fontWeight: 700, color: '#FEF3C7' }}>Room Currently Under Maintenance</span>}
-            description={<span style={{ color: '#FDE68A', fontSize: 12 }}>Technicians are currently working in this facility. Some equipment may be offline.</span>}
+            style={{ marginTop: 16 }}
+            message="Room currently under maintenance"
+            description="Technicians are working in this facility. Some equipment may be unavailable."
           />
         )}
       </Card>
@@ -678,12 +632,17 @@ export default function ClassroomFeedbackPage() {
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
-        type="card"
+        type="line"
+        className="qr-portal-tabs"
+        size="small"
+        tabBarGutter={8}
+        more={{ trigger: 'click' }}
         style={{
           background: '#FFFFFF',
           borderRadius: 16,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
-          padding: '12px 16px 24px 16px'
+          border: '1px solid #e5eaf2',
+          boxShadow: '0 8px 26px rgba(15, 23, 42, 0.06)',
+          padding: '8px 20px 22px'
         }}
         items={[
           {
@@ -691,7 +650,7 @@ export default function ClassroomFeedbackPage() {
             label: (
               <span style={{ fontWeight: 700, color: activeTab === 'book' ? '#16A34A' : undefined }}>
                 <CalendarOutlined style={{ color: '#16A34A' }} />
-                <span>Book Classroom</span>
+                <span>Book</span>
               </span>
             ),
             children: (
@@ -951,7 +910,7 @@ export default function ClassroomFeedbackPage() {
             label: (
               <span style={{ fontWeight: 700, color: activeTab === 'report' ? '#DC2626' : undefined }}>
                 <AlertOutlined style={{ color: '#DC2626' }} />
-                <span>Report Breakdown</span>
+                <span>Report issue</span>
                 {summary.open_issues_count > 0 && (
                   <Badge count={summary.open_issues_count} style={{ backgroundColor: '#DC2626', marginLeft: 6 }} />
                 )}
@@ -1108,7 +1067,7 @@ export default function ClassroomFeedbackPage() {
             label: (
               <span style={{ fontWeight: 700, color: activeTab === 'feedback' ? '#D97706' : undefined }}>
                 <StarOutlined style={{ color: '#D97706' }} />
-                <span>Classroom Feedback</span>
+                <span>Feedback</span>
               </span>
             ),
             children: (
@@ -1261,7 +1220,7 @@ export default function ClassroomFeedbackPage() {
             label: (
               <span style={{ fontWeight: 700 }}>
                 <CalendarOutlined style={{ color: '#2563EB' }} />
-                <span>Today's Schedule</span>
+                <span>Schedule</span>
               </span>
             ),
             children: (
@@ -1313,7 +1272,7 @@ export default function ClassroomFeedbackPage() {
             label: (
               <span style={{ fontWeight: 700 }}>
                 <ToolOutlined />
-                <span>Room Reviews ({feedbacks.length})</span>
+                <span>Reviews ({feedbacks.length})</span>
               </span>
             ),
             children: (

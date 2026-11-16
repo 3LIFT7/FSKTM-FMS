@@ -13,6 +13,8 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
   const [assignedDevices, setAssignedDevices] = useState([]);
   const [allInventoryDevices, setAllInventoryDevices] = useState([]);
   const [selectedDeviceToAssign, setSelectedDeviceToAssign] = useState(undefined);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [inventoryError, setInventoryError] = useState('');
 
   useEffect(() => {
     if (isOpen && location) {
@@ -46,25 +48,36 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
   }
 
   async function fetchInventory() {
+    setLoadingInventory(true);
+    setInventoryError('');
     try {
-      const res = await fetch('/api/devices');
+      const res = await fetch('/api/devices', { credentials: 'include' });
       const data = await res.json();
-      if (data.success) {
-        setAllInventoryDevices(data.devices);
-      }
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load hardware inventory.');
+      setAllInventoryDevices(Array.isArray(data.devices) ? data.devices : []);
     } catch (err) {
       console.error(err);
+      setInventoryError(err.message || 'Failed to load hardware inventory.');
+    } finally {
+      setLoadingInventory(false);
     }
   }
 
   function handleAssignDevice() {
-    if (!selectedDeviceToAssign) return;
-    const devId = parseInt(selectedDeviceToAssign, 10);
-    const dev = allInventoryDevices.find(d => d.device_id === devId);
-    if (!dev) return;
+    if (!selectedDeviceToAssign) {
+      message.warning('Select an unassigned hardware item first.');
+      return;
+    }
+    const dev = allInventoryDevices.find(d => String(d.device_id) === String(selectedDeviceToAssign));
+    if (!dev) {
+      message.error('That hardware item is no longer available. Refresh the facility editor and try again.');
+      fetchInventory();
+      return;
+    }
 
-    if (!assignedDevices.some(d => d.device_id === devId)) {
+    if (!assignedDevices.some(d => String(d.device_id) === String(dev.device_id))) {
       setAssignedDevices(prev => [...prev, dev]);
+      message.success('Item added. Click Save Facility Changes to apply the assignment.');
     }
     setSelectedDeviceToAssign(undefined);
   }
@@ -220,12 +233,6 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
             fieldName="image_url"
             label="Facility Display Image URL"
             extra="Provide an image URL or click 'Upload File' to select a photo from your computer."
-            presets={[
-              { label: 'FSKTM DK2 Lab', url: 'https://fsktm.um.edu.my/fsktm/images/DEV/DK2.jpg' },
-              { label: 'Computer Lab', url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800' },
-              { label: 'Lecture Theatre', url: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?w=800' },
-              { label: 'Seminar Room', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800' },
-            ]}
             saveReminder="Click 'Save Facility Changes' below to apply this image to the facility."
           />
 
@@ -241,19 +248,31 @@ export default function EditRoomModal({ isOpen, onClose, location, onSaved }) {
                 style={{ flex: 1 }}
                 value={selectedDeviceToAssign}
                 onChange={setSelectedDeviceToAssign}
+                loading={loadingInventory}
+                disabled={loadingInventory || Boolean(inventoryError)}
+                notFoundContent={inventoryError || (loadingInventory ? 'Loading inventory…' : 'No unassigned hardware available')}
                 showSearch
                 filterOption={(input, opt) => (opt?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                 options={allInventoryDevices
-                  .filter(d => !assignedDevices.some(ad => ad.device_id === d.device_id))
+                  .filter(d => (d.location_id === null || d.location_id === undefined) && !assignedDevices.some(ad => String(ad.device_id) === String(d.device_id)))
                   .map(d => ({
                     value: String(d.device_id),
                     label: `${d.name} (${d.serial_number}${d.barcode ? ` • ${d.barcode}` : ''})`,
                   }))}
               />
-              <Button icon={<PlusOutlined />} onClick={handleAssignDevice}>
+              <Button htmlType="button" icon={<PlusOutlined />} onClick={handleAssignDevice} disabled={loadingInventory || Boolean(inventoryError)}>
                 Assign Item
               </Button>
             </div>
+            {inventoryError && (
+              <Alert
+                type="error"
+                showIcon
+                message={inventoryError}
+                action={<Button size="small" onClick={fetchInventory}>Retry</Button>}
+                style={{ marginBottom: 12 }}
+              />
+            )}
 
             <Table
               dataSource={assignedDevices}

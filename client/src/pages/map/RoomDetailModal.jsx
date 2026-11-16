@@ -250,7 +250,7 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
             {/* Action Buttons based on User Role */}
             <div style={{ marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #F1F5F9' }}>
               <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                {data.status !== 'maintenance' ? (
+                {!isStaff && (data.status !== 'maintenance' ? (
                   <Button
                     type="primary"
                     block
@@ -268,7 +268,7 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
                   <Button block size="large" disabled>
                     Unavailable for Booking (Under Maintenance)
                   </Button>
-                )}
+                ))}
 
                 {isStaff && (
                   <Popconfirm
@@ -293,19 +293,30 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
                   </Popconfirm>
                 )}
 
-                <Button
-                  block
-                  icon={<QrcodeOutlined />}
-                  onClick={() => setIsQRPlacardOpen(true)}
-                  style={{
-                    fontWeight: 600,
-                    color: '#1E3A8A',
-                    borderColor: '#93C5FD',
-                    background: '#EFF6FF'
-                  }}
-                >
-                  View / Print Classroom QR Placard
-                </Button>
+                {isStaff ? (
+                  <Button
+                    block
+                    icon={<QrcodeOutlined />}
+                    onClick={() => setIsQRPlacardOpen(true)}
+                    style={{
+                      fontWeight: 600,
+                      color: '#1E3A8A',
+                      borderColor: '#93C5FD',
+                      background: '#EFF6FF'
+                    }}
+                  >
+                    View / Print Classroom QR Placard
+                  </Button>
+                ) : (
+                  <Button
+                    block
+                    icon={<QrcodeOutlined />}
+                    href={`/qr/${encodeURIComponent(data.code || data.location_id)}`}
+                    style={{ fontWeight: 600 }}
+                  >
+                    Open Quick QR Portal
+                  </Button>
+                )}
               </Space>
             </div>
           </div>
@@ -313,14 +324,18 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
       </Drawer>
 
       {/* Classroom QR Placard Modal */}
-      {isQRPlacardOpen && data && (
+      {isStaff && isQRPlacardOpen && data && (
         <Modal
           open={isQRPlacardOpen}
           onCancel={() => setIsQRPlacardOpen(false)}
           footer={null}
-          width={680}
+          width={720}
           centered
+          zIndex={1200}
           destroyOnClose
+          getContainer={() => document.body}
+          className="qr-placard-modal"
+          styles={{ body: { padding: 16 } }}
         >
           <ClassroomQRPlacard location={data} />
         </Modal>

@@ -5,6 +5,14 @@ let bookingColumnsEnsured = false;
 async function ensureBookingColumns() {
   if (bookingColumnsEnsured) return;
   try {
+    // Older databases may have kept course fields NOT NULL even though room
+    // bookings now allow staff reservations without course details.
+    await exec(`
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS course_id VARCHAR(50);
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS course_name VARCHAR(255);
+      ALTER TABLE location_bookings ALTER COLUMN course_id DROP NOT NULL;
+      ALTER TABLE location_bookings ALTER COLUMN course_name DROP NOT NULL;
+    `);
     await exec(`
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS lecturer_name VARCHAR(255);
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
@@ -179,14 +187,14 @@ async function createBooking(req, res) {
       return res.status(403).json({ error: 'Recurring bookings are reserved for Academic Lecturers and Lab Managers.' });
     }
 
-    if (!course_id?.trim() || !course_name?.trim()) {
-      return res.status(400).json({ error: 'Course code and course name are required for all bookings.' });
+    const isStaff = ['technician', 'manager'].includes(userRole);
+    if (!isStaff && (!course_id?.trim() || !course_name?.trim())) {
+      return res.status(400).json({ error: 'Course code and course name are required for student and lecturer bookings.' });
     }
 
     // Booking approval policy:
     // Staff (technicians, managers) bookings are pre-approved.
     // Student & Lecturer bookings require Administrator approval.
-    const isStaff = ['technician', 'manager'].includes(userRole);
     const initialStatus = isStaff ? 'approved' : 'pending';
     const approvedBy = isStaff ? userId : null;
 

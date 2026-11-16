@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, Form, Select, DatePicker, TimePicker, Input, Switch, Alert, Button, Space, Typography, Tag, Row, Col, message } from 'antd';
+import { Modal, Form, Select, DatePicker, TimePicker, Input, InputNumber, Switch, Alert, Button, Space, Typography, Tag, Row, Col, message } from 'antd';
 import {
   CalendarOutlined,
   ClockCircleOutlined,
@@ -16,6 +16,7 @@ const { Text, Paragraph } = Typography;
 
 export default function BookRoomModal({ isOpen, onClose, initialLocation, initialSlot, onBookingCreated }) {
   const { user, isLecturer, isStaff } = useAuth();
+  const courseDetailsRequired = !isStaff;
   const [form] = Form.useForm();
 
   const [locations, setLocations] = useState([]);
@@ -79,6 +80,7 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
         location_id: locId,
         date: targetDate,
         timeRange: [targetDate.hour(startHour).minute(0), targetDate.hour(endHour).minute(0)],
+        weeks: 14,
       });
     }
   }, [isOpen, initialLocation, initialSlot, isLecturer, form]);
@@ -292,8 +294,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
               <Col xs={24} sm={10}>
                 <Form.Item
                   name="course_id"
-                  label="Course Code"
-                  rules={[{ required: true, message: 'Course Code is required' }]}
+                  label={isStaff ? 'Course Code (optional)' : 'Course Code'}
+                  rules={[{ required: courseDetailsRequired, message: 'Course Code is required' }]}
                 >
                   <Input style={{ textTransform: 'uppercase' }} />
                 </Form.Item>
@@ -301,8 +303,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
               <Col xs={24} sm={14}>
                 <Form.Item
                   name="course_name"
-                  label="Course Name"
-                  rules={[{ required: true, message: 'Course Name is required' }]}
+                  label={isStaff ? 'Course Name (optional)' : 'Course Name'}
+                  rules={[{ required: courseDetailsRequired, message: 'Course Name is required' }]}
                 >
                   <Input />
                 </Form.Item>
@@ -314,8 +316,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
                 <Col xs={24} sm={10}>
                   <Form.Item
                     name="course_id"
-                    label="Course Code"
-                    rules={[{ required: true, message: 'Course Code is required' }]}
+                    label={isStaff ? 'Course Code (optional)' : 'Course Code'}
+                    rules={[{ required: courseDetailsRequired, message: 'Course Code is required' }]}
                   >
                     <Input style={{ textTransform: 'uppercase' }} />
                   </Form.Item>
@@ -323,8 +325,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
                 <Col xs={24} sm={14}>
                   <Form.Item
                     name="course_name"
-                    label="Course Name"
-                    rules={[{ required: true, message: 'Course Name is required' }]}
+                    label={isStaff ? 'Course Name (optional)' : 'Course Name'}
+                    rules={[{ required: courseDetailsRequired, message: 'Course Name is required' }]}
                   >
                     <Input />
                   </Form.Item>
@@ -372,13 +374,26 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <Text strong style={{ fontSize: 13 }}>Repeat for Entire Semester (14 Weeks)</Text>
+                  <Text strong style={{ fontSize: 13 }}>Repeat weekly</Text>
                   <div style={{ fontSize: 11, color: '#64748B' }}>
-                    Auto-schedules recurring bookings on this day each week
+                    Auto-schedules this booking on the same day each week
                   </div>
                 </div>
                 <Switch checked={isRecurring} onChange={setIsRecurring} />
               </div>
+              {isRecurring && (
+                <Form.Item
+                  name="weeks"
+                  label="Number of weeks"
+                  rules={[
+                    { required: true, message: 'Choose how many weeks to repeat this booking' },
+                    { type: 'number', min: 1, max: 18, message: 'Choose between 1 and 18 weeks' },
+                  ]}
+                  style={{ margin: '12px 0 0' }}
+                >
+                  <InputNumber min={1} max={18} precision={0} style={{ width: 120 }} addonAfter="weeks" />
+                </Form.Item>
+              )}
             </div>
           )}
 

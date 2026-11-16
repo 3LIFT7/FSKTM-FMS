@@ -66,6 +66,10 @@ export default function BatchPlacardsModal({ isOpen, onClose, locations = [] }) 
   }, [locations, selectedRoomIds]);
 
   const handlePrintAll = () => {
+    document.body.classList.add('print-batch-placards');
+    window.addEventListener('afterprint', () => {
+      document.body.classList.remove('print-batch-placards');
+    }, { once: true });
     window.print();
   };
 
@@ -77,6 +81,8 @@ export default function BatchPlacardsModal({ isOpen, onClose, locations = [] }) 
       width={900}
       centered
       destroyOnClose
+      getContainer={() => document.body}
+      className="batch-placards-modal"
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <QrcodeOutlined style={{ color: '#1E3A8A', fontSize: 22 }} />
@@ -182,7 +188,7 @@ export default function BatchPlacardsModal({ isOpen, onClose, locations = [] }) 
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
             {selectedLocations.map((loc, idx) => (
-              <div key={loc.location_id}>
+              <div className="placard-print-item" key={loc.location_id}>
                 <ClassroomQRPlacard location={loc} />
                 {idx < selectedLocations.length - 1 && (
                   <Divider className="no-print" style={{ margin: '24px 0' }}>

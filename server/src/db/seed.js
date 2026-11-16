@@ -28,6 +28,8 @@ async function seedDatabase() {
       ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS booking_id INT;
       ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
       ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50) DEFAULT 'on_time';
+      ALTER TABLE location_bookings ALTER COLUMN course_id DROP NOT NULL;
+      ALTER TABLE location_bookings ALTER COLUMN course_name DROP NOT NULL;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT FALSE;
