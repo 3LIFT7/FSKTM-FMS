@@ -164,7 +164,21 @@ async function getDeviceById(req, res) {
       return res.status(404).json({ error: 'Device not found.' });
     }
 
-    // Complete borrowing history for this device with all borrower, approver, and rating details
+    const isStaff = req.user && ['technician', 'manager'].includes(req.user.role);
+
+    if (!isStaff) {
+      return res.json({
+        success: true,
+        device: {
+          ...formatDeviceRow(devRes.rows[0]),
+          loan_history: [],
+          recent_loans: [],
+          maintenance_logs: []
+        }
+      });
+    }
+
+    // Complete borrowing history for this device with all borrower, approver, and rating details (Technician & Lab Manager only)
     const loanRes = await query(
       `SELECT 
          dl.*,

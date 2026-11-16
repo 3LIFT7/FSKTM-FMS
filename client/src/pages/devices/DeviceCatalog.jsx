@@ -18,6 +18,7 @@ const { Text, Paragraph } = Typography;
 
 export default function DeviceCatalog() {
   const { user } = useAuth();
+  const isStaff = ['technician', 'manager'].includes(user?.role);
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -245,13 +246,15 @@ export default function DeviceCatalog() {
                     </div>
 
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <Button
-                        icon={<HistoryOutlined />}
-                        onClick={() => setViewingDeviceHistory(d)}
-                        title="View Device Borrowing History & Specs"
-                      >
-                        History ({loanCount})
-                      </Button>
+                      {isStaff && (
+                        <Button
+                          icon={<HistoryOutlined />}
+                          onClick={() => setViewingDeviceHistory(d)}
+                          title="View Device Borrowing History & Specs"
+                        >
+                          History ({loanCount})
+                        </Button>
+                      )}
                       <Button
                         type="primary"
                         style={{ flex: 1, fontWeight: 600 }}
@@ -276,7 +279,7 @@ export default function DeviceCatalog() {
         onRequested={() => fetchDevices()}
       />
 
-      {viewingDeviceHistory && (
+      {isStaff && viewingDeviceHistory && (
         <DeviceDetailModal
           isOpen={Boolean(viewingDeviceHistory)}
           device={viewingDeviceHistory}

@@ -19,6 +19,7 @@ import {
 } from '@ant-design/icons';
 import StatusTag from './StatusTag';
 import { formatDateTime } from '../utils/date';
+import { useAuth } from '../context/AuthContext';
 
 const { Text, Paragraph } = Typography;
 
@@ -30,17 +31,21 @@ export default function DeviceDetailModal({
   canEdit = true,
   initialTab = 'details',
 }) {
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const { user } = useAuth();
+  const isStaff = ['technician', 'manager'].includes(user?.role);
+  const [activeTab, setActiveTab] = useState(isStaff ? initialTab : 'details');
   const [fullDevice, setFullDevice] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     if (isOpen && device) {
-      setActiveTab(initialTab || 'details');
+      setActiveTab(isStaff ? (initialTab || 'details') : 'details');
       setFullDevice(device);
-      fetchDeviceHistory(device.device_id);
+      if (isStaff) {
+        fetchDeviceHistory(device.device_id);
+      }
     }
-  }, [isOpen, device, initialTab]);
+  }, [isOpen, device, initialTab, isStaff]);
 
   async function fetchDeviceHistory(deviceId) {
     if (!deviceId) return;
@@ -94,7 +99,7 @@ export default function DeviceDetailModal({
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            Asset ID: #{currentDevice.device_id} • Total Loan Records: {totalBorrowed}
+            Asset ID: #{currentDevice.device_id}{isStaff ? ` • Total Loan Records: ${totalBorrowed}` : ''}
           </Text>
           <Space>
             <Button onClick={onClose}>Close</Button>
@@ -418,15 +423,17 @@ export default function DeviceDetailModal({
               </div>
             ),
           },
-          {
-            key: 'history',
-            label: (
-              <span>
-                <HistoryOutlined style={{ marginRight: 6 }} />
-                Borrowing History ({totalBorrowed})
-              </span>
-            ),
-            children: (
+          ...(isStaff
+            ? [
+                {
+                  key: 'history',
+                  label: (
+                    <span>
+                      <HistoryOutlined style={{ marginRight: 6 }} />
+                      Borrowing History ({totalBorrowed})
+                    </span>
+                  ),
+                  children: (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 4 }}>
                 {/* Summary KPI Strip */}
                 <Row gutter={[12, 12]}>
@@ -683,6 +690,8 @@ export default function DeviceDetailModal({
               </div>
             ),
           },
+              ]
+            : []),
         ]}
       />
     </Modal>

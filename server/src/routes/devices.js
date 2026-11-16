@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const devicesController = require('../controllers/devicesController');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, optionalAuth, requireRole } = require('../middleware/auth');
 
-router.get('/', devicesController.getAllDevices);
-router.get('/:id', devicesController.getDeviceById);
+router.get('/', optionalAuth, devicesController.getAllDevices);
+router.get('/:id', optionalAuth, devicesController.getDeviceById);
 
 // Staff management endpoints
 router.post('/', authenticateToken, requireRole(['technician', 'manager']), devicesController.createDevice);
