@@ -21,6 +21,13 @@ async function seedDatabase() {
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS recurrence_group_id VARCHAR(100);
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS series_status VARCHAR(50) DEFAULT 'active';
       ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS course_name VARCHAR(255);
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS lecturer_name VARCHAR(255);
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50);
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_notes TEXT;
+      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS booking_id INT;
+      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50) DEFAULT 'on_time';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT FALSE;

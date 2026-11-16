@@ -56,6 +56,10 @@ CREATE TABLE IF NOT EXISTS location_bookings (
     series_status VARCHAR(50) DEFAULT 'active' CHECK (series_status IN ('active', 'paused', 'cancelled')),
     course_id VARCHAR(50) DEFAULT NULL,
     course_name VARCHAR(255) DEFAULT NULL,
+    lecturer_name VARCHAR(255) DEFAULT NULL,
+    checked_in_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    attendance_status VARCHAR(50) DEFAULT NULL,
+    attendance_notes TEXT DEFAULT NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
     approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     rejection_reason TEXT,
@@ -164,6 +168,7 @@ ON CONFLICT (setting_key) DO NOTHING;
 -- 8. LAB USAGE & LECTURE ATTENDANCE LOGS (LOG REKOD PENGGUNAAN MAKMAL)
 CREATE TABLE IF NOT EXISTS lab_usage_logs (
     log_id SERIAL PRIMARY KEY,
+    booking_id INT REFERENCES location_bookings(booking_id) ON DELETE CASCADE,
     location_id INT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
     user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -171,6 +176,8 @@ CREATE TABLE IF NOT EXISTS lab_usage_logs (
     course_id VARCHAR(50) NOT NULL,
     course_name VARCHAR(255) NOT NULL,
     purpose TEXT NOT NULL,
+    checked_in_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    attendance_status VARCHAR(50) DEFAULT 'on_time',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
