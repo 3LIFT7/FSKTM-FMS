@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Card,
   Row,
@@ -16,20 +17,17 @@ import {
   message,
 } from 'antd';
 import {
-  CalendarOutlined,
-  PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
   DownloadOutlined,
   DeleteOutlined,
-  BookOutlined,
   CheckCircleOutlined,
-  CompassOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
+  QrcodeOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import PageHeader from '../../components/PageHeader';
-import LabUsageModal from '../booking/LabUsageModal';
 import { formatDateTime } from '../../utils/date';
 
 const { Text } = Typography;
@@ -41,7 +39,7 @@ export default function LabUsageLogs() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFloor, setSelectedFloor] = useState('All');
   const [selectedLocationId, setSelectedLocationId] = useState('All');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('All');
   const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
@@ -75,8 +73,8 @@ export default function LabUsageLogs() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete record');
-      message.success('Record removed');
-      setLogs((prev) => prev.filter((item) => item.log_id !== logId));
+      message.success(data.message || 'Record updated');
+      fetchData();
     } catch (err) {
       message.error(err.message);
     } finally {
@@ -90,44 +88,50 @@ export default function LabUsageLogs() {
   }, [locations]);
 
   const filteredLogs = useMemo(() => {
-    return logs.filter((item) => {
-      if (selectedFloor !== 'All' && item.location_floor !== selectedFloor) return false;
-      if (selectedLocationId !== 'All' && String(item.location_id) !== String(selectedLocationId)) return false;
+    return logs
+      .filter((item) => {
+        if (selectedFloor !== 'All' && item.location_floor !== selectedFloor) return false;
+        if (selectedLocationId !== 'All' && String(item.location_id) !== String(selectedLocationId)) return false;
+        if (statusFilter !== 'All' && item.attendance_status !== statusFilter) return false;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const match =
-          (item.location_name || '').toLowerCase().includes(q) ||
-          (item.location_code || '').toLowerCase().includes(q) ||
-          (item.user_name || '').toLowerCase().includes(q) ||
-          (item.user_email || '').toLowerCase().includes(q) ||
-          (item.matric_or_staff_id || '').toLowerCase().includes(q) ||
-          (item.course_id || '').toLowerCase().includes(q) ||
-          (item.course_name || '').toLowerCase().includes(q) ||
-          (item.purpose || '').toLowerCase().includes(q);
-        if (!match) return false;
-      }
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const match =
+            (item.location_name || '').toLowerCase().includes(q) ||
+            (item.location_code || '').toLowerCase().includes(q) ||
+            (item.user_name || '').toLowerCase().includes(q) ||
+            (item.user_email || '').toLowerCase().includes(q) ||
+            (item.matric_or_staff_id || '').toLowerCase().includes(q) ||
+            (item.course_id || '').toLowerCase().includes(q) ||
+            (item.course_name || '').toLowerCase().includes(q) ||
+            (item.purpose || '').toLowerCase().includes(q);
+          if (!match) return false;
+        }
 
-      return true;
-    });
-  }, [logs, selectedFloor, selectedLocationId, searchQuery]);
+        return true;
+      })
+      .sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+  }, [logs, selectedFloor, selectedLocationId, statusFilter, searchQuery]);
 
-  const todayCount = useMemo(() => {
-    const todayStr = dayjs().format('YYYY-MM-DD');
-    return logs.filter((l) => dayjs(l.start_time).format('YYYY-MM-DD') === todayStr).length;
+  const stats = useMemo(() => {
+    const onTime = logs.filter((l) => l.attendance_status === 'on_time').length;
+    const late = logs.filter((l) => l.attendance_status === 'late').length;
+    const pending = logs.filter((l) => l.attendance_status === 'pending_checkin').length;
+    const missed = logs.filter((l) => l.attendance_status === 'missed').length;
+    return { total: logs.length, onTime, late, pending, missed };
   }, [logs]);
 
-  const uniqueLabsCount = useMemo(() => {
-    return new Set(logs.map((l) => l.location_id)).size;
-  }, [logs]);
-
-  const uniqueCoursesCount = useMemo(() => {
-    return new Set(logs.map((l) => (l.course_id || '').toUpperCase()).filter(Boolean)).size;
-  }, [logs]);
+  function getStatusLabel(status, lateMins) {
+    if (status === 'on_time') return 'Attended (On-Time)';
+    if (status === 'late') return `Late Check-In (+${lateMins || 1}m)`;
+    if (status === 'pending_checkin') return 'Pending QR Scan';
+    if (status === 'missed') return 'Missed / Absent';
+    return status;
+  }
 
   function exportCSV() {
     const headers = [
-      'Log ID',
+      'Record ID',
       'Lab / Facility',
       'Room Code',
       'Floor / Block',
@@ -136,10 +140,11 @@ export default function LabUsageLogs() {
       'Email',
       'Course Code',
       'Course Name',
-      'Start Time',
-      'End Time',
+      'Scheduled Start',
+      'Scheduled End',
+      'QR Checked-In At',
+      'Attendance Status',
       'Purpose / Lecture Notes',
-      'Recorded At',
     ];
     const rows = filteredLogs.map((r) => [
       r.log_id,
@@ -153,8 +158,9 @@ export default function LabUsageLogs() {
       `"${(r.course_name || '').replace(/"/g, '""')}"`,
       `"${formatDateTime(r.start_time)}"`,
       `"${formatDateTime(r.end_time)}"`,
+      `"${r.checked_in_at ? formatDateTime(r.checked_in_at) : 'Not Scanned'}"`,
+      `"${getStatusLabel(r.attendance_status, r.late_minutes)}"`,
       `"${(r.purpose || '').replace(/"/g, '""')}"`,
-      `"${formatDateTime(r.created_at)}"`,
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
@@ -162,7 +168,7 @@ export default function LabUsageLogs() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'log_rekod_penggunaan_makmal.csv';
+    a.download = 'log_rekod_penggunaan_makmal_qr_attendance.csv';
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -181,7 +187,7 @@ export default function LabUsageLogs() {
       ),
     },
     {
-      title: 'Lecturer / Staff',
+      title: 'Lecturer / Faculty',
       key: 'lecturer',
       render: (_, record) => (
         <div>
@@ -213,43 +219,87 @@ export default function LabUsageLogs() {
       render: (text) => <span style={{ fontSize: 13, color: '#334155' }}>{text}</span>,
     },
     {
-      title: 'Lecture Time Window',
+      title: 'Scheduled Slot & QR Scan Time',
       key: 'time_window',
+      sorter: (a, b) => new Date(a.start_time) - new Date(b.start_time),
+      defaultSortOrder: 'descend',
       render: (_, record) => (
-        <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
-          {formatDateTime(record.start_time)} &rarr; {formatDateTime(record.end_time)}
-        </span>
+        <Space direction="vertical" size={2} style={{ fontSize: 12 }}>
+          <div style={{ fontFamily: 'monospace' }}>
+            <strong>Slot:</strong> {formatDateTime(record.start_time)} &rarr; {formatDateTime(record.end_time)}
+          </div>
+          {record.checked_in_at ? (
+            <div style={{ color: record.attendance_status === 'late' ? '#D97706' : '#059669', fontFamily: 'monospace', fontWeight: 700 }}>
+              <QrcodeOutlined style={{ marginRight: 4 }} />
+              Scanned: {formatDateTime(record.checked_in_at)}
+            </div>
+          ) : (
+            <div style={{ color: '#94A3B8', fontSize: 11 }}>
+              No QR scan recorded
+            </div>
+          )}
+        </Space>
       ),
     },
     {
-      title: 'Status',
+      title: 'QR Attendance Status',
       key: 'status',
-      render: () => (
-        <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontWeight: 600 }}>
-          Attended / Logged
-        </Tag>
-      ),
+      render: (_, record) => {
+        if (record.attendance_status === 'on_time') {
+          return (
+            <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontWeight: 700 }}>
+              Attended (On-Time)
+            </Tag>
+          );
+        }
+        if (record.attendance_status === 'late') {
+          return (
+            <Tag icon={<ClockCircleOutlined />} color="warning" style={{ fontWeight: 700 }}>
+              Late Check-In ({record.late_minutes ? `+${record.late_minutes}m` : 'Late'})
+            </Tag>
+          );
+        }
+        if (record.attendance_status === 'pending_checkin') {
+          return (
+            <Tag icon={<QrcodeOutlined />} color="processing" style={{ fontWeight: 600 }}>
+              Pending QR Scan
+            </Tag>
+          );
+        }
+        return (
+          <Tag icon={<CloseCircleOutlined />} color="error" style={{ fontWeight: 700 }}>
+            Missed / Absent
+          </Tag>
+        );
+      },
     },
     {
       title: 'Action',
       key: 'action',
-      width: 90,
+      width: 120,
       render: (_, record) => (
-        <Popconfirm
-          title="Delete this lab usage log?"
-          description="This action cannot be undone."
-          onConfirm={() => handleDelete(record.log_id)}
-          okText="Delete"
-          cancelText="Cancel"
-          okButtonProps={{ danger: true }}
-        >
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            loading={deletingId === record.log_id}
-          />
-        </Popconfirm>
+        <Space size="small">
+          <Link to={`/qr/${record.location_code}`} title="Open Room QR Check-In Portal">
+            <Button size="small" icon={<QrcodeOutlined />} />
+          </Link>
+          {(record.checked_in_at || !String(record.log_id).startsWith('B-')) && (
+            <Popconfirm
+              title="Reset / Delete this attendance log?"
+              description="This will clear the QR check-in record."
+              onConfirm={() => handleDelete(record.log_id)}
+              okText="Reset"
+              cancelText="Cancel"
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                loading={deletingId === record.log_id}
+              />
+            </Popconfirm>
+          )}
+        </Space>
       ),
     },
   ];
@@ -258,7 +308,7 @@ export default function LabUsageLogs() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
         title="LOG REKOD PENGGUNAAN MAKMAL"
-        subtitle="Official log of lecture attendance and laboratory/room usage across FSKTM facilities"
+        subtitle="QR-verified faculty attendance and laboratory/room reservation tracking across FSKTM facilities (On-Time, Late, Pending Scan, & Missed)"
         extra={
           <Space wrap>
             <Button icon={<ReloadOutlined />} onClick={fetchData} loading={loading}>
@@ -267,57 +317,59 @@ export default function LabUsageLogs() {
             <Button icon={<DownloadOutlined />} onClick={exportCSV} disabled={filteredLogs.length === 0}>
               Export CSV
             </Button>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setIsModalOpen(true)}
-              style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 600 }}
-            >
-              Record Lecture Attendance
-            </Button>
           </Space>
         }
       />
 
       {/* Summary Statistics */}
-      <Row gutter={[14, 14]}>
-        <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <Row gutter={[12, 12]}>
+        <Col xs={12} sm={8} md={4}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 16 }}>
             <Statistic
-              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 12 }}>Total Logged Sessions</span>}
-              value={logs.length}
+              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 12 }}>Total Sessions</span>}
+              value={stats.total}
               valueStyle={{ fontWeight: 800, color: '#0F172A' }}
               prefix={<FileTextOutlined style={{ color: '#1E3A8A' }} />}
             />
           </Card>
         </Col>
-        <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <Col xs={12} sm={8} md={5}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 16 }}>
             <Statistic
-              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 12 }}>Today&apos;s Attendance Logs</span>}
-              value={todayCount}
+              title={<span style={{ fontWeight: 600, color: '#065F46', fontSize: 12 }}>Attended On-Time</span>}
+              value={stats.onTime}
               valueStyle={{ fontWeight: 800, color: '#059669' }}
-              prefix={<CalendarOutlined style={{ color: '#059669' }} />}
+              prefix={<CheckCircleOutlined style={{ color: '#059669' }} />}
             />
           </Card>
         </Col>
-        <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <Col xs={12} sm={8} md={5}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 16 }}>
             <Statistic
-              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 12 }}>Labs & Rooms Logged</span>}
-              value={uniqueLabsCount}
+              title={<span style={{ fontWeight: 600, color: '#92400E', fontSize: 12 }}>Checked In Late</span>}
+              value={stats.late}
               valueStyle={{ fontWeight: 800, color: '#D97706' }}
-              prefix={<CompassOutlined style={{ color: '#D97706' }} />}
+              prefix={<ClockCircleOutlined style={{ color: '#D97706' }} />}
             />
           </Card>
         </Col>
-        <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <Col xs={12} sm={12} md={5}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 16 }}>
             <Statistic
-              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 12 }}>Active Courses</span>}
-              value={uniqueCoursesCount}
-              valueStyle={{ fontWeight: 800, color: '#7C3AED' }}
-              prefix={<BookOutlined style={{ color: '#7C3AED' }} />}
+              title={<span style={{ fontWeight: 600, color: '#1E40AF', fontSize: 12 }}>Pending QR Scan</span>}
+              value={stats.pending}
+              valueStyle={{ fontWeight: 800, color: '#2563EB' }}
+              prefix={<QrcodeOutlined style={{ color: '#2563EB' }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={5}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 16 }}>
+            <Statistic
+              title={<span style={{ fontWeight: 600, color: '#991B1B', fontSize: 12 }}>Missed / Absent</span>}
+              value={stats.missed}
+              valueStyle={{ fontWeight: 800, color: '#DC2626' }}
+              prefix={<CloseCircleOutlined style={{ color: '#DC2626' }} />}
             />
           </Card>
         </Col>
@@ -326,16 +378,30 @@ export default function LabUsageLogs() {
       {/* Filters & Log Table */}
       <Card bordered={false} style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-          <Col xs={24} md={10}>
+          <Col xs={24} md={7}>
             <Input
               allowClear
               prefix={<SearchOutlined style={{ color: '#94A3B8' }} />}
-              placeholder="Search lecturer, course code, course name, lab, or notes..."
+              placeholder="Search lecturer, course, lab, or notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </Col>
-          <Col xs={12} md={7}>
+          <Col xs={12} md={6}>
+            <Select
+              style={{ width: '100%' }}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: 'All', label: 'All Attendance Statuses' },
+                { value: 'on_time', label: 'Attended (On-Time)' },
+                { value: 'late', label: 'Checked In Late' },
+                { value: 'pending_checkin', label: 'Pending QR Scan' },
+                { value: 'missed', label: 'Missed / Absent' },
+              ]}
+            />
+          </Col>
+          <Col xs={12} md={5}>
             <Select
               style={{ width: '100%' }}
               value={selectedFloor}
@@ -349,7 +415,7 @@ export default function LabUsageLogs() {
               }))}
             />
           </Col>
-          <Col xs={12} md={7}>
+          <Col xs={24} md={6}>
             <Select
               style={{ width: '100%' }}
               showSearch
@@ -370,24 +436,17 @@ export default function LabUsageLogs() {
         </Row>
 
         <Table
-          rowKey="log_id"
+          rowKey="record_key"
           loading={loading}
           dataSource={filteredLogs}
           columns={columns}
           pagination={{ pageSize: 10, showSizeChanger: true }}
-          scroll={{ x: 860 }}
+          scroll={{ x: 920 }}
           locale={{
-            emptyText: <Empty description="No lab usage or lecture attendance records found." />,
+            emptyText: <Empty description="No faculty reservation or QR attendance records found." />,
           }}
         />
       </Card>
-
-      <LabUsageModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onLogCreated={fetchData}
-      />
     </div>
   );
 }
-

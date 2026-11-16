@@ -71,7 +71,7 @@ async function getLocationById(req, res) {
 
     // Fetch devices in this room
     const devResult = await query(
-      `SELECT device_id, name, category, serial_number, barcode, specs, status, image_url,
+      `SELECT device_id, name, category, serial_number, barcode, specs, accessories, status, image_url,
               COALESCE(is_loanable, FALSE) AS is_loanable
        FROM devices WHERE location_id = $1 ORDER BY name ASC`,
       [locId]

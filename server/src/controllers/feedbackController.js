@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { ensureQrAttendanceSchema } = require('./labUsageController');
 
 // POST /api/feedback
 async function submitFeedback(req, res) {
@@ -151,15 +152,18 @@ async function getLocationFeedback(req, res) {
       [locationId]
     );
 
-    // Get today's bookings for this classroom
+    // Get today's bookings for this classroom (and upcoming lecturer bookings for QR attendance verification)
+    await ensureQrAttendanceSchema();
     const bookingsRes = await query(
-      `SELECT b.booking_id, b.start_time, b.end_time, b.purpose, b.course_id, b.status, u.name as booked_by
+      `SELECT b.booking_id, b.user_id, b.start_time, b.end_time, b.purpose, b.course_id, b.course_name,
+              b.status, b.checked_in_at, b.attendance_status, b.attendance_notes,
+              u.name as booked_by, u.role as booked_by_role, u.matric_or_staff_id
        FROM location_bookings b
        JOIN users u ON b.user_id = u.user_id
        WHERE b.location_id = $1
-         AND b.status = 'approved'
+         AND b.status IN ('approved', 'pending')
          AND b.end_time >= CURRENT_DATE
-         AND b.start_time < CURRENT_DATE + INTERVAL '1 day'
+         AND b.start_time < CURRENT_DATE + INTERVAL '2 days'
        ORDER BY b.start_time ASC`,
       [locationId]
     );

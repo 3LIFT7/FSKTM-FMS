@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const bookingsController = require('../controllers/bookingsController');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
 
-router.get('/', bookingsController.getBookings);
+router.get('/', optionalAuth, bookingsController.getBookings);
+router.get('/lecturers', authenticateToken, bookingsController.getBookingLecturers);
 router.post('/', authenticateToken, bookingsController.createBooking);
 router.patch('/recurring/:groupId/status', authenticateToken, bookingsController.toggleRecurringSeries);
 router.patch('/:id/cancel-week', authenticateToken, bookingsController.cancelOneWeek);

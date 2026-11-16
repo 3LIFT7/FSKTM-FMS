@@ -57,18 +57,20 @@ export default function MaintenanceList() {
   }, [logs]);
 
   const filteredLogs = useMemo(() => {
-    return logs.filter(l => {
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          (l.description && l.description.toLowerCase().includes(q)) ||
-          (l.location_name && l.location_name.toLowerCase().includes(q)) ||
-          (l.device_name && l.device_name.toLowerCase().includes(q)) ||
-          (l.performed_by_name && l.performed_by_name.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
+    return logs
+      .filter(l => {
+        if (search) {
+          const q = search.toLowerCase();
+          return (
+            (l.description && l.description.toLowerCase().includes(q)) ||
+            (l.location_name && l.location_name.toLowerCase().includes(q)) ||
+            (l.device_name && l.device_name.toLowerCase().includes(q)) ||
+            (l.performed_by_name && l.performed_by_name.toLowerCase().includes(q))
+          );
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.date_performed) - new Date(a.date_performed));
   }, [logs, search]);
 
   const columns = [
@@ -76,7 +78,9 @@ export default function MaintenanceList() {
       title: 'Service Date',
       dataIndex: 'date_performed',
       key: 'date_performed',
-      width: 120,
+      width: 130,
+      sorter: (a, b) => new Date(a.date_performed) - new Date(b.date_performed),
+      defaultSortOrder: 'descend',
       render: (d) => formatDate(d),
     },
     {

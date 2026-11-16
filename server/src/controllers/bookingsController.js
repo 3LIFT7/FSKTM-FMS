@@ -1,9 +1,49 @@
-const { query } = require('../config/db');
+const { query, exec } = require('../config/db');
 const { createUserNotification } = require('./notificationsController');
+
+let bookingColumnsEnsured = false;
+async function ensureBookingColumns() {
+  if (bookingColumnsEnsured) return;
+  try {
+    await exec(`
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS lecturer_name VARCHAR(255);
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50);
+      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_notes TEXT;
+    `);
+    await exec(`
+      UPDATE location_bookings
+      SET lecturer_name = (SELECT name FROM users WHERE users.user_id = location_bookings.user_id)
+      WHERE lecturer_name IS NULL
+        AND user_id IN (SELECT user_id FROM users WHERE role = 'lecturer');
+    `);
+    await exec(`
+      UPDATE location_bookings
+      SET lecturer_name = (SELECT name FROM users WHERE role = 'lecturer' ORDER BY user_id ASC LIMIT 1)
+      WHERE lecturer_name IS NULL
+        AND user_id IN (SELECT user_id FROM users WHERE role = 'student');
+    `);
+    bookingColumnsEnsured = true;
+  } catch (err) {
+    console.warn('ensureBookingColumns notice:', err.message);
+  }
+}
+
+// GET /api/bookings/lecturers
+async function getBookingLecturers(req, res) {
+  try {
+    const result = await query("SELECT user_id, name, email FROM users WHERE LOWER(TRIM(role)) = 'lecturer' ORDER BY name");
+    return res.json({ success: true, lecturers: result.rows });
+  } catch (err) {
+    console.error('getBookingLecturers error:', err);
+    return res.status(500).json({ error: 'Failed to load lecturers.' });
+  }
+}
 
 // GET /api/bookings
 async function getBookings(req, res) {
   try {
+    await ensureBookingColumns();
     const { startDate, endDate, location_id, floor, include_maintenance, status, user_id } = req.query;
 
     let sql = `
@@ -20,6 +60,10 @@ async function getBookings(req, res) {
         COALESCE(b.series_status, 'active') AS series_status,
         b.course_id,
         b.course_name,
+        b.lecturer_name,
+        b.checked_in_at,
+        b.attendance_status,
+        b.attendance_notes,
         COALESCE(b.status, 'approved') AS status,
         b.approved_by,
         b.rejection_reason,
@@ -77,7 +121,7 @@ async function getBookings(req, res) {
       sql += ` AND b.user_id = $${params.length}`;
     }
 
-    sql += ' ORDER BY b.start_time ASC';
+    sql += ' ORDER BY b.start_time DESC, b.created_at DESC';
 
     const result = await query(sql, params);
     return res.json({ success: true, count: result.rows.length, bookings: result.rows });
@@ -90,7 +134,8 @@ async function getBookings(req, res) {
 // POST /api/bookings
 async function createBooking(req, res) {
   try {
-    const { location_id, start_time, end_time, purpose, is_recurring, weeks = 14, recurrence_day, course_id, course_name } = req.body;
+    await ensureBookingColumns();
+    const { location_id, start_time, end_time, purpose, is_recurring, weeks = 14, recurrence_day, course_id, course_name, lecturer_name } = req.body;
     const userId = req.user.user_id;
     const userRole = req.user.role;
 
@@ -224,12 +269,17 @@ async function createBooking(req, res) {
       slotEnd.setDate(slotEnd.getDate() + (i * 7));
 
       const pattern = is_recurring ? `WEEKLY:${recurrence_day || 'WEEKDAY'}:W${i + 1}` : null;
+      const resolvedLecturerName = lecturer_name
+        ? String(lecturer_name).trim()
+        : userRole === 'lecturer'
+        ? req.user.name
+        : null;
 
       const insertRes = await query(
-        `INSERT INTO location_bookings (location_id, user_id, start_time, end_time, purpose, is_recurring, recurrence_pattern, recurrence_group_id, series_status, course_id, course_name, status, approved_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         RETURNING booking_id, start_time, end_time, purpose, course_id, course_name, status, recurrence_group_id, series_status;`,
-        [location_id, userId, slotStart.toISOString(), slotEnd.toISOString(), purpose, is_recurring || false, pattern, recurrenceGroupId, 'active', course_id ? course_id.toUpperCase().trim() : null, course_name ? course_name.trim() : null, initialStatus, approvedBy]
+        `INSERT INTO location_bookings (location_id, user_id, start_time, end_time, purpose, is_recurring, recurrence_pattern, recurrence_group_id, series_status, course_id, course_name, lecturer_name, status, approved_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING booking_id, start_time, end_time, purpose, course_id, course_name, lecturer_name, status, recurrence_group_id, series_status;`,
+        [location_id, userId, slotStart.toISOString(), slotEnd.toISOString(), purpose, is_recurring || false, pattern, recurrenceGroupId, 'active', course_id ? course_id.toUpperCase().trim() : null, course_name ? course_name.trim() : null, resolvedLecturerName, initialStatus, approvedBy]
       );
       createdBookings.push(insertRes.rows[0]);
     }
@@ -713,6 +763,7 @@ async function cancelOneWeek(req, res) {
 
 module.exports = {
   getBookings,
+  getBookingLecturers,
   createBooking,
   updateBookingStatus,
   deleteBooking,

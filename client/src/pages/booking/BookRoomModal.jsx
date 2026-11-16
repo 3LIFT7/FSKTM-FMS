@@ -19,6 +19,7 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
   const [form] = Form.useForm();
 
   const [locations, setLocations] = useState([]);
+  const [lecturers, setLecturers] = useState([]);
   const [selectedLocationId, setSelectedLocationId] = useState(null);
   const [existingBookingsOnDate, setExistingBookingsOnDate] = useState([]);
   const [fetchingSlots, setFetchingSlots] = useState(false);
@@ -34,6 +35,14 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
   useEffect(() => {
     if (isOpen) {
       fetchLocations();
+      if (user?.role === 'student') {
+        fetch('/api/bookings/lecturers', { credentials: 'include' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.success) setLecturers(d.lecturers || []);
+          })
+          .catch(() => {});
+      }
       form.resetFields();
       setError('');
 
@@ -164,6 +173,7 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
         purpose: values.purpose,
         course_id: values.course_id ? values.course_id.toUpperCase().trim() : null,
         course_name: values.course_name ? values.course_name.trim() : null,
+        lecturer_name: values.lecturer_name ? values.lecturer_name.trim() : (isLecturer ? user?.name : null),
         is_recurring: isRecurring,
         weeks: isRecurring ? (values.weeks || 14) : 1,
       };
@@ -299,26 +309,44 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
               </Col>
             </Row>
           ) : (
-            <Row gutter={12}>
-              <Col xs={24} sm={10}>
+            <>
+              <Row gutter={12}>
+                <Col xs={24} sm={10}>
+                  <Form.Item
+                    name="course_id"
+                    label="Course Code"
+                    rules={[{ required: true, message: 'Course Code is required' }]}
+                  >
+                    <Input style={{ textTransform: 'uppercase' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={14}>
+                  <Form.Item
+                    name="course_name"
+                    label="Course Name"
+                    rules={[{ required: true, message: 'Course Name is required' }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                </Col>
+              </Row>
+              {user?.role === 'student' && (
                 <Form.Item
-                  name="course_id"
-                  label="Course Code"
-                  rules={[{ required: true, message: 'Course Code is required' }]}
+                  name="lecturer_name"
+                  label="Course / Supervising Lecturer Name"
+                  rules={[{ required: true, message: 'Please select or enter your lecturer name' }]}
                 >
-                  <Input style={{ textTransform: 'uppercase' }} />
+                  <Select
+                    showSearch
+                    placeholder="Select lecturer for this course / booking"
+                    options={lecturers.map((l) => ({
+                      value: l.name,
+                      label: `${l.name} (${l.email})`,
+                    }))}
+                  />
                 </Form.Item>
-              </Col>
-              <Col xs={24} sm={14}>
-                <Form.Item
-                  name="course_name"
-                  label="Course Name"
-                  rules={[{ required: true, message: 'Course Name is required' }]}
-                >
-                  <Input />
-                </Form.Item>
-              </Col>
-            </Row>
+              )}
+            </>
           )}
 
           <Form.Item

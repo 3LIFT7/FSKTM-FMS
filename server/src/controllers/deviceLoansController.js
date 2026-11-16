@@ -184,7 +184,7 @@ async function requestDeviceLoan(req, res) {
     // Check device availability
     const devRes = await query(
       `SELECT d.device_id, d.name, d.status, d.location_id, d.accessories,
-              COALESCE(d.is_loanable, TRUE) AS is_loanable,
+              COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
               l.name AS location_name, l.code AS location_code
        FROM devices d
        LEFT JOIN locations l ON d.location_id = l.location_id
@@ -196,6 +196,12 @@ async function requestDeviceLoan(req, res) {
     }
 
     const device = devRes.rows[0];
+
+    if (!device.is_loanable || device.location_id !== null) {
+      return res.status(403).json({
+        error: `Device "${device.name}" is Fixed in Lab / Room (${device.location_name || 'Assigned Facility'}) and cannot be borrowed individually.`
+      });
+    }
 
     if (device.status !== 'available') {
       return res.status(400).json({
@@ -367,8 +373,8 @@ async function updateLoanStatus(req, res) {
       await createUserNotification({
         userId: loan.user_id,
         type: 'device_loan',
-        title: 'Device return confirmed — Rate your experience',
-        message: `${loan.device_name}${accSuffix} has been received by the technician${parsedRating ? ` (Condition Rated: ${parsedRating}/5 ★)` : ''}. You can now rate the device from your dashboard!`,
+        title: 'Device return confirmed',
+        message: `${loan.device_name}${accSuffix} has been returned and received by the technician.`,
         entityType: 'device_loan',
         entityId: id,
       });
@@ -386,13 +392,17 @@ async function updateLoanStatus(req, res) {
   }
 }
 
-// POST /api/device-loans/:id/rating (Rate device after it is returned and received by technician)
+// POST /api/device-loans/:id/rating (Technician or Lab Manager rates device after return)
 async function rateReturnedLoan(req, res) {
   try {
     await ensureLoanColumns();
     const { id } = req.params;
     const { rating, review, return_condition } = req.body;
     const currentUser = req.user;
+
+    if (!['technician', 'manager'].includes(currentUser.role)) {
+      return res.status(403).json({ error: 'Only technicians and lab managers can rate returned devices.' });
+    }
 
     const numRating = parseInt(rating, 10);
     if (!numRating || numRating < 1 || numRating > 5) {
@@ -416,38 +426,18 @@ async function rateReturnedLoan(req, res) {
       });
     }
 
-    const isStaff = ['technician', 'manager'].includes(currentUser.role);
-    const isBorrower = Number(loan.user_id) === Number(currentUser.user_id);
-
-    if (!isStaff && !isBorrower) {
-      return res.status(403).json({ error: 'You are not authorized to rate this loan record.' });
-    }
-
     const cleanReview = review ? String(review).trim() : null;
     const cleanCondition = return_condition ? String(return_condition).trim() : null;
 
-    if (isBorrower) {
-      await query(
-        `UPDATE device_bookings
-         SET device_rating = $1,
-             device_review = COALESCE($2, device_review),
-             rated_at = CURRENT_TIMESTAMP
-         WHERE loan_id = $3`,
-        [numRating, cleanReview, id]
-      );
-    }
-
-    if (isStaff) {
-      await query(
-        `UPDATE device_bookings
-         SET return_rating = $1,
-             return_condition = COALESCE($2, return_condition),
-             return_notes = COALESCE($3, return_notes),
-             rated_at = CURRENT_TIMESTAMP
-         WHERE loan_id = $4`,
-        [numRating, cleanCondition, cleanReview, id]
-      );
-    }
+    await query(
+      `UPDATE device_bookings
+       SET return_rating = $1,
+           return_condition = COALESCE($2, return_condition),
+           return_notes = COALESCE($3, return_notes),
+           rated_at = CURRENT_TIMESTAMP
+       WHERE loan_id = $4`,
+      [numRating, cleanCondition, cleanReview, id]
+    );
 
     const updatedRes = await query(`SELECT * FROM device_bookings WHERE loan_id = $1`, [id]);
 

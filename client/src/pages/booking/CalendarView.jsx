@@ -7,6 +7,8 @@ import {
   FilterOutlined,
   InfoCircleOutlined,
   ClockCircleOutlined,
+  UserOutlined,
+  IdcardOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
@@ -19,7 +21,8 @@ const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
 export default function CalendarView() {
-  const { isStudent, isLecturer, isStaff } = useAuth();
+  const { user, isStudent, isLecturer, isStaff } = useAuth();
+  const canViewBookingIdentity = ['technician', 'manager'].includes(user?.role);
   const [searchParams] = useSearchParams();
   const screens = useBreakpoint();
   const isMobile = screens.md === false;
@@ -108,28 +111,41 @@ export default function CalendarView() {
 
     return (
       <div style={{ maxHeight: 75, overflowY: 'auto' }}>
-        {dayBookings.map(b => (
-          <div
-            key={b.booking_id}
-            style={{
-              fontSize: 11,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              marginBottom: 2,
-              padding: '1px 4px',
-              borderRadius: 4,
-              background: b.status === 'approved' ? '#ECFDF5' : '#FFFBEB',
-              color: b.status === 'approved' ? '#065F46' : '#92400E',
-              border: `1px solid ${b.status === 'approved' ? '#A7F3D0' : '#FDE68A'}`,
-            }}
-            title={`${b.location_name}: ${b.purpose} (${dayjs(b.start_time).format('HH:mm')} - ${dayjs(b.end_time).format('HH:mm')})`}
-          >
-            <Badge status={b.status === 'approved' ? 'success' : 'warning'} />
-            <span style={{ fontWeight: 600 }}>{b.location_code || b.location_name}</span>:{' '}
-            {dayjs(b.start_time).format('HH:mm')}
-          </div>
-        ))}
+        {dayBookings.map(b => {
+          const lecturerLabel = b.lecturer_name || (b.user_role === 'lecturer' ? b.user_name : null);
+          const studentMatric = b.user_role === 'student' ? b.matric_or_staff_id : null;
+          const staffTooltipSuffix = canViewBookingIdentity
+            ? `${lecturerLabel ? ` • Lecturer: ${lecturerLabel}` : ''}${studentMatric ? ` • Student Matric: ${studentMatric}` : ''}`
+            : '';
+
+          return (
+            <div
+              key={b.booking_id}
+              style={{
+                fontSize: 11,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                marginBottom: 2,
+                padding: '1px 4px',
+                borderRadius: 4,
+                background: b.status === 'approved' ? '#ECFDF5' : '#FFFBEB',
+                color: b.status === 'approved' ? '#065F46' : '#92400E',
+                border: `1px solid ${b.status === 'approved' ? '#A7F3D0' : '#FDE68A'}`,
+              }}
+              title={`${b.location_name}: ${b.purpose} (${dayjs(b.start_time).format('HH:mm')} - ${dayjs(b.end_time).format('HH:mm')})${staffTooltipSuffix}`}
+            >
+              <Badge status={b.status === 'approved' ? 'success' : 'warning'} />
+              <span style={{ fontWeight: 600 }}>{b.location_code || b.location_name}</span>:{' '}
+              {dayjs(b.start_time).format('HH:mm')}
+              {canViewBookingIdentity && (
+                <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.9 }}>
+                  • {studentMatric ? `${studentMatric}${lecturerLabel ? ` (${lecturerLabel})` : ''}` : (lecturerLabel || b.user_name)}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -255,33 +271,71 @@ export default function CalendarView() {
               <Empty description="No classes or bookings scheduled for this date" />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {selectedDateBookings.map(b => (
-                  <div
-                    key={b.booking_id}
-                    style={{
-                      padding: '12px 14px',
-                      borderRadius: 10,
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text strong style={{ color: '#0F172A' }}>{b.location_name}</Text>
-                      <StatusTag status={b.status} />
+                {selectedDateBookings.map(b => {
+                  const lecturerDisplay = b.lecturer_name || (b.user_role === 'lecturer' ? b.user_name : null);
+                  const studentMatric = b.user_role === 'student' ? b.matric_or_staff_id : null;
+
+                  return (
+                    <div
+                      key={b.booking_id}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        background: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text strong style={{ color: '#0F172A' }}>{b.location_name}</Text>
+                        <StatusTag status={b.status} />
+                      </div>
+                      <div style={{ fontSize: 12, color: '#3B82F6', fontWeight: 600, marginTop: 2 }}>
+                        {dayjs(b.start_time).format('HH:mm')} &rarr; {dayjs(b.end_time).format('HH:mm')}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>
+                        {b.purpose}
+                      </div>
+
+                      {canViewBookingIdentity && (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            background: '#EFF6FF',
+                            border: '1px solid #DBEAFE',
+                            fontSize: 11,
+                            color: '#1E3A8A',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 3,
+                          }}
+                        >
+                          {lecturerDisplay && (
+                            <div>
+                              <UserOutlined style={{ marginRight: 5, color: '#2563EB' }} />
+                              <strong>Lecturer:</strong> {lecturerDisplay}
+                            </div>
+                          )}
+                          {studentMatric && (
+                            <div>
+                              <IdcardOutlined style={{ marginRight: 5, color: '#059669' }} />
+                              <strong>Student Matric No:</strong>{' '}
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{studentMatric}</span>
+                              {b.user_name ? ` (${b.user_name})` : ''}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {b.course_id && (
+                        <Tag color="cyan" style={{ marginTop: 6, fontSize: 10 }}>
+                          {b.course_id}
+                        </Tag>
+                      )}
                     </div>
-                    <div style={{ fontSize: 12, color: '#3B82F6', fontWeight: 600, marginTop: 2 }}>
-                      {dayjs(b.start_time).format('HH:mm')} &rarr; {dayjs(b.end_time).format('HH:mm')}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>
-                      {b.purpose}
-                    </div>
-                    {b.course_id && (
-                      <Tag color="cyan" style={{ marginTop: 6, fontSize: 10 }}>
-                        {b.course_id}
-                      </Tag>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>

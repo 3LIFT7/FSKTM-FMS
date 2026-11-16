@@ -102,6 +102,10 @@ export default function ClassroomFeedbackPage() {
   const [submittedFeedback, setSubmittedFeedback] = useState(null);
   const [isAnonymous, setIsAnonymous] = useState(false);
 
+  // Faculty QR Check-In State
+  const [checkingInBookingId, setCheckingInBookingId] = useState(null);
+  const [checkInNotesMap, setCheckInNotesMap] = useState({});
+
   useEffect(() => {
     fetchRoomDetails();
   }, [targetIdOrCode]);
@@ -226,7 +230,8 @@ export default function ClassroomFeedbackPage() {
         start_time: startDateTime.toISOString(),
         end_time: endDateTime.toISOString(),
         purpose: values.purpose,
-        course_id: values.course_id || null,
+        course_id: values.course_id?.trim() || 'LAB-SESSION',
+        course_name: values.course_name?.trim() || values.purpose?.trim() || 'Classroom Reservation',
         is_recurring: Boolean(values.is_recurring),
         weeks: values.weeks || 14
       };
@@ -257,6 +262,34 @@ export default function ClassroomFeedbackPage() {
     }
   };
 
+  // Handle Faculty QR Attendance Check-In
+  const handleQrAttendanceCheckIn = async (booking) => {
+    setCheckingInBookingId(booking.booking_id);
+    try {
+      const res = await fetch('/api/lab-usage/qr-checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          booking_id: booking.booking_id,
+          location_id: roomData.location.location_id,
+          code: roomData.location.code,
+          notes: checkInNotesMap[booking.booking_id] || booking.purpose,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to confirm QR attendance');
+
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
+      message.success(data.message || 'Attendance confirmed and recorded in LOG REKOD PENGGUNAAN MAKMAL!');
+      await fetchRoomDetails();
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setCheckingInBookingId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -284,6 +317,11 @@ export default function ClassroomFeedbackPage() {
   }
 
   const { location, summary, issues = [], feedbacks = [], todays_bookings = [] } = roomData;
+  const isFacultyMember = user && ['lecturer', 'manager'].includes(user.role);
+  const myRoomBookings = isFacultyMember
+    ? todays_bookings.filter((b) => Number(b.user_id) === Number(user.user_id) || user.role === 'manager')
+    : [];
+  const nowTime = new Date();
 
   return (
     <div
@@ -440,6 +478,201 @@ export default function ClassroomFeedbackPage() {
           />
         )}
       </Card>
+
+      {/* Auto-Detected Faculty QR Attendance Check-In Card */}
+      {isFacultyMember && (
+        <Card
+          style={{
+            borderRadius: 16,
+            marginBottom: 20,
+            border: '2px solid #2563EB',
+            background: 'linear-gradient(180deg, #EFF6FF 0%, #FFFFFF 100%)',
+            boxShadow: '0 6px 20px rgba(37, 99, 235, 0.12)',
+          }}
+          bodyStyle={{ padding: '18px 20px' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            <Space size={8}>
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 8,
+                  background: '#1E3A8A',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 18,
+                }}
+              >
+                <QrcodeOutlined />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: '#0F172A' }}>
+                  Faculty QR Attendance Verification
+                </div>
+                <div style={{ fontSize: 12, color: '#475569' }}>
+                  Automatically syncs with Lab Manager&apos;s <strong>LOG REKOD PENGGUNAAN MAKMAL</strong>
+                </div>
+              </div>
+            </Space>
+            <Tag color="blue" style={{ fontWeight: 700, borderRadius: 6 }}>
+              Check-In Window: 15 mins before start &rarr; end time
+            </Tag>
+          </div>
+
+          {myRoomBookings.length === 0 ? (
+            <Alert
+              type="info"
+              showIcon
+              style={{ borderRadius: 10 }}
+              message="No Active Reservation Found for You in This Room Today"
+              description={
+                <span style={{ fontSize: 12 }}>
+                  You do not have a scheduled reservation for <strong>{location.name} ({location.code})</strong> today. Once you reserve this room (below or via the Booking Calendar), scan this QR code within 15 minutes of your start time to confirm your attendance.
+                </span>
+              }
+            />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {myRoomBookings.map((b) => {
+                const start = new Date(b.start_time);
+                const end = new Date(b.end_time);
+                const earliest = new Date(start.getTime() - 15 * 60 * 1000);
+                const onTimeLimit = new Date(start.getTime() + 15 * 60 * 1000);
+
+                const isCheckedIn = Boolean(b.checked_in_at);
+                const isTooEarly = !isCheckedIn && nowTime < earliest;
+                const isMissed = !isCheckedIn && nowTime > end;
+                const canCheckInNow = !isCheckedIn && nowTime >= earliest && nowTime <= end;
+                const willBeLate = canCheckInNow && nowTime > onTimeLimit;
+
+                return (
+                  <div
+                    key={b.booking_id}
+                    style={{
+                      background: '#FFFFFF',
+                      border: `1.5px solid ${
+                        isCheckedIn
+                          ? '#10B981'
+                          : canCheckInNow
+                          ? '#2563EB'
+                          : isMissed
+                          ? '#EF4444'
+                          : '#CBD5E1'
+                      }`,
+                      borderRadius: 12,
+                      padding: '14px 16px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                      <div>
+                        <Space size={6} wrap>
+                          {b.course_id && (
+                            <Tag color="blue" style={{ margin: 0, fontWeight: 800 }}>
+                              {b.course_id}
+                            </Tag>
+                          )}
+                          <Text strong style={{ fontSize: 14, color: '#0F172A' }}>
+                            {b.course_name || b.purpose || 'Scheduled Lab / Lecture Session'}
+                          </Text>
+                        </Space>
+                        <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>
+                          <ClockCircleOutlined style={{ marginRight: 5, color: '#2563EB' }} />
+                          <strong>Scheduled Slot:</strong> {dayjs(b.start_time).format('DD/MM/YYYY')} •{' '}
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                            {dayjs(b.start_time).format('HH:mm')} &rarr; {dayjs(b.end_time).format('HH:mm')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                          Lecturer: <strong>{b.booked_by || user.name}</strong> • Purpose: {b.purpose}
+                        </div>
+                      </div>
+
+                      <div>
+                        {isCheckedIn ? (
+                          <Tag
+                            icon={<CheckCircleOutlined />}
+                            color={b.attendance_status === 'late' ? 'warning' : 'success'}
+                            style={{ fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 6 }}
+                          >
+                            {b.attendance_status === 'late' ? 'Attended (Late Check-In)' : 'Attended (On-Time)'}
+                          </Tag>
+                        ) : canCheckInNow ? (
+                          <Tag color={willBeLate ? 'orange' : 'processing'} style={{ fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 6 }}>
+                            {willBeLate ? 'Check-In Open (Late Window)' : 'Check-In Open (On-Time Window)'}
+                          </Tag>
+                        ) : isTooEarly ? (
+                          <Tag color="default" style={{ fontWeight: 600, fontSize: 12, padding: '3px 10px', borderRadius: 6 }}>
+                            Opens at {dayjs(earliest).format('HH:mm')}
+                          </Tag>
+                        ) : (
+                          <Tag color="error" style={{ fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 6 }}>
+                            Missed / Window Closed
+                          </Tag>
+                        )}
+                      </div>
+                    </div>
+
+                    {isCheckedIn && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          padding: '8px 12px',
+                          background: b.attendance_status === 'late' ? '#FFFBEB' : '#ECFDF5',
+                          border: `1px solid ${b.attendance_status === 'late' ? '#FDE68A' : '#A7F3D0'}`,
+                          borderRadius: 8,
+                          fontSize: 12,
+                          color: b.attendance_status === 'late' ? '#92400E' : '#065F46',
+                        }}
+                      >
+                        <strong>✓ QR Attendance Confirmed:</strong> Checked in at{' '}
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{formatDateTime(b.checked_in_at)}</span>. Recorded in{' '}
+                        <strong>LOG REKOD PENGGUNAAN MAKMAL</strong>.
+                      </div>
+                    )}
+
+                    {canCheckInNow && (
+                      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <Input
+                          placeholder="Optional lecture topic / attendance notes..."
+                          value={checkInNotesMap[b.booking_id] ?? ''}
+                          onChange={(e) =>
+                            setCheckInNotesMap((prev) => ({
+                              ...prev,
+                              [b.booking_id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <Button
+                          type="primary"
+                          size="large"
+                          block
+                          icon={<CheckCircleOutlined />}
+                          loading={checkingInBookingId === b.booking_id}
+                          onClick={() => handleQrAttendanceCheckIn(b)}
+                          style={{
+                            height: 44,
+                            borderRadius: 10,
+                            fontWeight: 800,
+                            background: willBeLate ? '#D97706' : '#16A34A',
+                            borderColor: willBeLate ? '#D97706' : '#16A34A',
+                          }}
+                        >
+                          {willBeLate
+                            ? `Confirm Attendance (QR Check-In — Late)`
+                            : `Confirm Attendance (QR Check-In — On-Time)`}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Main Tabs: Report Issue | Room Feedback | Timetable | Activity */}
       <Tabs

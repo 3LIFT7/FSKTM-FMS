@@ -71,7 +71,6 @@ export default function DeviceManage() {
   const [editingDevice, setEditingDevice] = useState(null);
   const [viewingDevice, setViewingDevice] = useState(null);
   const [viewingDeviceTab, setViewingDeviceTab] = useState('details');
-  const [viewingLoanRecord, setViewingLoanRecord] = useState(null);
   const [addForm] = Form.useForm();
   const [addMode, setAddMode] = useState('pool');
   const [addHasAccessories, setAddHasAccessories] = useState(false);
@@ -453,6 +452,10 @@ export default function DeviceManage() {
     {
       title: 'Timeline (Checkout / Return)',
       key: 'return_time',
+      sorter: (a, b) =>
+        new Date(a.created_at || a.checkout_time || a.expected_return_time) -
+        new Date(b.created_at || b.checkout_time || b.expected_return_time),
+      defaultSortOrder: 'descend',
       render: (_, record) => {
         const returnDate = dayjs(record.expected_return_time);
         const isLate = record.status === 'checked_out' && dayjs().isAfter(returnDate);
@@ -508,15 +511,6 @@ export default function DeviceManage() {
         const isLoading = actionLoadingId === record.loan_id;
         return (
           <Space size="small" wrap>
-            <Button
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => setViewingLoanRecord(record)}
-              title="View Full Loan Record Details"
-            >
-              Full Info
-            </Button>
-
             {['pending', 'pending_technician'].includes(record.status) && (
               <>
                 <Button
@@ -1025,28 +1019,6 @@ export default function DeviceManage() {
             </Form>
           </div>
         )}
-      </Modal>
-
-      {/* Full Loan Record Detail Modal */}
-      <Modal
-        open={Boolean(viewingLoanRecord)}
-        onCancel={() => setViewingLoanRecord(null)}
-        footer={[
-          <Button key="close" type="primary" onClick={() => setViewingLoanRecord(null)}>
-            Close
-          </Button>,
-        ]}
-        width={720}
-        centered
-        destroyOnClose
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <HistoryOutlined style={{ color: '#1E3A8A' }} />
-            <span>Borrowing History Record — Loan #{viewingLoanRecord?.loan_id}</span>
-          </div>
-        }
-      >
-        {viewingLoanRecord && renderExpandedLoanDetails(viewingLoanRecord)}
       </Modal>
 
       <Modal

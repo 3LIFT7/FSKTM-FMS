@@ -7,14 +7,14 @@ import {
   CompassOutlined,
   BookOutlined,
   LaptopOutlined,
-  FileTextOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
+  QrcodeOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import BookRoomModal from '../booking/BookRoomModal';
-import LabUsageModal from '../booking/LabUsageModal';
 import WeeklyTimetable from '../../components/WeeklyTimetable';
-import StatusTag from '../../components/StatusTag';
 import { formatDateTime } from '../../utils/date';
 
 const { Title, Text, Paragraph } = Typography;
@@ -24,9 +24,7 @@ export default function LecturerDashboard() {
   const [myBookings, setMyBookings] = useState([]);
   const [myUsageLogs, setMyUsageLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [togglingGroupId, setTogglingGroupId] = useState(null);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
-  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const [selectedSlotForBooking, setSelectedSlotForBooking] = useState(null);
   const [loanRequests, setLoanRequests] = useState([]);
   const [loanActionId, setLoanActionId] = useState(null);
@@ -48,16 +46,28 @@ export default function LecturerDashboard() {
         loanRes.json(),
         usageRes.json().catch(() => ({ success: false, logs: [] })),
       ]);
-      if (data.success) setMyBookings(data.bookings.filter((b) => b.user_id === user?.user_id));
+      if (data.success) {
+        setMyBookings(
+          data.bookings
+            .filter((b) => b.user_id === user?.user_id)
+            .sort((a, b) => new Date(b.start_time) - new Date(a.start_time))
+        );
+      }
       if (loanData.success) {
         setLoanRequests(
-          loanData.loans.filter(
-            (loan) => loan.status === 'pending_lecturer' && Number(loan.lecturer_approver_id) === Number(user?.user_id)
-          )
+          loanData.loans
+            .filter(
+              (loan) => loan.status === 'pending_lecturer' && Number(loan.lecturer_approver_id) === Number(user?.user_id)
+            )
+            .sort((a, b) => new Date(b.created_at || b.expected_return_time) - new Date(a.created_at || a.expected_return_time))
         );
       }
       if (usageData.success) {
-        setMyUsageLogs((usageData.logs || []).filter((log) => Number(log.user_id) === Number(user?.user_id)));
+        setMyUsageLogs(
+          (usageData.logs || [])
+            .filter((log) => Number(log.user_id) === Number(user?.user_id))
+            .sort((a, b) => new Date(b.start_time) - new Date(a.start_time))
+        );
       }
     } catch (err) {
       console.error(err);
@@ -87,34 +97,9 @@ export default function LecturerDashboard() {
     }
   }
 
-  async function handleToggleSeries(groupId, action) {
-    if (!groupId) return;
-    setTogglingGroupId(groupId);
-
-    try {
-      const res = await fetch(`/api/bookings/recurring/${groupId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ action }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        message.error(data.error || 'Failed to update schedule.');
-      } else {
-        message.success(data.message || 'Schedule updated');
-        await fetchLecturerData();
-      }
-    } catch (err) {
-      message.error('Network error updating series');
-    } finally {
-      setTogglingGroupId(null);
-    }
-  }
-
   const activeBookings = myBookings.filter((b) => b.status === 'approved' || b.status === 'pending');
   const recurringBookings = myBookings.filter((b) => Boolean(b.recurrence_group_id || b.recurring_group_id));
+  const verifiedAttendanceCount = myUsageLogs.filter((l) => ['on_time', 'late'].includes(l.attendance_status)).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -139,7 +124,7 @@ export default function LecturerDashboard() {
               {user?.name}
             </Title>
             <Paragraph style={{ color: '#FDE68A', margin: '4px 0 0 0', fontSize: 12 }}>
-              Staff ID: <strong style={{ color: '#FFFFFF', fontFamily: 'monospace' }}>{user?.matric_or_staff_id || '-'}</strong>
+              Staff ID: <strong style={{ color: '#FFFFFF', fontFamily: 'monospace' }}>{user?.matric_or_staff_id || '-'}</strong> • Scan the QR code inside your reserved lab/room to confirm lecture attendance.
             </Paragraph>
           </div>
 
@@ -151,14 +136,6 @@ export default function LecturerDashboard() {
               style={{ background: '#D97706', borderColor: '#D97706', fontWeight: 700 }}
             >
               Book Lab / Room
-            </Button>
-            <Button
-              type="primary"
-              icon={<FileTextOutlined />}
-              onClick={() => setIsUsageModalOpen(true)}
-              style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 700 }}
-            >
-              Record Lecture Attendance
             </Button>
             <Link to="/devices">
               <Button icon={<LaptopOutlined />} style={{ fontWeight: 600 }}>
@@ -197,7 +174,7 @@ export default function LecturerDashboard() {
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2.5vw, 16px)' }}>
+          <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2.5vw, 13px)' }}>
             <Statistic
               title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Total Bookings</span>}
               value={myBookings.length}
@@ -209,10 +186,10 @@ export default function LecturerDashboard() {
         <Col xs={12} sm={6}>
           <Card bordered={false} style={{ borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} bodyStyle={{ padding: 'clamp(10px, 2.5vw, 16px)' }}>
             <Statistic
-              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>Attendance Logs</span>}
-              value={myUsageLogs.length}
+              title={<span style={{ fontWeight: 600, color: '#64748B', fontSize: 'clamp(10px, 2.2vw, 13px)', lineHeight: 1.2, display: 'block' }}>QR Verified Attendance</span>}
+              value={verifiedAttendanceCount}
               valueStyle={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 800 }}
-              prefix={<FileTextOutlined style={{ color: '#2563EB' }} />}
+              prefix={<QrcodeOutlined style={{ color: '#2563EB' }} />}
             />
           </Card>
         </Col>
@@ -254,43 +231,44 @@ export default function LecturerDashboard() {
                 );
               },
             },
-            { title: 'Return By', dataIndex: 'expected_return_time', key: 'expected_return_time', render: formatDateTime },
+            {
+              title: 'Return By',
+              dataIndex: 'expected_return_time',
+              key: 'expected_return_time',
+              sorter: (a, b) => new Date(a.expected_return_time) - new Date(b.expected_return_time),
+              defaultSortOrder: 'descend',
+              render: formatDateTime,
+            },
             { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', ellipsis: true },
             { title: 'Review', key: 'review', render: (_, row) => <Space><Button size="small" type="primary" loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'lecturer_approve')}>Approve</Button><Button size="small" danger loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'reject')}>Reject</Button></Space> },
           ]}
         />
       </Card>
 
-      {/* Lecture Attendance & Lab Usage Log Card */}
+      {/* QR Lecture Attendance & Lab Usage Log Card */}
       <Card
         title={
           <Space>
-            <FileTextOutlined style={{ color: '#1E3A8A' }} />
-            <span>My Lecture Attendance &amp; Lab Usage Logs (Log Rekod Penggunaan Makmal)</span>
+            <QrcodeOutlined style={{ color: '#1E3A8A' }} />
+            <span>My QR-Verified Lecture Attendance &amp; Lab Reservations</span>
             <Tag color="blue">{myUsageLogs.length}</Tag>
           </Space>
         }
         extra={
-          <Button
-            type="primary"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => setIsUsageModalOpen(true)}
-            style={{ background: '#1E3A8A', borderColor: '#1E3A8A', fontWeight: 600 }}
-          >
-            Record Lecture Attendance
-          </Button>
+          <Tag color="geekblue" style={{ margin: 0, fontWeight: 600 }}>
+            Scan QR code inside reserved room (15m before start &rarr; end time)
+          </Tag>
         }
         bordered={false}
         style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
       >
         <Table
           size="small"
-          rowKey="log_id"
+          rowKey="record_key"
           loading={loading}
           dataSource={myUsageLogs}
           pagination={{ pageSize: 5, simple: true }}
-          locale={{ emptyText: <Empty description="No lecture attendance / lab usage sessions recorded yet" /> }}
+          locale={{ emptyText: <Empty description="No room reservations or QR attendance sessions found" /> }}
           columns={[
             {
               title: 'Lab / Room Facility',
@@ -313,26 +291,64 @@ export default function LecturerDashboard() {
               ),
             },
             {
-              title: 'Purpose / Lecture Notes',
-              dataIndex: 'purpose',
-              key: 'purpose',
-            },
-            {
-              title: 'Lecture Time Window',
+              title: 'Scheduled Time Window',
               key: 'time_window',
+              sorter: (a, b) => new Date(a.start_time) - new Date(b.start_time),
+              defaultSortOrder: 'descend',
               render: (_, row) => (
-                <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
-                  {formatDateTime(row.start_time)} &rarr; {formatDateTime(row.end_time)}
-                </span>
+                <Space direction="vertical" size={2}>
+                  <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                    {formatDateTime(row.start_time)} &rarr; {formatDateTime(row.end_time)}
+                  </span>
+                  {row.checked_in_at && (
+                    <span style={{ fontSize: 11, color: '#059669', fontFamily: 'monospace', fontWeight: 600 }}>
+                      Scanned: {formatDateTime(row.checked_in_at)}
+                    </span>
+                  )}
+                </Space>
               ),
             },
             {
-              title: 'Status',
+              title: 'QR Attendance Status',
               key: 'status',
-              render: () => (
-                <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontWeight: 600 }}>
-                  Logged
-                </Tag>
+              render: (_, row) => {
+                if (row.attendance_status === 'on_time') {
+                  return (
+                    <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontWeight: 700 }}>
+                      Attended (On-Time)
+                    </Tag>
+                  );
+                }
+                if (row.attendance_status === 'late') {
+                  return (
+                    <Tag icon={<ClockCircleOutlined />} color="warning" style={{ fontWeight: 700 }}>
+                      Late ({row.late_minutes ? `+${row.late_minutes}m` : 'Late'})
+                    </Tag>
+                  );
+                }
+                if (row.attendance_status === 'pending_checkin') {
+                  return (
+                    <Tag icon={<QrcodeOutlined />} color="processing" style={{ fontWeight: 600 }}>
+                      Pending QR Scan
+                    </Tag>
+                  );
+                }
+                return (
+                  <Tag icon={<CloseCircleOutlined />} color="error" style={{ fontWeight: 700 }}>
+                    Missed / Absent
+                  </Tag>
+                );
+              },
+            },
+            {
+              title: 'Room QR Portal',
+              key: 'qr_action',
+              render: (_, row) => (
+                <Link to={`/qr/${row.location_code}`}>
+                  <Button size="small" type={row.attendance_status === 'pending_checkin' ? 'primary' : 'default'} icon={<QrcodeOutlined />}>
+                    {row.attendance_status === 'pending_checkin' ? 'Open Room QR' : 'View Room QR'}
+                  </Button>
+                </Link>
               ),
             },
           ]}
@@ -360,12 +376,6 @@ export default function LecturerDashboard() {
           fetchLecturerData();
           setSelectedSlotForBooking(null);
         }}
-      />
-
-      <LabUsageModal
-        isOpen={isUsageModalOpen}
-        onClose={() => setIsUsageModalOpen(false)}
-        onLogCreated={fetchLecturerData}
       />
     </div>
   );

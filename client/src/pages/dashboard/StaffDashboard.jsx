@@ -194,7 +194,7 @@ export default function StaffDashboard() {
       }
     });
 
-    return list;
+    return list.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
   }, [pendingBookings]);
 
   const bookingColumns = [
@@ -242,6 +242,8 @@ export default function StaffDashboard() {
     {
       title: 'Time Window',
       key: 'time',
+      sorter: (a, b) => new Date(a.start_time) - new Date(b.start_time),
+      defaultSortOrder: 'descend',
       render: (_, record) => {
         if (record.is_recurring_series) {
           const dayName = dayjs(record.start_time).format('dddd');

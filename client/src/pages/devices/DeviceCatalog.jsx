@@ -19,6 +19,7 @@ const { Text, Paragraph } = Typography;
 export default function DeviceCatalog() {
   const { user } = useAuth();
   const isStaff = ['technician', 'manager'].includes(user?.role);
+  const isStudent = user?.role === 'student';
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -29,12 +30,13 @@ export default function DeviceCatalog() {
 
   useEffect(() => {
     fetchDevices();
-  }, []);
+  }, [isStaff]);
 
   async function fetchDevices() {
     setLoading(true);
     try {
-      const res = await fetch('/api/devices');
+      const url = isStaff ? '/api/devices' : '/api/devices?is_loanable=true';
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success) setDevices(data.devices);
     } catch (err) {
@@ -46,13 +48,15 @@ export default function DeviceCatalog() {
 
   const categories = useMemo(() => {
     const list = devices
+      .filter(d => isStaff || (d.is_loanable && !d.location_id))
       .map(d => d.category)
       .filter(Boolean);
     return ['All', ...new Set(list)];
-  }, [devices]);
+  }, [devices, isStaff]);
 
   const filteredDevices = useMemo(() => {
     return devices.filter(d => {
+      if (!isStaff && (!d.is_loanable || Boolean(d.location_id))) return false;
       if (categoryFilter !== 'All' && d.category !== categoryFilter) return false;
       if (statusFilter !== 'All' && d.status !== statusFilter) return false;
       if (search) {
@@ -69,7 +73,7 @@ export default function DeviceCatalog() {
       }
       return true;
     });
-  }, [devices, categoryFilter, statusFilter, search]);
+  }, [devices, categoryFilter, statusFilter, search, isStaff]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -129,6 +133,9 @@ export default function DeviceCatalog() {
         <Row gutter={[20, 20]}>
           {filteredDevices.map(d => {
             const isAvailable = d.status === 'available';
+            const isFixedInLab = !d.is_loanable || Boolean(d.location_id);
+            const isDisabledForStudent = isStudent && isFixedInLab;
+            const canBorrow = isAvailable && !isDisabledForStudent;
             const accessories = Array.isArray(d.accessories) ? d.accessories : [];
             const loanCount = Number(d.loan_count || 0);
             return (
@@ -186,7 +193,7 @@ export default function DeviceCatalog() {
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                       <StatusTag status={d.status} />
-                      {d.avg_rating && (
+                      {isStaff && d.avg_rating && (
                         <Tag color="gold" style={{ margin: 0, fontWeight: 700, fontSize: 11, borderRadius: 6 }}>
                           <StarFilled style={{ color: '#F59E0B', marginRight: 3 }} />
                           {d.avg_rating} ({d.rating_count})
@@ -236,13 +243,16 @@ export default function DeviceCatalog() {
                   <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid #F1F5F9' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 6, flexWrap: 'wrap' }}>
                       <Tag color="blue" style={{ margin: 0 }}>{d.category || 'General Pool'}</Tag>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        {d.location_name ? (
-                          <span><EnvironmentOutlined style={{ marginRight: 3 }} />{d.location_name}</span>
-                        ) : (
-                          'Portable Pool'
-                        )}
-                      </Text>
+                      {isFixedInLab ? (
+                        <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>
+                          <EnvironmentOutlined style={{ marginRight: 3 }} />
+                          Fixed in Lab: {d.location_name || 'Assigned Room'}
+                        </Tag>
+                      ) : (
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          Portable Pool
+                        </Text>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -258,10 +268,16 @@ export default function DeviceCatalog() {
                       <Button
                         type="primary"
                         style={{ flex: 1, fontWeight: 600 }}
-                        disabled={!isAvailable}
+                        disabled={!canBorrow}
                         onClick={() => setSelectedDeviceForLoan(d)}
                       >
-                        {isAvailable ? 'Request Loan' : d.status === 'checked_out' ? 'Checked Out' : 'Unavailable'}
+                        {isDisabledForStudent
+                          ? 'Fixed in Lab / Room'
+                          : isAvailable
+                          ? 'Request Loan'
+                          : d.status === 'checked_out'
+                          ? 'Checked Out'
+                          : 'Unavailable'}
                       </Button>
                     </div>
                   </div>

@@ -145,7 +145,7 @@ export default function DeviceDetailModal({
               </div>
               <div style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>{currentDevice.category || 'Hardware'} • SN: {currentDevice.serial_number}</span>
-                {currentDevice.avg_rating && (
+                {isStaff && currentDevice.avg_rating && (
                   <Tag color="gold" style={{ margin: 0, fontWeight: 700, fontSize: 11 }}>
                     <StarFilled style={{ color: '#F59E0B', marginRight: 3 }} />
                     {currentDevice.avg_rating} / 5 ({currentDevice.rating_count})
@@ -384,18 +384,20 @@ export default function DeviceDetailModal({
                     <Tag color="blue">{currentDevice.category || 'General'}</Tag>
                   </Descriptions.Item>
 
-                  <Descriptions.Item label="Overall Return Rating">
-                    {currentDevice.avg_rating ? (
-                      <Space align="center">
-                        <Rate disabled allowHalf value={Number(currentDevice.avg_rating)} style={{ fontSize: 14 }} />
-                        <Tag color="gold" style={{ fontWeight: 700 }}>{currentDevice.avg_rating} / 5 ({currentDevice.rating_count} rating{currentDevice.rating_count === 1 ? '' : 's'})</Tag>
-                      </Space>
-                    ) : (
-                      <Text type="secondary" style={{ fontSize: 12, fontStyle: 'italic' }}>
-                        Not rated yet (rated after device is returned)
-                      </Text>
-                    )}
-                  </Descriptions.Item>
+                  {isStaff && (
+                    <Descriptions.Item label="Overall Return Rating">
+                      {currentDevice.avg_rating ? (
+                        <Space align="center">
+                          <Rate disabled allowHalf value={Number(currentDevice.avg_rating)} style={{ fontSize: 14 }} />
+                          <Tag color="gold" style={{ fontWeight: 700 }}>{currentDevice.avg_rating} / 5 ({currentDevice.rating_count} rating{currentDevice.rating_count === 1 ? '' : 's'})</Tag>
+                        </Space>
+                      ) : (
+                        <Text type="secondary" style={{ fontSize: 12, fontStyle: 'italic' }}>
+                          Not rated yet (rated after device is returned)
+                        </Text>
+                      )}
+                    </Descriptions.Item>
+                  )}
 
                   <Descriptions.Item label="Allocation Mode">
                     {currentDevice.is_loanable ? (

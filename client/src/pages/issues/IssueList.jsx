@@ -76,20 +76,22 @@ export default function IssueList() {
   }
 
   const filteredReports = useMemo(() => {
-    return reports.filter(r => {
-      if (statusFilter !== 'All' && r.status !== statusFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          (r.description && r.description.toLowerCase().includes(q)) ||
-          (r.location_name && r.location_name.toLowerCase().includes(q)) ||
-          (r.device_name && r.device_name.toLowerCase().includes(q)) ||
-          (r.reporter_name && r.reporter_name.toLowerCase().includes(q)) ||
-          (r.reporter_matric_number && r.reporter_matric_number.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
+    return reports
+      .filter(r => {
+        if (statusFilter !== 'All' && r.status !== statusFilter) return false;
+        if (search) {
+          const q = search.toLowerCase();
+          return (
+            (r.description && r.description.toLowerCase().includes(q)) ||
+            (r.location_name && r.location_name.toLowerCase().includes(q)) ||
+            (r.device_name && r.device_name.toLowerCase().includes(q)) ||
+            (r.reporter_name && r.reporter_name.toLowerCase().includes(q)) ||
+            (r.reporter_matric_number && r.reporter_matric_number.toLowerCase().includes(q))
+          );
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [reports, statusFilter, search]);
 
   const columns = [
@@ -140,8 +142,10 @@ export default function IssueList() {
       },
     },
     {
-      title: 'Reported By',
+      title: 'Reported By & Date',
       key: 'reporter',
+      sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      defaultSortOrder: 'descend',
       render: (_, record) => (
         <div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{record.reporter_name || 'Anonymous'}</div>

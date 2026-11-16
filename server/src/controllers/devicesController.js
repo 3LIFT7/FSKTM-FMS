@@ -57,14 +57,14 @@ function serializeAccessories(val) {
   return arr.length > 0 ? JSON.stringify(arr) : null;
 }
 
-function formatDeviceRow(row) {
+function formatDeviceRow(row, isStaff = true) {
   if (!row) return row;
   return {
     ...row,
     accessories: parseAccessories(row.accessories),
-    loan_count: row.loan_count !== undefined ? Number(row.loan_count) : 0,
-    rating_count: row.rating_count !== undefined ? Number(row.rating_count) : 0,
-    avg_rating: row.avg_rating !== null && row.avg_rating !== undefined ? Number(Number(row.avg_rating).toFixed(1)) : null,
+    loan_count: isStaff && row.loan_count !== undefined ? Number(row.loan_count) : 0,
+    rating_count: isStaff && row.rating_count !== undefined ? Number(row.rating_count) : 0,
+    avg_rating: isStaff && row.avg_rating !== null && row.avg_rating !== undefined ? Number(Number(row.avg_rating).toFixed(1)) : null,
   };
 }
 
@@ -130,8 +130,9 @@ async function getAllDevices(req, res) {
 
     sql += ' ORDER BY d.category, d.name ASC';
 
+    const isStaff = Boolean(req.user && ['technician', 'manager'].includes(req.user.role));
     const result = await query(sql, params);
-    const devices = result.rows.map(formatDeviceRow);
+    const devices = result.rows.map((r) => formatDeviceRow(r, isStaff));
     return res.json({ success: true, count: devices.length, devices });
   } catch (err) {
     console.error('getAllDevices error:', err);
@@ -164,13 +165,13 @@ async function getDeviceById(req, res) {
       return res.status(404).json({ error: 'Device not found.' });
     }
 
-    const isStaff = req.user && ['technician', 'manager'].includes(req.user.role);
+    const isStaff = Boolean(req.user && ['technician', 'manager'].includes(req.user.role));
 
     if (!isStaff) {
       return res.json({
         success: true,
         device: {
-          ...formatDeviceRow(devRes.rows[0]),
+          ...formatDeviceRow(devRes.rows[0], false),
           loan_history: [],
           recent_loans: [],
           maintenance_logs: []

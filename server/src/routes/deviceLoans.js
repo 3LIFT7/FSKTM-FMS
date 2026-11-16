@@ -7,6 +7,6 @@ router.get('/', authenticateToken, deviceLoansController.getDeviceLoans);
 router.get('/lecturers', authenticateToken, requireRole(['student']), deviceLoansController.getLecturers);
 router.post('/', authenticateToken, deviceLoansController.requestDeviceLoan);
 router.patch('/:id/status', authenticateToken, requireRole(['lecturer', 'technician', 'manager']), deviceLoansController.updateLoanStatus);
-router.post('/:id/rating', authenticateToken, deviceLoansController.rateReturnedLoan);
+router.post('/:id/rating', authenticateToken, requireRole(['technician', 'manager']), deviceLoansController.rateReturnedLoan);
 
 module.exports = router;

@@ -85,13 +85,25 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
       key: 'name',
       render: (name, record) => (
         <div>
-          <Text strong>{name}</Text>
-          <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <Space size={6} wrap>
+            <Text strong>{name}</Text>
+            {record.category && (
+              <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px' }}>
+                {record.category}
+              </Tag>
+            )}
+          </Space>
+          <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace', display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
             <span>SN: {record.serial_number}</span>
             {record.barcode && (
               <span style={{ color: '#0369A1' }}>• Barcode: {record.barcode}</span>
             )}
           </div>
+          {record.specs && (
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+              {record.specs}
+            </div>
+          )}
         </div>
       ),
     },
