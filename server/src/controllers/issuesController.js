@@ -1,5 +1,15 @@
 const { query } = require('../config/db');
 const { createUserNotification } = require('./notificationsController');
+const { safeUnlink } = require('../utils/fileUpload');
+
+const VALID_ISSUE_STATUSES = [
+  'open',
+  'in_progress',
+  'resolved',
+  'cannot_be_resolved',
+  'requires_further_action',
+  'closed',
+];
 
 // GET /api/issues
 async function getIssues(req, res) {
@@ -41,7 +51,7 @@ async function getIssues(req, res) {
     `;
     const params = [];
 
-    // Students only view their own reports
+    // Students and lecturers only view their own reports
     if (currentUser.role === 'student' || currentUser.role === 'lecturer') {
       params.push(currentUser.user_id);
       sql += ` AND ir.reported_by = $${params.length}`;
@@ -78,12 +88,30 @@ async function createIssue(req, res) {
     const { location_id, device_id, description, photo_url, guest_name, guest_email, category } = req.body;
     const reported_by = req.user ? req.user.user_id : null;
 
-    if (!description || description.trim().length === 0) {
+    if (!description || String(description).trim().length === 0) {
+      safeUnlink(req.file?.path);
       return res.status(400).json({ error: 'Problem description is required.' });
     }
 
     if (!location_id && !device_id) {
+      safeUnlink(req.file?.path);
       return res.status(400).json({ error: 'Please specify either a room location or device for this report.' });
+    }
+
+    if (location_id) {
+      const locCheck = await query('SELECT location_id FROM locations WHERE location_id = $1', [location_id]);
+      if (locCheck.rows.length === 0) {
+        safeUnlink(req.file?.path);
+        return res.status(404).json({ error: 'Specified facility location does not exist.' });
+      }
+    }
+
+    if (device_id) {
+      const devCheck = await query('SELECT device_id FROM devices WHERE device_id = $1', [device_id]);
+      if (devCheck.rows.length === 0) {
+        safeUnlink(req.file?.path);
+        return res.status(404).json({ error: 'Specified hardware device does not exist.' });
+      }
     }
 
     let photo = photo_url || null;
@@ -91,23 +119,24 @@ async function createIssue(req, res) {
       photo = `/uploads/${req.file.filename}`;
     }
 
-    const gName = req.user ? req.user.name : (guest_name || 'Classroom Reporter');
-    const gEmail = req.user ? req.user.email : (guest_email || null);
+    const gName = req.user ? req.user.name : guest_name || 'Classroom Reporter';
+    const gEmail = req.user ? req.user.email : guest_email || null;
     const cat = category || 'General';
 
     const result = await query(
       `INSERT INTO issue_reports (reported_by, location_id, device_id, description, photo_url, status, guest_name, guest_email, category)
        VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8)
        RETURNING *`,
-      [reported_by, location_id || null, device_id || null, description.trim(), photo, gName, gEmail, cat]
+      [reported_by, location_id || null, device_id || null, String(description).trim(), photo, gName, gEmail, cat]
     );
 
     return res.status(201).json({
       success: true,
       message: 'Damage/breakdown report submitted successfully. Technicians have been notified.',
-      report: result.rows[0]
+      report: result.rows[0],
     });
   } catch (err) {
+    safeUnlink(req.file?.path);
     console.error('createIssue error:', err);
     return res.status(500).json({ error: 'Failed to submit report.' });
   }
@@ -119,9 +148,10 @@ async function updateIssueStatus(req, res) {
     const { id } = req.params;
     const { status, issue_reason, resolution_notes } = req.body;
 
-    const validStatuses = ['open', 'in_progress', 'resolved', 'cannot_be_resolved', 'requires_further_action'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    if (!VALID_ISSUE_STATUSES.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid status. Must be one of: ${VALID_ISSUE_STATUSES.join(', ')}`,
+      });
     }
 
     const previousRes = await query(
@@ -155,6 +185,7 @@ async function updateIssueStatus(req, res) {
         resolved: 'Resolved',
         cannot_be_resolved: 'Cannot Be Resolved',
         requires_further_action: 'Requires Further Action',
+        closed: 'Closed',
       };
       const details = [issue_reason, resolution_notes].filter(Boolean).join(' ');
       await createUserNotification({
@@ -170,7 +201,7 @@ async function updateIssueStatus(req, res) {
     return res.json({
       success: true,
       message: `Ticket status updated to ${status}.`,
-      report: result.rows[0]
+      report: result.rows[0],
     });
   } catch (err) {
     console.error('updateIssueStatus error:', err);
@@ -181,5 +212,6 @@ async function updateIssueStatus(req, res) {
 module.exports = {
   getIssues,
   createIssue,
-  updateIssueStatus
+  updateIssueStatus,
+  VALID_ISSUE_STATUSES,
 };

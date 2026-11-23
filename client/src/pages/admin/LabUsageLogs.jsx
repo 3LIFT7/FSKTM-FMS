@@ -276,12 +276,9 @@ export default function LabUsageLogs() {
     {
       title: 'Action',
       key: 'action',
-      width: 120,
+      width: 90,
       render: (_, record) => (
         <Space size="small">
-          <Link to={`/qr/${record.location_code}`} title="Open Room QR Check-In Portal">
-            <Button size="small" icon={<QrcodeOutlined />} />
-          </Link>
           {(record.checked_in_at || !String(record.log_id).startsWith('B-')) && (
             <Popconfirm
               title="Reset / Delete this attendance log?"

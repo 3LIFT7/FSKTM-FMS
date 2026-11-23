@@ -13,15 +13,16 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(true);
 
-  // Restore session on mount
   useEffect(() => {
+    // Clean up any legacy raw JWT stored in localStorage; rely on httpOnly cookie
+    localStorage.removeItem('fsktm_auth_token');
     checkSession();
   }, []);
 
   async function checkSession() {
     try {
       const res = await fetch('/api/auth/me', {
-        credentials: 'include'
+        credentials: 'include',
       });
       if (res.ok) {
         const data = await res.json();
@@ -45,10 +46,10 @@ export function AuthProvider({ children }) {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
-      body: JSON.stringify({ email, password, portal, remember })
+      body: JSON.stringify({ email, password, portal, remember }),
     });
 
     const text = await res.text();
@@ -67,9 +68,7 @@ export function AuthProvider({ children }) {
       throw err;
     }
 
-    if (data.token) {
-      localStorage.setItem('fsktm_auth_token', data.token);
-    }
+    localStorage.removeItem('fsktm_auth_token');
     if (data.user) {
       localStorage.setItem('fsktm_user', JSON.stringify(data.user));
     }
@@ -82,10 +81,10 @@ export function AuthProvider({ children }) {
     const res = await fetch('/api/auth/google', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       credentials: 'include',
-      body: JSON.stringify(authData)
+      body: JSON.stringify(authData),
     });
 
     const text = await res.text();
@@ -104,9 +103,7 @@ export function AuthProvider({ children }) {
       throw err;
     }
 
-    if (data.token) {
-      localStorage.setItem('fsktm_auth_token', data.token);
-    }
+    localStorage.removeItem('fsktm_auth_token');
     if (data.user) {
       localStorage.setItem('fsktm_user', JSON.stringify(data.user));
     }
@@ -119,7 +116,7 @@ export function AuthProvider({ children }) {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
       });
     } catch (err) {
       console.error('Logout error:', err);
@@ -142,7 +139,7 @@ export function AuthProvider({ children }) {
     isLecturer: user?.role === 'lecturer',
     isTechnician: user?.role === 'technician',
     isManager: user?.role === 'manager',
-    isStaff: user?.role === 'technician' || user?.role === 'manager'
+    isStaff: user?.role === 'technician' || user?.role === 'manager',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

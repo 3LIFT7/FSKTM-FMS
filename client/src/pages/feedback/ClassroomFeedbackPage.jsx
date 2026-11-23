@@ -318,10 +318,11 @@ export default function ClassroomFeedbackPage() {
   }
 
   const { location, summary, issues = [], feedbacks = [], todays_bookings = [] } = roomData;
-  const isFacultyMember = user && ['lecturer', 'manager'].includes(user.role);
-  const myRoomBookings = isFacultyMember
-    ? todays_bookings.filter((b) => Number(b.user_id) === Number(user.user_id) || user.role === 'manager')
+  const isLecturer = user?.role === 'lecturer';
+  const myRoomBookings = isLecturer
+    ? todays_bookings.filter((b) => Number(b.user_id) === Number(user.user_id))
     : [];
+  const showAttendanceCard = isLecturer && myRoomBookings.length > 0;
   const nowTime = new Date();
 
   return (
@@ -433,8 +434,8 @@ export default function ClassroomFeedbackPage() {
         )}
       </Card>
 
-      {/* Auto-Detected Faculty QR Attendance Check-In Card */}
-      {isFacultyMember && (
+      {/* Auto-Detected Faculty QR Attendance Check-In Card (Visible ONLY to the Lecturer who owns a booking in this room) */}
+      {showAttendanceCard && (
         <Card
           style={{
             borderRadius: 16,
@@ -476,30 +477,18 @@ export default function ClassroomFeedbackPage() {
             </Tag>
           </div>
 
-          {myRoomBookings.length === 0 ? (
-            <Alert
-              type="info"
-              showIcon
-              style={{ borderRadius: 10 }}
-              message="No Active Reservation Found for You in This Room Today"
-              description={
-                <span style={{ fontSize: 12 }}>
-                  You do not have a scheduled reservation for <strong>{location.name} ({location.code})</strong> today. Once you reserve this room (below or via the Booking Calendar), scan this QR code within 15 minutes of your start time to confirm your attendance.
-                </span>
-              }
-            />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {myRoomBookings.map((b) => {
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {myRoomBookings.map((b) => {
                 const start = new Date(b.start_time);
                 const end = new Date(b.end_time);
                 const earliest = new Date(start.getTime() - 15 * 60 * 1000);
                 const onTimeLimit = new Date(start.getTime() + 15 * 60 * 1000);
 
+                const isApproved = b.status === 'approved';
                 const isCheckedIn = Boolean(b.checked_in_at);
-                const isTooEarly = !isCheckedIn && nowTime < earliest;
-                const isMissed = !isCheckedIn && nowTime > end;
-                const canCheckInNow = !isCheckedIn && nowTime >= earliest && nowTime <= end;
+                const isTooEarly = isApproved && !isCheckedIn && nowTime < earliest;
+                const isMissed = isApproved && !isCheckedIn && nowTime > end;
+                const canCheckInNow = isApproved && !isCheckedIn && nowTime >= earliest && nowTime <= end;
                 const willBeLate = canCheckInNow && nowTime > onTimeLimit;
 
                 return (
@@ -552,6 +541,10 @@ export default function ClassroomFeedbackPage() {
                             style={{ fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 6 }}
                           >
                             {b.attendance_status === 'late' ? 'Attended (Late Check-In)' : 'Attended (On-Time)'}
+                          </Tag>
+                        ) : !isApproved ? (
+                          <Tag color="gold" style={{ fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 6 }}>
+                            Pending Admin Approval
                           </Tag>
                         ) : canCheckInNow ? (
                           <Tag color={willBeLate ? 'orange' : 'processing'} style={{ fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 6 }}>
@@ -624,7 +617,6 @@ export default function ClassroomFeedbackPage() {
                 );
               })}
             </div>
-          )}
         </Card>
       )}
 

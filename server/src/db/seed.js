@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { query, exec } = require('../config/db');
+const { runMigrations } = require('./migrations');
 const fs = require('fs');
 const path = require('path');
 
@@ -12,83 +13,9 @@ async function seedDatabase() {
   await exec(schemaSql);
   console.log('✓ Schema applied successfully.');
 
-  // Apply schema migrations for existing databases
+  // Apply centralized schema migrations for existing databases
   try {
-    await exec(`
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS approved_by INT REFERENCES users(user_id) ON DELETE SET NULL;
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS recurrence_group_id VARCHAR(100);
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS series_status VARCHAR(50) DEFAULT 'active';
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS course_name VARCHAR(255);
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS lecturer_name VARCHAR(255);
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50);
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_notes TEXT;
-      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS booking_id INT;
-      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
-      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50) DEFAULT 'on_time';
-      ALTER TABLE location_bookings ALTER COLUMN course_id DROP NOT NULL;
-      ALTER TABLE location_bookings ALTER COLUMN course_name DROP NOT NULL;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization VARCHAR(50);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'local';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT FALSE;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS lecturer_approver_id INT REFERENCES users(user_id) ON DELETE SET NULL;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS lecturer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS pickup_location TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_rating INT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_condition VARCHAR(100);
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_notes TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_rating INT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_review TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS rated_at TIMESTAMP WITH TIME ZONE;
-      ALTER TABLE device_bookings DROP CONSTRAINT IF EXISTS device_bookings_status_check;
-      ALTER TABLE device_bookings ADD CONSTRAINT device_bookings_status_check CHECK (status IN ('pending', 'pending_lecturer', 'pending_technician', 'approved', 'checked_out', 'returned', 'rejected'));
-      ALTER TABLE locations ADD COLUMN IF NOT EXISTS image_url TEXT;
-      ALTER TABLE devices ADD COLUMN IF NOT EXISTS image_url TEXT;
-      ALTER TABLE devices ADD COLUMN IF NOT EXISTS barcode VARCHAR(100);
-      ALTER TABLE devices ADD COLUMN IF NOT EXISTS accessories TEXT;
-      ALTER TABLE issue_reports ALTER COLUMN reported_by DROP NOT NULL;
-      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255);
-      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS guest_email VARCHAR(255);
-      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'General';
-      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS issue_reason TEXT;
-      ALTER TABLE issue_reports ADD COLUMN IF NOT EXISTS resolution_notes TEXT;
-      ALTER TABLE issue_reports DROP CONSTRAINT IF EXISTS issue_reports_status_check;
-      ALTER TABLE issue_reports ADD CONSTRAINT issue_reports_status_check CHECK (status IN ('open', 'in_progress', 'resolved', 'cannot_be_resolved', 'requires_further_action', 'closed'));
-
-      CREATE TABLE IF NOT EXISTS room_feedback (
-          feedback_id SERIAL PRIMARY KEY,
-          location_id INT NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-          user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
-          reporter_name VARCHAR(255),
-          reporter_email VARCHAR(255),
-          reporter_role VARCHAR(50) DEFAULT 'student',
-          rating INT DEFAULT 5 CHECK (rating >= 1 AND rating <= 5),
-          category VARCHAR(100) DEFAULT 'General',
-          comments TEXT NOT NULL,
-          cleanliness_rating INT DEFAULT 5,
-          equipment_rating INT DEFAULT 5,
-          ac_rating INT DEFAULT 5,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    await exec(`UPDATE location_bookings SET status = 'approved' WHERE status IS NULL OR status = ''`);
-    await exec(`UPDATE users SET specialization = 'BIW' WHERE role = 'student' AND (specialization IS NULL OR specialization = '')`);
-    await exec(`UPDATE devices SET is_loanable = FALSE WHERE location_id IS NOT NULL`);
-    await exec(`UPDATE devices SET is_loanable = TRUE WHERE location_id IS NULL`);
-    await exec(`UPDATE devices SET barcode = 'BC-' || REPLACE(serial_number, ' ', '-') WHERE barcode IS NULL OR barcode = ''`);
-
-    // Populate default accessories for loanable devices that don't have accessories configured yet
-    await exec(`UPDATE devices SET accessories = '["Touch Controllers (L & R)","USB-C Charging Cable","Carrying Case"]' WHERE serial_number IN ('VR-MQ2-001', 'VR-MQ2-002') AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["Base Stations 2.0 (Pair)","Wireless Adapter","Controllers (L & R)","Link Box & Cables"]' WHERE serial_number = 'VR-VIVE-001' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["24-70mm GM Lens","Extra NP-FZ100 Battery","64GB SDXC Card","Camera Hard Case","Charger & Strap"]' WHERE serial_number = 'CAM-SNY-A7IV' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["BG30 Battery Grip","Quick-Release Plate","Extended Grip / Tripod","Carrying Case"]' WHERE serial_number = 'GMB-DJI-RS3P' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["140W USB-C Power Adapter","MagSafe 3 Cable","USB-C Multiport Hub","Protective Laptop Sleeve","Wireless Mouse"]' WHERE serial_number = 'LAP-APL-MBP16' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["130W USB-C Power Adapter","USB-C to HDMI/USB Adapter","Laptop Carrying Bag","Wireless Mouse"]' WHERE serial_number = 'LAP-DEL-XPS15' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["Remote Control","HDMI Cable","Power Cord"]' WHERE serial_number = 'PRJ-EPS-2250' AND accessories IS NULL`);
-
+    await runMigrations();
     console.log('✓ Database schema migrations applied.');
 
     // Ensure new blocks (Blok B8, Blok C12, Blok L Perpustakaan) exist
@@ -224,6 +151,7 @@ async function seedDatabase() {
     const res = await query(
       `INSERT INTO locations (code, name, floor, capacity, category, description, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
        RETURNING location_id, code;`,
       [loc.code, loc.name, loc.floor, loc.capacity, loc.category, loc.desc, loc.status]
     );

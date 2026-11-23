@@ -1,5 +1,4 @@
 const { query } = require('../config/db');
-const { ensureQrAttendanceSchema } = require('./labUsageController');
 
 // POST /api/feedback
 async function submitFeedback(req, res) {
@@ -15,18 +14,17 @@ async function submitFeedback(req, res) {
       ac_rating = 5,
       reporter_name,
       reporter_email,
-      reporter_role = 'student'
+      reporter_role = 'student',
     } = req.body;
 
-    if (!comments || comments.trim().length === 0) {
+    if (!comments || String(comments).trim().length === 0) {
       return res.status(400).json({ error: 'Please provide feedback comments or suggestions.' });
     }
 
     let resolvedLocationId = location_id;
 
-    // Resolve location_id if code was provided
     if (!resolvedLocationId && code) {
-      const locRes = await query('SELECT location_id FROM locations WHERE code = $1', [code]);
+      const locRes = await query('SELECT location_id FROM locations WHERE UPPER(code) = UPPER($1)', [String(code).trim()]);
       if (locRes.rows.length > 0) {
         resolvedLocationId = locRes.rows[0].location_id;
       }
@@ -36,15 +34,33 @@ async function submitFeedback(req, res) {
       return res.status(400).json({ error: 'Target classroom or facility is required.' });
     }
 
-    const userId = req.user ? req.user.user_id : null;
-    const name = req.user ? req.user.name : (reporter_name || 'Anonymous Student');
-    const email = req.user ? req.user.email : (reporter_email || null);
-    const role = req.user ? req.user.role : (reporter_role || 'student');
+    const locVerify = await query('SELECT location_id FROM locations WHERE location_id = $1', [resolvedLocationId]);
+    if (locVerify.rows.length === 0) {
+      return res.status(404).json({ error: 'Target classroom or facility does not exist.' });
+    }
 
-    const numRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
-    const numClean = Math.max(1, Math.min(5, parseInt(cleanliness_rating, 10) || 5));
-    const numEquip = Math.max(1, Math.min(5, parseInt(equipment_rating, 10) || 5));
-    const numAc = Math.max(1, Math.min(5, parseInt(ac_rating, 10) || 5));
+    const userId = req.user ? req.user.user_id : null;
+    const name = req.user ? req.user.name : reporter_name || 'Anonymous Student';
+    const email = req.user ? req.user.email : reporter_email || null;
+    const role = req.user ? req.user.role : reporter_role || 'student';
+
+    const parseRating = (val, label) => {
+      const n = Number(val);
+      if (!Number.isInteger(n) || n < 1 || n > 5) {
+        throw new Error(`${label} must be an integer between 1 and 5.`);
+      }
+      return n;
+    };
+
+    let numRating, numClean, numEquip, numAc;
+    try {
+      numRating = parseRating(rating, 'Overall rating');
+      numClean = parseRating(cleanliness_rating, 'Cleanliness rating');
+      numEquip = parseRating(equipment_rating, 'Equipment rating');
+      numAc = parseRating(ac_rating, 'Air-conditioning rating');
+    } catch (validationErr) {
+      return res.status(400).json({ error: validationErr.message });
+    }
 
     const insertRes = await query(
       `INSERT INTO room_feedback (
@@ -52,7 +68,7 @@ async function submitFeedback(req, res) {
         rating, category, comments, cleanliness_rating, equipment_rating, ac_rating
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *`,
+      RETURNING feedback_id, location_id, rating, category, comments, cleanliness_rating, equipment_rating, ac_rating, created_at`,
       [
         resolvedLocationId,
         userId,
@@ -61,17 +77,17 @@ async function submitFeedback(req, res) {
         role,
         numRating,
         category,
-        comments.trim(),
+        String(comments).trim(),
         numClean,
         numEquip,
-        numAc
+        numAc,
       ]
     );
 
     return res.status(201).json({
       success: true,
       message: 'Classroom feedback submitted successfully! Thank you for helping improve our faculty facilities.',
-      feedback: insertRes.rows[0]
+      feedback: insertRes.rows[0],
     });
   } catch (err) {
     console.error('submitFeedback error:', err);
@@ -83,12 +99,13 @@ async function submitFeedback(req, res) {
 async function getLocationFeedback(req, res) {
   try {
     const { idOrCode } = req.params;
+    const currentUser = req.user || null;
+    const isStaff = Boolean(currentUser && ['technician', 'manager'].includes(currentUser.role));
 
-    // Find location by location_id or code
-    let locSql = 'SELECT * FROM locations WHERE code = $1';
+    let locSql = 'SELECT * FROM locations WHERE UPPER(code) = UPPER($1)';
     let locParams = [idOrCode];
     if (!isNaN(parseInt(idOrCode, 10)) && String(parseInt(idOrCode, 10)) === String(idOrCode)) {
-      locSql = 'SELECT * FROM locations WHERE location_id = $1 OR code = $2';
+      locSql = 'SELECT * FROM locations WHERE location_id = $1 OR UPPER(code) = UPPER($2)';
       locParams = [parseInt(idOrCode, 10), idOrCode];
     }
 
@@ -100,7 +117,6 @@ async function getLocationFeedback(req, res) {
     const location = locRes.rows[0];
     const locationId = location.location_id;
 
-    // Get feedback entries
     const feedbackRes = await query(
       `SELECT f.*, u.matric_or_staff_id, u.role as user_role
        FROM room_feedback f
@@ -110,14 +126,12 @@ async function getLocationFeedback(req, res) {
       [locationId]
     );
 
-    // Calculate rating metrics
-    const feedbacks = feedbackRes.rows;
-    const totalCount = feedbacks.length;
+    const rawFeedbacks = feedbackRes.rows;
+    const totalCount = rawFeedbacks.length;
     let avgRating = 0;
     let avgCleanliness = 0;
     let avgEquipment = 0;
     let avgAc = 0;
-
     const ratingDistribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
 
     if (totalCount > 0) {
@@ -126,7 +140,7 @@ async function getLocationFeedback(req, res) {
       let sumEquip = 0;
       let sumAc = 0;
 
-      feedbacks.forEach(f => {
+      rawFeedbacks.forEach((f) => {
         sumRating += f.rating || 5;
         sumClean += f.cleanliness_rating || 5;
         sumEquip += f.equipment_rating || 5;
@@ -141,7 +155,25 @@ async function getLocationFeedback(req, res) {
       avgAc = Number((sumAc / totalCount).toFixed(1));
     }
 
-    // Get recent breakdown issues for this location
+    // Sanitize feedback list for public visitors (hide reporter email, matric ID, user_id)
+    const feedbacks = rawFeedbacks.map((f) =>
+      isStaff
+        ? f
+        : {
+            feedback_id: f.feedback_id,
+            location_id: f.location_id,
+            reporter_name: f.reporter_name === 'Anonymous' ? 'Anonymous' : 'Faculty Member / Student',
+            reporter_role: f.reporter_role,
+            rating: f.rating,
+            category: f.category,
+            comments: f.comments,
+            cleanliness_rating: f.cleanliness_rating,
+            equipment_rating: f.equipment_rating,
+            ac_rating: f.ac_rating,
+            created_at: f.created_at,
+          }
+    );
+
     const issuesRes = await query(
       `SELECT ir.*, u.name as reporter_name, d.name as device_name
        FROM issue_reports ir
@@ -152,12 +184,26 @@ async function getLocationFeedback(req, res) {
       [locationId]
     );
 
-    // Get today's bookings for this classroom (and upcoming lecturer bookings for QR attendance verification)
-    await ensureQrAttendanceSchema();
+    // Sanitize issues for public visitors
+    const issues = issuesRes.rows.map((ir) =>
+      isStaff
+        ? ir
+        : {
+            report_id: ir.report_id,
+            location_id: ir.location_id,
+            device_id: ir.device_id,
+            device_name: ir.device_name,
+            category: ir.category,
+            description: ir.description,
+            status: ir.status,
+            created_at: ir.created_at,
+          }
+    );
+
     const bookingsRes = await query(
       `SELECT b.booking_id, b.user_id, b.start_time, b.end_time, b.purpose, b.course_id, b.course_name,
               b.status, b.checked_in_at, b.attendance_status, b.attendance_notes,
-              u.name as booked_by, u.role as booked_by_role, u.matric_or_staff_id
+              u.name as booked_by, u.role as booked_by_role
        FROM location_bookings b
        JOIN users u ON b.user_id = u.user_id
        WHERE b.location_id = $1
@@ -167,6 +213,29 @@ async function getLocationFeedback(req, res) {
        ORDER BY b.start_time ASC`,
       [locationId]
     );
+
+    // Only expose personal/attendance fields to the booking owner or staff
+    const todays_bookings = bookingsRes.rows
+      .filter((b) => {
+        if (b.status === 'approved') return true;
+        // Pending bookings are only shown to their owner or staff
+        return isStaff || (currentUser && Number(b.user_id) === Number(currentUser.user_id));
+      })
+      .map((b) => {
+        const isOwner = Boolean(currentUser && Number(currentUser.user_id) === Number(b.user_id));
+        if (isStaff || isOwner) {
+          return b;
+        }
+        return {
+          booking_id: b.booking_id,
+          start_time: b.start_time,
+          end_time: b.end_time,
+          purpose: b.purpose,
+          course_id: b.course_id,
+          course_name: b.course_name,
+          status: b.status,
+        };
+      });
 
     return res.json({
       success: true,
@@ -178,11 +247,11 @@ async function getLocationFeedback(req, res) {
         average_equipment: avgEquipment,
         average_ac: avgAc,
         rating_distribution: ratingDistribution,
-        open_issues_count: issuesRes.rows.filter(i => i.status === 'open' || i.status === 'in_progress').length
+        open_issues_count: issuesRes.rows.filter((i) => i.status === 'open' || i.status === 'in_progress').length,
       },
       feedbacks,
-      issues: issuesRes.rows,
-      todays_bookings: bookingsRes.rows
+      issues,
+      todays_bookings,
     });
   } catch (err) {
     console.error('getLocationFeedback error:', err);
@@ -228,33 +297,32 @@ async function getAllFeedback(req, res) {
     sql += ' ORDER BY f.created_at DESC';
 
     const result = await query(sql, params);
-
-    // Calculate overall stats
-    let totalScore = 0;
-    result.rows.forEach(r => totalScore += (r.rating || 5));
-    const avgScore = result.rows.length > 0 ? Number((totalScore / result.rows.length).toFixed(1)) : 5.0;
-
     return res.json({
       success: true,
       count: result.rows.length,
-      average_rating: avgScore,
-      feedbacks: result.rows
+      feedbacks: result.rows,
     });
   } catch (err) {
     console.error('getAllFeedback error:', err);
-    return res.status(500).json({ error: 'Failed to retrieve feedback list.' });
+    return res.status(500).json({ error: 'Failed to retrieve all classroom feedback.' });
   }
 }
 
-// DELETE /api/feedback/:id (Staff / Admin)
+// DELETE /api/feedback/:id (Staff / Admin only)
 async function deleteFeedback(req, res) {
   try {
     const { id } = req.params;
-    await query('DELETE FROM room_feedback WHERE feedback_id = $1', [id]);
-    return res.json({ success: true, message: 'Feedback entry deleted successfully.' });
+    const result = await query('DELETE FROM room_feedback WHERE feedback_id = $1 RETURNING feedback_id', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Feedback entry not found.' });
+    }
+    return res.json({
+      success: true,
+      message: 'Feedback record removed successfully.',
+    });
   } catch (err) {
     console.error('deleteFeedback error:', err);
-    return res.status(500).json({ error: 'Failed to delete feedback entry.' });
+    return res.status(500).json({ error: 'Failed to delete feedback record.' });
   }
 }
 
@@ -262,5 +330,5 @@ module.exports = {
   submitFeedback,
   getLocationFeedback,
   getAllFeedback,
-  deleteFeedback
+  deleteFeedback,
 };

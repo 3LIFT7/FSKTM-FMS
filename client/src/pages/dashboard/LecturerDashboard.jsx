@@ -340,17 +340,6 @@ export default function LecturerDashboard() {
                 );
               },
             },
-            {
-              title: 'Room QR Portal',
-              key: 'qr_action',
-              render: (_, row) => (
-                <Link to={`/qr/${row.location_code}`}>
-                  <Button size="small" type={row.attendance_status === 'pending_checkin' ? 'primary' : 'default'} icon={<QrcodeOutlined />}>
-                    {row.attendance_status === 'pending_checkin' ? 'Open Room QR' : 'View Room QR'}
-                  </Button>
-                </Link>
-              ),
-            },
           ]}
         />
       </Card>

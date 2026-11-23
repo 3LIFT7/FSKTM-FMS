@@ -1,33 +1,5 @@
-const { query, exec } = require('../config/db');
+const { query, withTransaction } = require('../config/db');
 const { createUserNotification } = require('./notificationsController');
-
-let qrAttendanceColumnsEnsured = false;
-
-async function ensureQrAttendanceSchema() {
-  if (qrAttendanceColumnsEnsured) return;
-  try {
-    await exec(`
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50);
-      ALTER TABLE location_bookings ADD COLUMN IF NOT EXISTS attendance_notes TEXT;
-      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS booking_id INT;
-      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMP WITH TIME ZONE;
-      ALTER TABLE lab_usage_logs ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(50) DEFAULT 'on_time';
-    `);
-
-    // Backfill existing lab_usage_logs that don't have checked_in_at or attendance_status
-    await exec(`
-      UPDATE lab_usage_logs
-      SET checked_in_at = COALESCE(checked_in_at, start_time, created_at),
-          attendance_status = COALESCE(attendance_status, 'on_time')
-      WHERE checked_in_at IS NULL OR attendance_status IS NULL;
-    `);
-
-    qrAttendanceColumnsEnsured = true;
-  } catch (err) {
-    console.warn('ensureQrAttendanceSchema notice:', err.message);
-  }
-}
 
 function computeBookingAttendanceState(row, now = new Date()) {
   if (row.checked_in_at || (row.attendance_status && ['on_time', 'late'].includes(row.attendance_status))) {
@@ -56,14 +28,23 @@ function computeBookingAttendanceState(row, now = new Date()) {
 }
 
 // GET /api/lab-usage
-// Returns unified faculty reservation attendance records (On-Time, Late, Pending QR Scan, Missed/Absent)
+// Restricted to staff (technician, manager) and lecturers (who only see their own attendance records)
 async function getLabUsageLogs(req, res) {
   try {
-    await ensureQrAttendanceSchema();
+    const currentUser = req.user;
+    if (!currentUser || !['lecturer', 'technician', 'manager'].includes(currentUser.role)) {
+      return res.status(403).json({ error: 'Access denied. Only faculty and lab management staff can access attendance logs.' });
+    }
 
+    const isStaff = ['technician', 'manager'].includes(currentUser.role);
     const { location_id, user_id, startDate, endDate, floor, attendance_status } = req.query;
 
-    // 1. Query all lecturer room/lab reservations (location_bookings) along with any linked lab_usage_logs
+    // Non-staff (lecturers) can only view their own attendance records
+    const effectiveUserId = isStaff ? user_id : currentUser.user_id;
+    if (!isStaff && user_id && Number(user_id) !== Number(currentUser.user_id)) {
+      return res.status(403).json({ error: 'Lecturers may only view their own attendance records.' });
+    }
+
     let bookingsSql = `
       SELECT
         b.booking_id,
@@ -93,7 +74,7 @@ async function getLabUsageLogs(req, res) {
       JOIN users u ON b.user_id = u.user_id
       LEFT JOIN lab_usage_logs lg ON lg.booking_id = b.booking_id
       WHERE u.role = 'lecturer'
-        AND b.status IN ('approved', 'pending')
+        AND b.status = 'approved'
     `;
     const params = [];
 
@@ -102,8 +83,8 @@ async function getLabUsageLogs(req, res) {
       bookingsSql += ` AND b.location_id = $${params.length}`;
     }
 
-    if (user_id) {
-      params.push(user_id);
+    if (effectiveUserId) {
+      params.push(effectiveUserId);
       bookingsSql += ` AND b.user_id = $${params.length}`;
     }
 
@@ -122,7 +103,6 @@ async function getLabUsageLogs(req, res) {
       bookingsSql += ` AND b.start_time <= $${params.length}`;
     }
 
-    // 2. Also include standalone legacy lab_usage_logs that aren't tied to a booking_id
     let standaloneSql = `
       SELECT
         lg.booking_id,
@@ -158,8 +138,8 @@ async function getLabUsageLogs(req, res) {
       standaloneParams.push(location_id);
       standaloneSql += ` AND lg.location_id = $${standaloneParams.length}`;
     }
-    if (user_id) {
-      standaloneParams.push(user_id);
+    if (effectiveUserId) {
+      standaloneParams.push(effectiveUserId);
       standaloneSql += ` AND lg.user_id = $${standaloneParams.length}`;
     }
     if (floor) {
@@ -191,12 +171,12 @@ async function getLabUsageLogs(req, res) {
       };
     });
 
-    // Sort: Today's & most recent sessions first, or active check-ins first
     combined.sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
 
-    const filtered = attendance_status && attendance_status !== 'All'
-      ? combined.filter((item) => item.attendance_status === attendance_status)
-      : combined;
+    const filtered =
+      attendance_status && attendance_status !== 'All'
+        ? combined.filter((item) => item.attendance_status === attendance_status)
+        : combined;
 
     return res.json({
       success: true,
@@ -210,11 +190,9 @@ async function getLabUsageLogs(req, res) {
 }
 
 // POST /api/lab-usage/qr-checkin
-// Lecturer scans the QR code in the reserved lab/room to confirm attendance
+// Lecturer scans the QR code in the reserved lab/room to confirm attendance for an APPROVED booking
 async function checkInViaQr(req, res) {
   try {
-    await ensureQrAttendanceSchema();
-
     const { booking_id, location_id, code, notes } = req.body;
     const userId = req.user.user_id;
 
@@ -222,99 +200,121 @@ async function checkInViaQr(req, res) {
       return res.status(400).json({ error: 'Reservation ID (booking_id) is required to confirm QR attendance.' });
     }
 
-    const bookingRes = await query(
-      `SELECT b.*, l.name AS location_name, l.code AS location_code, l.floor AS location_floor
-       FROM location_bookings b
-       JOIN locations l ON b.location_id = l.location_id
-       WHERE b.booking_id = $1`,
-      [booking_id]
-    );
+    const txResult = await withTransaction(async (tx) => {
+      // Lock the booking row so concurrent requests cannot create duplicate check-ins
+      const bookingRes = await tx.query(
+        `SELECT b.*, l.name AS location_name, l.code AS location_code, l.floor AS location_floor
+         FROM location_bookings b
+         JOIN locations l ON b.location_id = l.location_id
+         WHERE b.booking_id = $1
+         FOR UPDATE`,
+        [booking_id]
+      );
 
-    if (bookingRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Reservation not found.' });
-    }
+      if (bookingRes.rows.length === 0) {
+        const err = new Error('Reservation not found.');
+        err.status = 404;
+        throw err;
+      }
 
-    const booking = bookingRes.rows[0];
+      const booking = bookingRes.rows[0];
 
-    // Verify ownership (or Lab Manager)
-    if (Number(booking.user_id) !== Number(userId) && req.user.role !== 'manager') {
-      return res.status(403).json({ error: 'This reservation belongs to another faculty member.' });
-    }
+      // Verify ownership: strictly only the lecturer who created the booking can confirm attendance
+      if (req.user.role !== 'lecturer' || Number(booking.user_id) !== Number(userId)) {
+        const err = new Error('Only the faculty member who reserved this room can confirm attendance.');
+        err.status = 403;
+        throw err;
+      }
 
-    // Verify scanned room matches the reserved room
-    if (location_id && Number(booking.location_id) !== Number(location_id)) {
-      return res.status(400).json({
-        error: `Room mismatch: This reservation is for ${booking.location_name} (${booking.location_code}). Please scan the QR code inside ${booking.location_code}.`,
-      });
-    }
-    if (code && String(booking.location_code).toUpperCase() !== String(code).trim().toUpperCase()) {
-      return res.status(400).json({
-        error: `Room mismatch: This reservation is for ${booking.location_name} (${booking.location_code}).`,
-      });
-    }
+      // Only APPROVED bookings can be checked into; QR scan must never auto-approve a pending booking
+      if (booking.status !== 'approved') {
+        const err = new Error(
+          `Cannot check in: This reservation is currently "${booking.status}". Only approved bookings can be checked into via QR code.`
+        );
+        err.status = 400;
+        err.code = 'BOOKING_NOT_APPROVED';
+        throw err;
+      }
 
-    if (booking.checked_in_at) {
-      return res.status(400).json({
-        error: 'Attendance has already been confirmed for this reservation.',
-        checked_in_at: booking.checked_in_at,
-        attendance_status: booking.attendance_status,
-      });
-    }
+      // Verify scanned room matches the reserved room
+      if (location_id && Number(booking.location_id) !== Number(location_id)) {
+        const err = new Error(
+          `Room mismatch: This reservation is for ${booking.location_name} (${booking.location_code}). Please scan the QR code inside ${booking.location_code}.`
+        );
+        err.status = 400;
+        err.code = 'WRONG_ROOM_QR';
+        throw err;
+      }
+      if (code && String(booking.location_code).toUpperCase() !== String(code).trim().toUpperCase()) {
+        const err = new Error(
+          `Room mismatch: This reservation is for ${booking.location_name} (${booking.location_code}).`
+        );
+        err.status = 400;
+        err.code = 'WRONG_ROOM_QR';
+        throw err;
+      }
 
-    const now = new Date();
-    const start = new Date(booking.start_time);
-    const end = new Date(booking.end_time);
-    const earliestCheckin = new Date(start.getTime() - 15 * 60 * 1000); // 15 minutes before start_time
-    const onTimeDeadline = new Date(start.getTime() + 15 * 60 * 1000); // 15 minutes after start_time
+      if (booking.checked_in_at) {
+        const err = new Error('Attendance has already been confirmed for this reservation.');
+        err.status = 409;
+        err.code = 'DUPLICATE_CHECKIN';
+        throw err;
+      }
 
-    if (now < earliestCheckin) {
-      const earliestStr = earliestCheckin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return res.status(400).json({
-        error: `Too early to check in. QR attendance confirmation opens 15 minutes before your scheduled start time (at ${earliestStr}).`,
-        code: 'TOO_EARLY',
-      });
-    }
+      const existingLog = await tx.query('SELECT log_id FROM lab_usage_logs WHERE booking_id = $1', [booking.booking_id]);
+      if (existingLog.rows.length > 0) {
+        const err = new Error('Attendance has already been recorded for this reservation.');
+        err.status = 409;
+        err.code = 'DUPLICATE_CHECKIN';
+        throw err;
+      }
 
-    if (now > end) {
-      const endStr = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return res.status(400).json({
-        error: `Check-in window closed at ${endStr}. This reservation has been marked as Missed / Absent.`,
-        code: 'WINDOW_CLOSED',
-      });
-    }
+      const now = new Date();
+      const start = new Date(booking.start_time);
+      const end = new Date(booking.end_time);
+      const earliestCheckin = new Date(start.getTime() - 15 * 60 * 1000); // 15 minutes before start_time
+      const onTimeDeadline = new Date(start.getTime() + 15 * 60 * 1000); // 15 minutes after start_time
 
-    const attendanceStatus = now <= onTimeDeadline ? 'on_time' : 'late';
-    const diffMins = Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
-    const cleanNotes = notes?.trim() || booking.purpose || 'QR Code Attendance Verified';
+      if (now < earliestCheckin) {
+        const earliestStr = earliestCheckin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const err = new Error(
+          `Too early to check in. QR attendance confirmation opens 15 minutes before your scheduled start time (at ${earliestStr}).`
+        );
+        err.status = 400;
+        err.code = 'TOO_EARLY';
+        throw err;
+      }
 
-    // Update location_bookings
-    await query(
-      `UPDATE location_bookings
-       SET checked_in_at = CURRENT_TIMESTAMP,
-           attendance_status = $1,
-           attendance_notes = $2,
-           status = 'approved'
-       WHERE booking_id = $3`,
-      [attendanceStatus, cleanNotes, booking.booking_id]
-    );
+      if (now > end) {
+        const endStr = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const err = new Error(
+          `Check-in window closed at ${endStr}. This reservation has been marked as Missed / Absent.`
+        );
+        err.status = 400;
+        err.code = 'WINDOW_CLOSED';
+        throw err;
+      }
 
-    // Insert or update corresponding record in lab_usage_logs for Lab Manager
-    const existingLog = await query('SELECT log_id FROM lab_usage_logs WHERE booking_id = $1', [booking.booking_id]);
-    let createdLog;
-    if (existingLog.rows.length > 0) {
-      const upd = await query(
-        `UPDATE lab_usage_logs
+      const attendanceStatus = now <= onTimeDeadline ? 'on_time' : 'late';
+      const diffMins = Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
+      const cleanNotes = notes?.trim() || booking.purpose || 'QR Code Attendance Verified';
+
+      // Update location_bookings without changing booking approval status
+      await tx.query(
+        `UPDATE location_bookings
          SET checked_in_at = CURRENT_TIMESTAMP,
              attendance_status = $1,
-             purpose = $2
-         WHERE booking_id = $3
-         RETURNING *`,
+             attendance_notes = $2
+         WHERE booking_id = $3`,
         [attendanceStatus, cleanNotes, booking.booking_id]
       );
-      createdLog = upd.rows[0];
-    } else {
-      const ins = await query(
-        `INSERT INTO lab_usage_logs (booking_id, location_id, user_id, start_time, end_time, course_id, course_name, purpose, checked_in_at, attendance_status)
+
+      // Insert synchronized record into lab_usage_logs
+      const ins = await tx.query(
+        `INSERT INTO lab_usage_logs (
+           booking_id, location_id, user_id, start_time, end_time,
+           course_id, course_name, purpose, checked_in_at, attendance_status
+         )
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, $9)
          RETURNING *`,
         [
@@ -329,21 +329,27 @@ async function checkInViaQr(req, res) {
           attendanceStatus,
         ]
       );
-      createdLog = ins.rows[0];
-    }
+
+      return {
+        booking,
+        createdLog: ins.rows[0],
+        attendanceStatus,
+        diffMins,
+      };
+    });
 
     // Notify Lab Managers
     try {
       const managers = await query("SELECT user_id FROM users WHERE role = 'manager'");
-      const statusLabel = attendanceStatus === 'on_time' ? 'On-Time' : `Late (+${diffMins} mins)`;
+      const statusLabel = txResult.attendanceStatus === 'on_time' ? 'On-Time' : `Late (+${txResult.diffMins} mins)`;
       for (const mgr of managers.rows) {
         await createUserNotification({
           userId: mgr.user_id,
           type: 'room_booking',
           title: `QR Attendance Verified (${statusLabel})`,
-          message: `${req.user.name} confirmed attendance via QR at ${booking.location_name} (${booking.location_code}) for ${booking.course_id || booking.purpose} — Status: ${statusLabel}.`,
+          message: `${req.user.name} confirmed attendance via QR at ${txResult.booking.location_name} (${txResult.booking.location_code}) for ${txResult.booking.course_id || txResult.booking.purpose} — Status: ${statusLabel}.`,
           entityType: 'lab_usage',
-          entityId: createdLog.log_id,
+          entityId: txResult.createdLog.log_id,
         });
       }
     } catch (notifyErr) {
@@ -352,16 +358,22 @@ async function checkInViaQr(req, res) {
 
     return res.status(200).json({
       success: true,
-      attendance_status: attendanceStatus,
-      late_minutes: attendanceStatus === 'late' ? diffMins : 0,
-      checked_in_at: createdLog.checked_in_at,
+      attendance_status: txResult.attendanceStatus,
+      late_minutes: txResult.attendanceStatus === 'late' ? txResult.diffMins : 0,
+      checked_in_at: txResult.createdLog.checked_in_at,
       message:
-        attendanceStatus === 'on_time'
-          ? `Attendance confirmed On-Time for ${booking.location_name} (${booking.location_code})!`
-          : `Attendance confirmed (Late Check-In: +${diffMins} mins) for ${booking.location_name} (${booking.location_code}).`,
-      log: createdLog,
+        txResult.attendanceStatus === 'on_time'
+          ? `Attendance confirmed On-Time for ${txResult.booking.location_name} (${txResult.booking.location_code})!`
+          : `Attendance confirmed (Late Check-In: +${txResult.diffMins} mins) for ${txResult.booking.location_name} (${txResult.booking.location_code}).`,
+      log: txResult.createdLog,
     });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({
+        error: err.message,
+        code: err.code,
+      });
+    }
     console.error('checkInViaQr error:', err);
     return res.status(500).json({ error: 'Failed to confirm QR attendance.' });
   }
@@ -370,18 +382,19 @@ async function checkInViaQr(req, res) {
 // DELETE /api/lab-usage/:id
 async function deleteLabUsageLog(req, res) {
   try {
-    await ensureQrAttendanceSchema();
     const { id } = req.params;
 
     if (String(id).startsWith('B-')) {
       const bookingId = parseInt(String(id).replace('B-', ''), 10);
-      await query(
-        `UPDATE location_bookings
-         SET checked_in_at = NULL, attendance_status = NULL, attendance_notes = NULL
-         WHERE booking_id = $1`,
-        [bookingId]
-      );
-      await query('DELETE FROM lab_usage_logs WHERE booking_id = $1', [bookingId]);
+      await withTransaction(async (tx) => {
+        await tx.query(
+          `UPDATE location_bookings
+           SET checked_in_at = NULL, attendance_status = NULL, attendance_notes = NULL
+           WHERE booking_id = $1`,
+          [bookingId]
+        );
+        await tx.query('DELETE FROM lab_usage_logs WHERE booking_id = $1', [bookingId]);
+      });
       return res.json({ success: true, message: 'Attendance log reset.' });
     }
 
@@ -392,20 +405,22 @@ async function deleteLabUsageLog(req, res) {
 
     const log = existing.rows[0];
     const isStaff = ['manager', 'technician'].includes(req.user.role);
-    if (!isStaff && Number(log.user_id) !== Number(req.user.user_id)) {
+    if (!isStaff) {
       return res.status(403).json({ error: 'Not authorized to delete this record.' });
     }
 
-    if (log.booking_id) {
-      await query(
-        `UPDATE location_bookings
-         SET checked_in_at = NULL, attendance_status = NULL, attendance_notes = NULL
-         WHERE booking_id = $1`,
-        [log.booking_id]
-      );
-    }
+    await withTransaction(async (tx) => {
+      if (log.booking_id) {
+        await tx.query(
+          `UPDATE location_bookings
+           SET checked_in_at = NULL, attendance_status = NULL, attendance_notes = NULL
+           WHERE booking_id = $1`,
+          [log.booking_id]
+        );
+      }
+      await tx.query('DELETE FROM lab_usage_logs WHERE log_id = $1', [id]);
+    });
 
-    await query('DELETE FROM lab_usage_logs WHERE log_id = $1', [id]);
     return res.json({ success: true, message: 'Lab usage log record deleted.' });
   } catch (err) {
     console.error('deleteLabUsageLog error:', err);
@@ -414,7 +429,6 @@ async function deleteLabUsageLog(req, res) {
 }
 
 module.exports = {
-  ensureQrAttendanceSchema,
   getLabUsageLogs,
   checkInViaQr,
   deleteLabUsageLog,

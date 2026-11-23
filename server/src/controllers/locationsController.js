@@ -1,4 +1,14 @@
-const { query } = require('../config/db');
+const { query, withTransaction } = require('../config/db');
+
+const VALID_FLOORS = new Set([
+  'Ground',
+  'First',
+  'Second',
+  'Third',
+  'Blok B8',
+  'Blok C12',
+  'Blok L Perpustakaan',
+]);
 
 // GET /api/locations
 async function getAllLocations(req, res) {
@@ -52,11 +62,13 @@ async function getAllLocations(req, res) {
 async function getLocationById(req, res) {
   try {
     const { id } = req.params;
+    const currentUser = req.user || null;
+    const isStaff = Boolean(currentUser && ['technician', 'manager'].includes(currentUser.role));
 
-    let locSql = 'SELECT * FROM locations WHERE code = $1';
+    let locSql = 'SELECT * FROM locations WHERE UPPER(code) = UPPER($1)';
     let locParams = [id];
     if (!isNaN(parseInt(id, 10)) && String(parseInt(id, 10)) === String(id)) {
-      locSql = 'SELECT * FROM locations WHERE location_id = $1 OR code = $2';
+      locSql = 'SELECT * FROM locations WHERE location_id = $1 OR UPPER(code) = UPPER($2)';
       locParams = [parseInt(id, 10), id];
     }
 
@@ -69,7 +81,6 @@ async function getLocationById(req, res) {
     const location = locResult.rows[0];
     const locId = location.location_id;
 
-    // Fetch devices in this room
     const devResult = await query(
       `SELECT device_id, name, category, serial_number, barcode, specs, accessories, status, image_url,
               COALESCE(is_loanable, FALSE) AS is_loanable
@@ -77,7 +88,6 @@ async function getLocationById(req, res) {
       [locId]
     );
 
-    // Fetch upcoming bookings
     const bookingsResult = await query(
       `SELECT b.booking_id, b.start_time, b.end_time, b.purpose, b.is_recurring, b.course_id, b.status,
               u.name AS booked_by, u.role AS booked_by_role
@@ -88,24 +98,40 @@ async function getLocationById(req, res) {
       [locId]
     );
 
-    // Fetch recent maintenance logs
-    const maintenanceResult = await query(
-      `SELECT m.log_id, m.description, m.cost, m.date_performed, m.linked_report_id,
-              u.name AS technician_name
-       FROM maintenance_logs m
-       JOIN users u ON m.technician_id = u.user_id
-       WHERE m.location_id = $1
-       ORDER BY m.date_performed DESC LIMIT 5`,
-      [locId]
+    const upcoming_bookings = bookingsResult.rows.map((b) =>
+      isStaff
+        ? b
+        : {
+            booking_id: b.booking_id,
+            start_time: b.start_time,
+            end_time: b.end_time,
+            purpose: b.purpose,
+            is_recurring: b.is_recurring,
+            course_id: b.course_id,
+            status: b.status,
+          }
     );
 
-    // Fetch feedback metrics
+    let recent_maintenance = [];
+    if (isStaff) {
+      const maintenanceResult = await query(
+        `SELECT m.log_id, m.description, m.cost, m.date_performed, m.linked_report_id,
+                u.name AS technician_name
+         FROM maintenance_logs m
+         JOIN users u ON m.technician_id = u.user_id
+         WHERE m.location_id = $1
+         ORDER BY m.date_performed DESC LIMIT 5`,
+        [locId]
+      );
+      recent_maintenance = maintenanceResult.rows;
+    }
+
     let feedbackStats = {
       feedback_count: 0,
       average_rating: 5.0,
       average_cleanliness: 5.0,
       average_equipment: 5.0,
-      average_ac: 5.0
+      average_ac: 5.0,
     };
     try {
       const fbRes = await query(
@@ -129,7 +155,6 @@ async function getLocationById(req, res) {
       }
     } catch (_) {}
 
-    // Fetch active unresolved reports for this classroom
     let activeIssues = [];
     try {
       const issuesRes = await query(
@@ -147,11 +172,11 @@ async function getLocationById(req, res) {
       location: {
         ...location,
         devices: devResult.rows,
-        upcoming_bookings: bookingsResult.rows,
-        recent_maintenance: maintenanceResult.rows,
+        upcoming_bookings,
+        recent_maintenance,
         feedback_stats: feedbackStats,
-        active_issues: activeIssues
-      }
+        active_issues: activeIssues,
+      },
     });
   } catch (err) {
     console.error('getLocationById error:', err);
@@ -160,7 +185,6 @@ async function getLocationById(req, res) {
 }
 
 // PATCH /api/locations/:id/status
-// Core feature: Changing status to 'maintenance' immediately hides room from calendar & disables map booking
 async function updateLocationStatus(req, res) {
   try {
     const { id } = req.params;
@@ -170,32 +194,43 @@ async function updateLocationStatus(req, res) {
       return res.status(400).json({ error: 'Invalid status. Must be "available" or "maintenance".' });
     }
 
-    const result = await query(
-      `UPDATE locations SET status = $1 WHERE location_id = $2 RETURNING location_id, code, name, floor, status`,
-      [status, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Location not found.' });
-    }
-
-    const updated = result.rows[0];
-
-    // If set to maintenance, automatically record a maintenance log entry if technician info provided
-    if (status === 'maintenance' && req.user) {
-      await query(
-        `INSERT INTO maintenance_logs (location_id, technician_id, description, date_performed)
-         VALUES ($1, $2, $3, CURRENT_DATE)`,
-        [id, req.user.user_id, reason || 'Room marked under maintenance by staff.']
+    const txResult = await withTransaction(async (tx) => {
+      const existingRes = await tx.query(
+        'SELECT location_id, code, name, floor, status FROM locations WHERE location_id = $1 FOR UPDATE',
+        [id]
       );
-    }
+      if (existingRes.rows.length === 0) {
+        const err = new Error('Location not found.');
+        err.status = 404;
+        throw err;
+      }
+
+      const previous = existingRes.rows[0];
+      const result = await tx.query(
+        `UPDATE locations SET status = $1 WHERE location_id = $2 RETURNING location_id, code, name, floor, status`,
+        [status, id]
+      );
+      const updated = result.rows[0];
+
+      // Only log a new maintenance entry when transitioning from available -> maintenance
+      if (status === 'maintenance' && previous.status !== 'maintenance' && req.user) {
+        await tx.query(
+          `INSERT INTO maintenance_logs (location_id, technician_id, description, date_performed)
+           VALUES ($1, $2, $3, CURRENT_DATE)`,
+          [id, req.user.user_id, reason || 'Room marked under maintenance by staff.']
+        );
+      }
+
+      return updated;
+    });
 
     return res.json({
       success: true,
-      message: `Location ${updated.name} status updated to ${status}. Auto-hide from calendar is now active.`,
-      location: updated
+      message: `Location ${txResult.name} status updated to ${status}. Auto-hide from calendar is now active.`,
+      location: txResult,
     });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('updateLocationStatus error:', err);
     return res.status(500).json({ error: 'Failed to update location status.' });
   }
@@ -205,15 +240,44 @@ async function updateLocationStatus(req, res) {
 async function createLocation(req, res) {
   try {
     const { code, name, floor, capacity, category, description, status, image_url } = req.body;
-    if (!code || !name || !floor) {
+    if (!code || !String(code).trim() || !name || !String(name).trim() || !floor) {
       return res.status(400).json({ error: 'Code, name, and floor are required.' });
+    }
+
+    if (!VALID_FLOORS.has(floor)) {
+      return res.status(400).json({ error: 'Invalid floor or block specified.' });
+    }
+
+    if (status && !['available', 'maintenance'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid room status.' });
+    }
+
+    const parsedCap = capacity !== undefined ? parseInt(capacity, 10) : 30;
+    if (isNaN(parsedCap) || parsedCap < 0) {
+      return res.status(400).json({ error: 'Capacity must be a non-negative integer.' });
+    }
+
+    const dupCheck = await query('SELECT location_id FROM locations WHERE UPPER(code) = UPPER($1)', [
+      String(code).trim(),
+    ]);
+    if (dupCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'A facility with this room code already exists.' });
     }
 
     const result = await query(
       `INSERT INTO locations (code, name, floor, capacity, category, description, status, image_url)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [code, name, floor, capacity || 30, category || 'Lab', description || '', status || 'available', image_url || null]
+      [
+        String(code).trim(),
+        String(name).trim(),
+        floor,
+        parsedCap,
+        category || 'Lab',
+        description || '',
+        status || 'available',
+        image_url || null,
+      ]
     );
 
     return res.status(201).json({ success: true, location: result.rows[0] });
@@ -229,66 +293,108 @@ async function updateLocation(req, res) {
     const { id } = req.params;
     const { code, name, floor, capacity, category, description, status, image_url, device_ids } = req.body;
 
-    const existingRes = await query('SELECT * FROM locations WHERE location_id = $1', [id]);
-    if (existingRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Location not found.' });
-    }
-    const current = existingRes.rows[0];
+    const txResult = await withTransaction(async (tx) => {
+      const existingRes = await tx.query('SELECT * FROM locations WHERE location_id = $1 FOR UPDATE', [id]);
+      if (existingRes.rows.length === 0) {
+        const err = new Error('Location not found.');
+        err.status = 404;
+        throw err;
+      }
+      const current = existingRes.rows[0];
 
-    const updatedCode = code !== undefined ? code.trim() : current.code;
-    const updatedName = name !== undefined ? name.trim() : current.name;
-    const updatedFloor = floor !== undefined ? floor : current.floor;
-    const updatedCapacity = capacity !== undefined ? parseInt(capacity, 10) || 0 : current.capacity;
-    const updatedCategory = category !== undefined ? category : current.category;
-    const updatedDescription = description !== undefined ? description : current.description;
-    const updatedStatus = status !== undefined ? status : current.status;
-    const updatedImageUrl = image_url !== undefined ? (image_url ? image_url.trim() : null) : current.image_url;
-
-    const result = await query(
-      `UPDATE locations
-       SET code = $1,
-           name = $2,
-           floor = $3,
-           capacity = $4,
-           category = $5,
-           description = $6,
-           status = $7,
-           image_url = $8
-       WHERE location_id = $9
-       RETURNING *`,
-      [updatedCode, updatedName, updatedFloor, updatedCapacity, updatedCategory, updatedDescription, updatedStatus, updatedImageUrl, id]
-    );
-
-    // If device_ids array is provided, synchronize equipment inside this room
-    if (Array.isArray(device_ids)) {
-      // First unassign devices currently in this room that are being removed -> return to loanable pool
-      await query('UPDATE devices SET location_id = NULL, is_loanable = TRUE WHERE location_id = $1', [id]);
-      // Assign specified devices to this room -> mark unavailable for individual booking (is_loanable = FALSE)
-      for (const devId of device_ids) {
-        if (devId) {
-          await query(
-            'UPDATE devices SET location_id = $1, is_loanable = FALSE WHERE device_id = $2',
-            [id, parseInt(devId, 10)]
-          );
+      const updatedCode = code !== undefined ? String(code).trim() : current.code;
+      if (updatedCode.toUpperCase() !== current.code.toUpperCase()) {
+        const dup = await tx.query(
+          'SELECT location_id FROM locations WHERE UPPER(code) = UPPER($1) AND location_id != $2',
+          [updatedCode, id]
+        );
+        if (dup.rows.length > 0) {
+          const err = new Error('A facility with this room code already exists.');
+          err.status = 400;
+          throw err;
         }
       }
-    }
 
-    // Fetch refreshed equipment in this room
-    const devResult = await query(
-      `SELECT device_id, name, category, serial_number, barcode, specs, status, image_url
-       FROM devices WHERE location_id = $1 ORDER BY name ASC`,
-      [id]
-    );
+      const updatedName = name !== undefined ? String(name).trim() : current.name;
+      const updatedFloor = floor !== undefined ? floor : current.floor;
+      if (!VALID_FLOORS.has(updatedFloor)) {
+        const err = new Error('Invalid floor or block specified.');
+        err.status = 400;
+        throw err;
+      }
+
+      const updatedCapacity = capacity !== undefined ? parseInt(capacity, 10) : current.capacity;
+      if (isNaN(updatedCapacity) || updatedCapacity < 0) {
+        const err = new Error('Capacity must be a non-negative integer.');
+        err.status = 400;
+        throw err;
+      }
+
+      const updatedCategory = category !== undefined ? category : current.category;
+      const updatedDescription = description !== undefined ? description : current.description;
+      const updatedStatus = status !== undefined ? status : current.status;
+      if (!['available', 'maintenance'].includes(updatedStatus)) {
+        const err = new Error('Invalid room status.');
+        err.status = 400;
+        throw err;
+      }
+      const updatedImageUrl = image_url !== undefined ? (image_url ? String(image_url).trim() : null) : current.image_url;
+
+      const result = await tx.query(
+        `UPDATE locations
+         SET code = $1,
+             name = $2,
+             floor = $3,
+             capacity = $4,
+             category = $5,
+             description = $6,
+             status = $7,
+             image_url = $8
+         WHERE location_id = $9
+         RETURNING *`,
+        [
+          updatedCode,
+          updatedName,
+          updatedFloor,
+          updatedCapacity,
+          updatedCategory,
+          updatedDescription,
+          updatedStatus,
+          updatedImageUrl,
+          id,
+        ]
+      );
+
+      if (Array.isArray(device_ids)) {
+        await tx.query('UPDATE devices SET location_id = NULL, is_loanable = TRUE WHERE location_id = $1', [id]);
+        for (const devId of device_ids) {
+          if (devId) {
+            await tx.query('UPDATE devices SET location_id = $1, is_loanable = FALSE WHERE device_id = $2', [
+              id,
+              parseInt(devId, 10),
+            ]);
+          }
+        }
+      }
+
+      const devResult = await tx.query(
+        `SELECT device_id, name, category, serial_number, barcode, specs, status, image_url
+         FROM devices WHERE location_id = $1 ORDER BY name ASC`,
+        [id]
+      );
+
+      return {
+        ...result.rows[0],
+        devices: devResult.rows,
+      };
+    });
 
     return res.json({
       success: true,
-      location: {
-        ...result.rows[0],
-        devices: devResult.rows
-      }
+      location: txResult,
     });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('updateLocation error:', err);
     return res.status(500).json({ error: 'Failed to update location.' });
   }
@@ -315,5 +421,5 @@ module.exports = {
   updateLocationStatus,
   createLocation,
   updateLocation,
-  deleteLocation
+  deleteLocation,
 };

@@ -1,25 +1,31 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const path = require('path');
 const issuesController = require('../controllers/issuesController');
 const { authenticateToken, optionalAuth, requireRole } = require('../middleware/auth');
+const { createImageUploader, verifyImageMagicBytes, safeUnlink } = require('../utils/fileUpload');
 
-// Multer storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, '..', '..', 'uploads'));
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    cb(null, `issue-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-  }
-});
-const upload = multer({ storage });
+const upload = createImageUploader('issue');
+
+function uploadIssuePhoto(req, res, next) {
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Invalid photo upload.' });
+    }
+    if (req.file) {
+      const detected = verifyImageMagicBytes(req.file.path);
+      if (!detected) {
+        safeUnlink(req.file.path);
+        return res.status(400).json({
+          error: 'Invalid uploaded image content. Only authentic JPEG, PNG, WebP, and GIF files are allowed.',
+        });
+      }
+    }
+    next();
+  });
+}
 
 router.get('/', authenticateToken, issuesController.getIssues);
-router.post('/', optionalAuth, upload.single('photo'), issuesController.createIssue);
+router.post('/', optionalAuth, uploadIssuePhoto, issuesController.createIssue);
 router.patch('/:id/status', authenticateToken, requireRole(['technician', 'manager']), issuesController.updateIssueStatus);
 
 module.exports = router;
-

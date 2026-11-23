@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const locationsController = require('../controllers/locationsController');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, optionalAuth, requireRole } = require('../middleware/auth');
 
-router.get('/', locationsController.getAllLocations);
-router.get('/:id', locationsController.getLocationById);
+router.get('/', optionalAuth, locationsController.getAllLocations);
+router.get('/:id', optionalAuth, locationsController.getLocationById);
 
 // Staff only: toggle status (available <-> maintenance)
 router.patch('/:id/status', authenticateToken, requireRole(['technician', 'manager']), locationsController.updateLocationStatus);

@@ -68,14 +68,6 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
             status="success"
             title="Reset Request Registered"
             subTitle={responseInfo.message}
-            extra={
-              responseInfo.stub_token ? (
-                <div style={{ textAlign: 'left', background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0', marginTop: 12 }}>
-                  <div style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Dev Stub Reset Token:</div>
-                  <code style={{ fontSize: 12, wordBreak: 'break-all' }}>{responseInfo.stub_token}</code>
-                </div>
-              ) : null
-            }
           >
             <Button type="primary" block onClick={handleCancel}>
               Close
@@ -84,7 +76,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
         ) : (
           <>
             <p style={{ color: '#64748B', fontSize: 13, marginBottom: 16 }}>
-              Enter your registered faculty email address to receive a secure password reset token.
+              Enter your registered faculty email address to receive password reset instructions.
             </p>
             <Form form={form} layout="vertical" onFinish={handleFinish}>
               <Form.Item

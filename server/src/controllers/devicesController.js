@@ -1,33 +1,4 @@
-const { query, exec } = require('../config/db');
-
-let accessoriesColumnEnsured = false;
-
-async function ensureAccessoriesColumn() {
-  if (accessoriesColumnEnsured) return;
-  try {
-    await exec(`
-      ALTER TABLE devices ADD COLUMN IF NOT EXISTS accessories TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS selected_accessories TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_rating INT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_condition VARCHAR(100);
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS return_notes TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_rating INT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS device_review TEXT;
-      ALTER TABLE device_bookings ADD COLUMN IF NOT EXISTS rated_at TIMESTAMP WITH TIME ZONE;
-    `);
-    await exec(`UPDATE devices SET accessories = '["Touch Controllers (L & R)","USB-C Charging Cable","Carrying Case"]' WHERE serial_number IN ('VR-MQ2-001', 'VR-MQ2-002') AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["Base Stations 2.0 (Pair)","Wireless Adapter","Controllers (L & R)","Link Box & Cables"]' WHERE serial_number = 'VR-VIVE-001' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["24-70mm GM Lens","Extra NP-FZ100 Battery","64GB SDXC Card","Camera Hard Case","Charger & Strap"]' WHERE serial_number = 'CAM-SNY-A7IV' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["BG30 Battery Grip","Quick-Release Plate","Extended Grip / Tripod","Carrying Case"]' WHERE serial_number = 'GMB-DJI-RS3P' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["140W USB-C Power Adapter","MagSafe 3 Cable","USB-C Multiport Hub","Protective Laptop Sleeve","Wireless Mouse"]' WHERE serial_number = 'LAP-APL-MBP16' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["130W USB-C Power Adapter","USB-C to HDMI/USB Adapter","Laptop Carrying Bag","Wireless Mouse"]' WHERE serial_number = 'LAP-DEL-XPS15' AND accessories IS NULL`);
-    await exec(`UPDATE devices SET accessories = '["Remote Control","HDMI Cable","Power Cord"]' WHERE serial_number = 'PRJ-EPS-2250' AND accessories IS NULL`);
-    await exec(`UPDATE device_bookings SET selected_accessories = '["24-70mm GM Lens","Extra NP-FZ100 Battery","Camera Hard Case"]' WHERE selected_accessories IS NULL AND device_id IN (SELECT device_id FROM devices WHERE serial_number = 'CAM-SNY-A7IV')`);
-    accessoriesColumnEnsured = true;
-  } catch (err) {
-    console.warn('ensureAccessoriesColumn notice:', err.message);
-  }
-}
+const { query } = require('../config/db');
 
 function parseAccessories(val) {
   if (!val) return [];
@@ -64,14 +35,16 @@ function formatDeviceRow(row, isStaff = true) {
     accessories: parseAccessories(row.accessories),
     loan_count: isStaff && row.loan_count !== undefined ? Number(row.loan_count) : 0,
     rating_count: isStaff && row.rating_count !== undefined ? Number(row.rating_count) : 0,
-    avg_rating: isStaff && row.avg_rating !== null && row.avg_rating !== undefined ? Number(Number(row.avg_rating).toFixed(1)) : null,
+    avg_rating:
+      isStaff && row.avg_rating !== null && row.avg_rating !== undefined
+        ? Number(Number(row.avg_rating).toFixed(1))
+        : null,
   };
 }
 
 // GET /api/devices
 async function getAllDevices(req, res) {
   try {
-    await ensureAccessoriesColumn();
     const { status, category, location_id, is_loanable, search } = req.query;
 
     let sql = `
@@ -92,8 +65,8 @@ async function getAllDevices(req, res) {
         l.code AS location_code,
         l.floor AS location_floor,
         (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND db.status IN ('approved', 'checked_out', 'returned')) AS loan_count,
-        (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
-        (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
+        (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.return_rating, db.device_rating) IS NOT NULL) AS rating_count,
+        (SELECT AVG(COALESCE(db.return_rating, db.device_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.return_rating, db.device_rating) IS NOT NULL) AS avg_rating
       FROM devices d
       LEFT JOIN locations l ON d.location_id = l.location_id
       WHERE 1=1
@@ -143,7 +116,6 @@ async function getAllDevices(req, res) {
 // GET /api/devices/:id
 async function getDeviceById(req, res) {
   try {
-    await ensureAccessoriesColumn();
     const { id } = req.params;
     if (isNaN(parseInt(id, 10))) {
       return res.status(404).json({ error: 'Device not found.' });
@@ -153,8 +125,8 @@ async function getDeviceById(req, res) {
               COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
               l.name AS location_name, l.code AS location_code, l.floor AS location_floor,
               (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND db.status IN ('approved', 'checked_out', 'returned')) AS loan_count,
-              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
-              (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.return_rating, db.device_rating) IS NOT NULL) AS rating_count,
+              (SELECT AVG(COALESCE(db.return_rating, db.device_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.return_rating, db.device_rating) IS NOT NULL) AS avg_rating
        FROM devices d
        LEFT JOIN locations l ON d.location_id = l.location_id
        WHERE d.device_id = $1`,
@@ -174,12 +146,11 @@ async function getDeviceById(req, res) {
           ...formatDeviceRow(devRes.rows[0], false),
           loan_history: [],
           recent_loans: [],
-          maintenance_logs: []
-        }
+          maintenance_logs: [],
+        },
       });
     }
 
-    // Complete borrowing history for this device with all borrower, approver, and rating details (Technician & Lab Manager only)
     const loanRes = await query(
       `SELECT 
          dl.*,
@@ -212,7 +183,6 @@ async function getDeviceById(req, res) {
       [id]
     );
 
-    // Maintenance history
     const maintRes = await query(
       `SELECT m.*, u.name AS technician_name
        FROM maintenance_logs m
@@ -225,16 +195,20 @@ async function getDeviceById(req, res) {
     const formattedLoans = loanRes.rows.map((l) => ({
       ...l,
       selected_accessories: parseAccessories(l.selected_accessories),
+      return_rating: l.return_rating ?? l.device_rating ?? null,
+      device_rating: l.device_rating ?? l.return_rating ?? null,
+      return_notes: l.return_notes ?? l.device_review ?? null,
+      device_review: l.device_review ?? l.return_notes ?? null,
     }));
 
     return res.json({
       success: true,
       device: {
-        ...formatDeviceRow(devRes.rows[0]),
+        ...formatDeviceRow(devRes.rows[0], true),
         loan_history: formattedLoans,
         recent_loans: formattedLoans,
-        maintenance_logs: maintRes.rows
-      }
+        maintenance_logs: maintRes.rows,
+      },
     });
   } catch (err) {
     console.error('getDeviceById error:', err);
@@ -245,22 +219,37 @@ async function getDeviceById(req, res) {
 // POST /api/devices
 async function createDevice(req, res) {
   try {
-    await ensureAccessoriesColumn();
     const { name, category, serial_number, barcode, location_id, is_loanable, specs, accessories, status, image_url } = req.body;
-    if (!name || !serial_number) {
+    if (!name || !String(name).trim() || !serial_number || !String(serial_number).trim()) {
       return res.status(400).json({ error: 'Device name and serial number are required.' });
     }
 
-    const checkRes = await query('SELECT device_id FROM devices WHERE serial_number = $1', [serial_number.trim()]);
+    const validStatuses = ['available', 'checked_out', 'maintenance', 'broken'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid device status.' });
+    }
+
+    const checkRes = await query('SELECT device_id FROM devices WHERE UPPER(serial_number) = UPPER($1)', [
+      String(serial_number).trim(),
+    ]);
     if (checkRes.rows.length > 0) {
       return res.status(400).json({ error: 'A device with this serial number already exists.' });
     }
 
     const targetLocationId = location_id ? parseInt(location_id, 10) : null;
-    // Once added to a room, a device becomes unavailable for individual booking (is_loanable = false)
-    const targetIsLoanable = targetLocationId !== null
-      ? false
-      : (is_loanable !== undefined ? (is_loanable === true || is_loanable === 'true') : true);
+    if (targetLocationId !== null) {
+      const locCheck = await query('SELECT location_id FROM locations WHERE location_id = $1', [targetLocationId]);
+      if (locCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Assigned location does not exist.' });
+      }
+    }
+
+    const targetIsLoanable =
+      targetLocationId !== null
+        ? false
+        : is_loanable !== undefined
+        ? is_loanable === true || is_loanable === 'true'
+        : true;
 
     const serializedAccessories = serializeAccessories(accessories);
 
@@ -269,20 +258,20 @@ async function createDevice(req, res) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
-        name.trim(),
+        String(name).trim(),
         category || 'General',
-        serial_number.trim(),
-        barcode ? barcode.trim() : null,
+        String(serial_number).trim(),
+        barcode ? String(barcode).trim() : null,
         targetLocationId,
         targetIsLoanable,
         specs || '',
         serializedAccessories,
         status || 'available',
-        image_url || null
+        image_url || null,
       ]
     );
 
-    return res.status(201).json({ success: true, device: formatDeviceRow(result.rows[0]) });
+    return res.status(201).json({ success: true, device: formatDeviceRow(result.rows[0], true) });
   } catch (err) {
     console.error('createDevice error:', err);
     return res.status(500).json({ error: 'Failed to create device.' });
@@ -292,7 +281,6 @@ async function createDevice(req, res) {
 // PUT /api/devices/:id
 async function updateDevice(req, res) {
   try {
-    await ensureAccessoriesColumn();
     const { id } = req.params;
     const { name, category, serial_number, barcode, location_id, is_loanable, specs, accessories, status, image_url } = req.body;
 
@@ -302,23 +290,21 @@ async function updateDevice(req, res) {
     }
     const current = existingRes.rows[0];
 
-    // Check serial uniqueness if changing
-    if (serial_number && serial_number.trim() !== current.serial_number) {
-      const dup = await query('SELECT device_id FROM devices WHERE serial_number = $1 AND device_id != $2', [
-        serial_number.trim(),
-        id
+    if (serial_number && String(serial_number).trim() !== current.serial_number) {
+      const dup = await query('SELECT device_id FROM devices WHERE UPPER(serial_number) = UPPER($1) AND device_id != $2', [
+        String(serial_number).trim(),
+        id,
       ]);
       if (dup.rows.length > 0) {
         return res.status(400).json({ error: 'A device with this serial number already exists.' });
       }
     }
 
-    const updatedName = name !== undefined ? name.trim() : current.name;
+    const updatedName = name !== undefined ? String(name).trim() : current.name;
     const updatedCategory = category !== undefined ? category : current.category;
-    const updatedSerial = serial_number !== undefined ? serial_number.trim() : current.serial_number;
-    const updatedBarcode = barcode !== undefined ? (barcode ? barcode.trim() : null) : current.barcode;
-    
-    // Allow explicitly setting location_id to null / General Pool
+    const updatedSerial = serial_number !== undefined ? String(serial_number).trim() : current.serial_number;
+    const updatedBarcode = barcode !== undefined ? (barcode ? String(barcode).trim() : null) : current.barcode;
+
     const updatedLocationId =
       location_id !== undefined
         ? location_id === '' || location_id === null || location_id === 'null'
@@ -326,12 +312,11 @@ async function updateDevice(req, res) {
           : parseInt(location_id, 10)
         : current.location_id;
 
-    // Rule: When assigned to a room, device is strictly unavailable for booking (is_loanable = false)
     let updatedIsLoanable;
     if (updatedLocationId !== null) {
       updatedIsLoanable = false;
     } else if (is_loanable !== undefined) {
-      updatedIsLoanable = (is_loanable === true || is_loanable === 'true');
+      updatedIsLoanable = is_loanable === true || is_loanable === 'true';
     } else {
       updatedIsLoanable = true;
     }
@@ -339,7 +324,20 @@ async function updateDevice(req, res) {
     const updatedSpecs = specs !== undefined ? specs : current.specs;
     const updatedAccessories = accessories !== undefined ? serializeAccessories(accessories) : current.accessories;
     const updatedStatus = status !== undefined ? status : current.status;
-    const updatedImageUrl = image_url !== undefined ? (image_url ? image_url.trim() : null) : current.image_url;
+    const updatedImageUrl = image_url !== undefined ? (image_url ? String(image_url).trim() : null) : current.image_url;
+
+    // Prevent manually changing status to 'available' while an active checked_out loan exists
+    if (updatedStatus === 'available') {
+      const activeLoan = await query(
+        `SELECT loan_id FROM device_bookings WHERE device_id = $1 AND status = 'checked_out'`,
+        [id]
+      );
+      if (activeLoan.rows.length > 0) {
+        return res.status(409).json({
+          error: 'Cannot mark device as available while it is actively checked out on a loan. Please log the return first.',
+        });
+      }
+    }
 
     await query(
       `UPDATE devices
@@ -354,7 +352,19 @@ async function updateDevice(req, res) {
            status = $9,
            image_url = $10
        WHERE device_id = $11`,
-      [updatedName, updatedCategory, updatedSerial, updatedBarcode, updatedLocationId, updatedIsLoanable, updatedSpecs, updatedAccessories, updatedStatus, updatedImageUrl, id]
+      [
+        updatedName,
+        updatedCategory,
+        updatedSerial,
+        updatedBarcode,
+        updatedLocationId,
+        updatedIsLoanable,
+        updatedSpecs,
+        updatedAccessories,
+        updatedStatus,
+        updatedImageUrl,
+        id,
+      ]
     );
 
     const devWithLoc = await query(
@@ -362,15 +372,15 @@ async function updateDevice(req, res) {
               COALESCE(d.is_loanable, (d.location_id IS NULL)) AS is_loanable,
               l.name AS location_name, l.code AS location_code, l.floor AS location_floor,
               (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND db.status IN ('approved', 'checked_out', 'returned')) AS loan_count,
-              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS rating_count,
-              (SELECT AVG(COALESCE(db.device_rating, db.return_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.device_rating, db.return_rating) IS NOT NULL) AS avg_rating
+              (SELECT COUNT(*)::int FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.return_rating, db.device_rating) IS NOT NULL) AS rating_count,
+              (SELECT AVG(COALESCE(db.return_rating, db.device_rating)::numeric) FROM device_bookings db WHERE db.device_id = d.device_id AND COALESCE(db.return_rating, db.device_rating) IS NOT NULL) AS avg_rating
        FROM devices d
        LEFT JOIN locations l ON d.location_id = l.location_id
        WHERE d.device_id = $1`,
       [id]
     );
 
-    return res.json({ success: true, device: formatDeviceRow(devWithLoc.rows[0]) });
+    return res.json({ success: true, device: formatDeviceRow(devWithLoc.rows[0], true) });
   } catch (err) {
     console.error('updateDevice error:', err);
     return res.status(500).json({ error: 'Failed to update device.' });
@@ -385,6 +395,18 @@ async function updateDeviceStatus(req, res) {
 
     if (!['available', 'checked_out', 'maintenance', 'broken'].includes(status)) {
       return res.status(400).json({ error: 'Invalid device status.' });
+    }
+
+    if (status === 'available') {
+      const activeLoan = await query(
+        `SELECT loan_id FROM device_bookings WHERE device_id = $1 AND status = 'checked_out'`,
+        [id]
+      );
+      if (activeLoan.rows.length > 0) {
+        return res.status(409).json({
+          error: 'Cannot mark device as available while it is actively checked out on a loan.',
+        });
+      }
     }
 
     const result = await query(
@@ -408,14 +430,13 @@ async function deleteDevice(req, res) {
   try {
     const { id } = req.params;
 
-    // Check if device is actively loaned out
     const activeLoan = await query(
-      `SELECT loan_id FROM device_bookings WHERE device_id = $1 AND status = 'checked_out'`,
+      `SELECT loan_id FROM device_bookings WHERE device_id = $1 AND status IN ('approved', 'checked_out')`,
       [id]
     );
     if (activeLoan.rows.length > 0) {
       return res.status(400).json({
-        error: 'Cannot remove equipment that is currently checked out by a borrower. Please log its return first.'
+        error: 'Cannot remove equipment that is currently approved or checked out by a borrower. Please log its return first.',
       });
     }
 
@@ -426,7 +447,7 @@ async function deleteDevice(req, res) {
     return res.json({
       success: true,
       message: `Equipment "${result.rows[0].name}" (${result.rows[0].serial_number}) removed successfully.`,
-      device: result.rows[0]
+      device: result.rows[0],
     });
   } catch (err) {
     console.error('deleteDevice error:', err);
@@ -440,5 +461,5 @@ module.exports = {
   createDevice,
   updateDevice,
   updateDeviceStatus,
-  deleteDevice
+  deleteDevice,
 };

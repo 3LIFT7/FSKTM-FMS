@@ -233,6 +233,7 @@ export default function IssueList() {
                   { value: 'resolved', label: 'Resolved' },
                   { value: 'cannot_be_resolved', label: 'Cannot Be Resolved' },
                   { value: 'requires_further_action', label: 'Requires Further Action' },
+                  { value: 'closed', label: 'Closed' },
                 ]}
               />
             </Col>
@@ -278,6 +279,7 @@ export default function IssueList() {
               { value: 'resolved', label: 'Resolved' },
               { value: 'cannot_be_resolved', label: 'Cannot Be Resolved' },
               { value: 'requires_further_action', label: 'Requires Further Action' },
+              { value: 'closed', label: 'Closed' },
             ]} />
           </Form.Item>
           <Form.Item name="issue_reason" label="Reason for the Issue">

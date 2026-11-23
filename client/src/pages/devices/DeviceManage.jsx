@@ -981,6 +981,7 @@ export default function DeviceManage() {
               form={returnForm}
               layout="vertical"
               initialValues={{
+                return_rating: 5,
                 return_condition: 'Excellent',
                 return_notes: '',
               }}
@@ -994,6 +995,14 @@ export default function DeviceManage() {
                 }
               }}
             >
+              <Form.Item
+                name="return_rating"
+                label="Rate Returned Device Condition (1–5 Stars)"
+                rules={[{ required: true, message: 'Please select a star rating for the returned device' }]}
+              >
+                <Rate style={{ fontSize: 26 }} />
+              </Form.Item>
+
               <Form.Item
                 name="return_condition"
                 label="Returned Equipment Condition"

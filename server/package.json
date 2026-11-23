@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "seed": "node src/db/seed.js"
+    "seed": "node src/db/seed.js",
+    "test": "node --test tests/system.test.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.14",
