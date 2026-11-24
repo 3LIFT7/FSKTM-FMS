@@ -34,6 +34,11 @@ export default function UserLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const handleLogout = () => {
+    navigate('/login', { replace: true, state: { loggedOut: true } });
+    logout();
+  };
+
   const roleKey = useMemo(() => {
     if (!user?.role) return 'Student';
     return user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase();
@@ -111,7 +116,7 @@ export default function UserLayout() {
       key: 'logout',
       icon: <LogoutOutlined style={{ color: '#dc2626' }} />,
       label: <span style={{ color: '#dc2626' }}>Sign Out</span>,
-      onClick: () => logout(),
+      onClick: handleLogout,
     },
   ];
 
@@ -244,7 +249,7 @@ export default function UserLayout() {
             icon={<LogoutOutlined />}
             onClick={() => {
               setMobileMenuOpen(false);
-              logout();
+              handleLogout();
             }}
           >
             Sign Out

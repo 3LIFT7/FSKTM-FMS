@@ -260,7 +260,7 @@ async function createBooking(req, res) {
     // Atomic transaction with row-level lock on locations to prevent concurrent overlapping bookings
     const txResult = await withTransaction(async (tx) => {
       const locRes = await tx.query(
-        'SELECT location_id, name, code, category, status FROM locations WHERE location_id = $1 FOR UPDATE',
+        "SELECT location_id, name, code, category, status FROM locations WHERE location_id = $1 AND UPPER(code) <> 'RMP' FOR UPDATE",
         [location_id]
       );
       if (locRes.rows.length === 0) {

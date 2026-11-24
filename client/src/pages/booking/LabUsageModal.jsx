@@ -1,14 +1,42 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, Form, Select, DatePicker, TimePicker, Input, Alert, Button, Row, Col, message } from 'antd';
-import { CalendarOutlined } from '@ant-design/icons';
+import { Modal, Form, Select, DatePicker, Input, Alert, Button, Space, Tag, Row, Col, message } from 'antd';
+import { CalendarOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
+import { DATE_FORMAT } from '../../utils/date';
+
+const TIME_SLOTS = [
+  '08:00', '08:30',
+  '09:00', '09:30',
+  '10:00', '10:30',
+  '11:00', '11:30',
+  '12:00', '12:30',
+  '13:00', '13:30',
+  '14:00', '14:30',
+  '15:00', '15:30',
+  '16:00', '16:30',
+  '17:00', '17:30',
+  '18:00', '18:30',
+  '19:00', '19:30',
+  '20:00',
+];
+
+const QUICK_PRESETS = [
+  { label: '08:00 – 10:00', start: '08:00', end: '10:00' },
+  { label: '09:00 – 11:00', start: '09:00', end: '11:00' },
+  { label: '10:00 – 12:00', start: '10:00', end: '12:00' },
+  { label: '14:00 – 16:00', start: '14:00', end: '16:00' },
+  { label: '16:00 – 18:00', start: '16:00', end: '18:00' },
+  { label: '18:00 – 20:00', start: '18:00', end: '20:00' },
+];
 
 export default function LabUsageModal({ isOpen, onClose, initialLocation, onLogCreated }) {
   const [form] = Form.useForm();
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedStartTime = Form.useWatch('startTime', form);
+  const selectedEndTime = Form.useWatch('endTime', form);
 
   useEffect(() => {
     if (isOpen) {
@@ -22,7 +50,8 @@ export default function LabUsageModal({ isOpen, onClose, initialLocation, onLogC
       form.setFieldsValue({
         location_id: locId,
         date: targetDate,
-        timeRange: [targetDate.hour(9).minute(0), targetDate.hour(11).minute(0)],
+        startTime: '09:00',
+        endTime: '11:00',
       });
     }
   }, [isOpen, initialLocation, form]);
@@ -43,14 +72,81 @@ export default function LabUsageModal({ isOpen, onClose, initialLocation, onLogC
     return locations.filter((loc) => loc.status !== 'maintenance');
   }, [locations]);
 
+  const durationText = useMemo(() => {
+    if (!selectedStartTime || !selectedEndTime) return null;
+    const [startH, startM] = selectedStartTime.split(':').map(Number);
+    const [endH, endM] = selectedEndTime.split(':').map(Number);
+    const totalMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+    if (totalMinutes <= 0) return 'Invalid: End time must be after start time';
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const parts = [];
+    if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`);
+    if (mins > 0) parts.push(`${mins} min${mins > 1 ? 's' : ''}`);
+    return parts.join(' ');
+  }, [selectedStartTime, selectedEndTime]);
+
+  const startTimeOptions = useMemo(() => {
+    return TIME_SLOTS.slice(0, -1).map((t) => ({
+      value: t,
+      label: t,
+    }));
+  }, []);
+
+  const endTimeOptions = useMemo(() => {
+    const currentStart = selectedStartTime || '08:00';
+    return TIME_SLOTS.filter((t) => t > currentStart).map((t) => ({
+      value: t,
+      label: t,
+    }));
+  }, [selectedStartTime]);
+
+  const handleStartTimeChange = (newStart) => {
+    form.setFieldsValue({ startTime: newStart });
+    const [h, m] = newStart.split(':').map(Number);
+    const currentEnd = form.getFieldValue('endTime');
+    const [curEndH, curEndM] = (currentEnd || '00:00').split(':').map(Number);
+    if (!currentEnd || (curEndH * 60 + curEndM) <= (h * 60 + m)) {
+      const targetEndMinutes = Math.min((h + 2) * 60 + m, 20 * 60);
+      const targetEndH = String(Math.floor(targetEndMinutes / 60)).padStart(2, '0');
+      const targetEndM = String(targetEndMinutes % 60).padStart(2, '0');
+      form.setFieldsValue({ endTime: `${targetEndH}:${targetEndM}` });
+    }
+  };
+
+  const setDuration = (hoursToAdd) => {
+    const start = form.getFieldValue('startTime') || '09:00';
+    const [h, m] = start.split(':').map(Number);
+    const targetEndMinutes = Math.min((h + hoursToAdd) * 60 + m, 20 * 60);
+    const targetEndH = String(Math.floor(targetEndMinutes / 60)).padStart(2, '0');
+    const targetEndM = String(targetEndMinutes % 60).padStart(2, '0');
+    form.setFieldsValue({ endTime: `${targetEndH}:${targetEndM}` });
+  };
+
+  const applyPreset = (preset) => {
+    form.setFieldsValue({
+      startTime: preset.start,
+      endTime: preset.end,
+    });
+  };
+
   async function handleFinish(values) {
+    if (!values.startTime || !values.endTime) {
+      setError('Please select start and end time');
+      return;
+    }
+    if (values.endTime <= values.startTime) {
+      setError('End time must be after start time');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
       const chosenDateStr = values.date.format('YYYY-MM-DD');
-      const startTimeStr = `${chosenDateStr}T${values.timeRange[0].format('HH:mm:00')}`;
-      const endTimeStr = `${chosenDateStr}T${values.timeRange[1].format('HH:mm:00')}`;
+      const startTimeStr = `${chosenDateStr}T${values.startTime}:00`;
+      const endTimeStr = `${chosenDateStr}T${values.endTime}:00`;
 
       const payload = {
         location_id: values.location_id,
@@ -137,17 +233,106 @@ export default function LabUsageModal({ isOpen, onClose, initialLocation, onLogC
             />
           </Form.Item>
 
-          <Form.Item
-            name="timeRange"
-            label="Lecture Time Window"
-            rules={[{ required: true, message: 'Please select start and end time' }]}
-          >
-            <TimePicker.RangePicker
-              style={{ width: '100%' }}
-              format={TIME_FORMAT}
-              minuteStep={15}
-            />
-          </Form.Item>
+          {/* Lecture Time Window */}
+          <div style={{ marginBottom: 16, background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontWeight: 600, color: '#1E293B', fontSize: 14 }}>
+                <ClockCircleOutlined style={{ marginRight: 6, color: '#2563EB' }} />
+                Lecture Time Window
+              </span>
+              {durationText && (
+                <Tag color={selectedEndTime && selectedStartTime && selectedEndTime > selectedStartTime ? 'blue' : 'error'} style={{ margin: 0 }}>
+                  {durationText.includes('Invalid') ? durationText : `⏱️ Duration: ${durationText}`}
+                </Tag>
+              )}
+            </div>
+
+            {/* Quick Preset Buttons */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Standard Class & Lab Slots:</div>
+              <Space wrap size={[6, 6]}>
+                {QUICK_PRESETS.map((p) => {
+                  const isSelected = selectedStartTime === p.start && selectedEndTime === p.end;
+                  return (
+                    <Button
+                      key={p.label}
+                      size="small"
+                      type={isSelected ? 'primary' : 'default'}
+                      onClick={() => applyPreset(p)}
+                      style={{
+                        fontSize: 12,
+                        borderRadius: 6,
+                        ...(isSelected ? {} : { background: '#FFFFFF', color: '#334155', borderColor: '#CBD5E1' }),
+                      }}
+                    >
+                      {p.label}
+                    </Button>
+                  );
+                })}
+              </Space>
+            </div>
+
+            <Row gutter={12}>
+              <Col xs={24} sm={12}>
+                <Form.Item
+                  name="startTime"
+                  label="Start Time"
+                  rules={[{ required: true, message: 'Select start time' }]}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Select
+                    options={startTimeOptions}
+                    onChange={handleStartTimeChange}
+                    placeholder="Select start time"
+                    showSearch
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Form.Item
+                  name="endTime"
+                  label="End Time"
+                  rules={[
+                    { required: true, message: 'Select end time' },
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        const start = getFieldValue('startTime');
+                        if (!value || !start || value > start) {
+                          return Promise.resolve();
+                        }
+                        return Promise.reject(new Error('End time must be after start time'));
+                      },
+                    }),
+                  ]}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Select
+                    options={endTimeOptions}
+                    placeholder="Select end time"
+                    showSearch
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {/* Quick Duration Adjusters */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: 12, color: '#64748B' }}>Quick Duration:</span>
+              <Space size={4}>
+                {[1, 2, 3, 4].map((h) => (
+                  <Button
+                    key={h}
+                    size="small"
+                    type="text"
+                    style={{ fontSize: 12, color: '#1D4ED8', padding: '0 8px', height: 22, background: '#EFF6FF', borderRadius: 4, fontWeight: 500 }}
+                    onClick={() => setDuration(h)}
+                  >
+                    +{h} hr{h > 1 ? 's' : ''}
+                  </Button>
+                ))}
+              </Space>
+            </div>
+          </div>
 
           <Row gutter={12}>
             <Col xs={24} sm={10}>

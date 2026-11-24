@@ -44,7 +44,6 @@ export const FLOOR_PLANS = {
       rowBottom: [],
       // The first floor has large open learning spaces
       rowTop: [
-        { code: 'RMP', name: 'Ruang Membaca Pelajar', capacity: 60, category: 'Study Area', flexSpan: 1 },
         { code: 'MINFO', name: 'Makmal Infosys', capacity: 45, category: 'Computer Lab', flexSpan: 1.5 }
       ]
     },

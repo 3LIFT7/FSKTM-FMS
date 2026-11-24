@@ -4,7 +4,7 @@ import { ArrowRight, ArrowUpRight, LockKeyhole, Mail, Wrench, UserCog, Zap } fro
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ForgotPasswordModal from './ForgotPasswordModal';
-import { getRedirectDestination } from '../../utils/navigation';
+import { getRedirectDestination, getDashboardForRole } from '../../utils/navigation';
 import './AcademicLogin.css';
 
 const STAFF_DEMO_ACCOUNTS = [
@@ -35,7 +35,6 @@ export default function StaffLogin() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectUrl = getRedirectDestination(location, '/staff');
 
   useEffect(() => {
     localStorage.removeItem('fsktm_remember_staff_email');
@@ -46,8 +45,9 @@ export default function StaffLogin() {
     setError('');
     setLoading(true);
     try {
-      await login(values.email, values.password, 'staff', false);
-      navigate(redirectUrl, { replace: true });
+      const loggedUser = await login(values.email, values.password, 'staff', false);
+      const dashboard = getDashboardForRole(loggedUser?.role || 'technician');
+      navigate(getRedirectDestination(location, dashboard), { replace: true });
     } catch (authError) {
       setError(authError.message || 'Sign-in failed. Check your staff credentials and try again.');
     } finally {
@@ -60,8 +60,9 @@ export default function StaffLogin() {
     form.setFieldsValue({ email: preset.email, password: preset.password });
     setDemoLoadingKey(preset.key);
     try {
-      await login(preset.email, preset.password, 'staff', true);
-      navigate(redirectUrl, { replace: true });
+      const loggedUser = await login(preset.email, preset.password, 'staff', true);
+      const dashboard = getDashboardForRole(loggedUser?.role || preset.key);
+      navigate(getRedirectDestination(location, dashboard), { replace: true });
     } catch (authError) {
       setError(authError.message || 'Demo staff sign-in failed.');
     } finally {

@@ -99,7 +99,6 @@ async function seedDatabase() {
 
     // First Floor
     { code: 'MINFO', name: 'Makmal Infosys', floor: 'First', capacity: 45, category: 'Computer Lab', desc: 'Information systems computing laboratory with dual-monitor PCs.', status: 'available' },
-    { code: 'RMP', name: 'Ruang Membaca Pelajar', floor: 'First', capacity: 60, category: 'Study Area', desc: 'Spacious student study commons with charging docks and group study booths.', status: 'available' },
     { code: 'MKP', name: 'Makmal Kejuruteraan Perisian', floor: 'First', capacity: 40, category: 'Computer Lab', desc: 'Software engineering lab with CI/CD dev environments.', status: 'available' },
     { code: 'MPP', name: 'Makmal Pembangunan Perisian', floor: 'First', capacity: 40, category: 'Computer Lab', desc: 'Development lab for mobile and full-stack software development.', status: 'available' },
     { code: 'MPROG', name: 'Makmal Pengaturcaraan', floor: 'First', capacity: 45, category: 'Computer Lab', desc: 'Core programming laboratory for C++, Java, and Python courses.', status: 'available' },

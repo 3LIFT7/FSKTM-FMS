@@ -4,7 +4,7 @@ import { ArrowUpRight, CheckCircle2, GraduationCap, Landmark, ShieldCheck, Wrenc
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import GoogleColorIcon from '../../components/GoogleColorIcon';
-import { getRedirectDestination } from '../../utils/navigation';
+import { getRedirectDestination, getDashboardForRole } from '../../utils/navigation';
 import './AcademicLogin.css';
 
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -64,8 +64,9 @@ export default function AcademicLogin() {
     setError('');
     setDemoLoadingKey(preset.key);
     try {
-      await login(preset.email, preset.password, preset.portal, true);
-      navigate(getRedirectDestination(location, preset.redirect), { replace: true });
+      const loggedUser = await login(preset.email, preset.password, preset.portal, true);
+      const dashboard = getDashboardForRole(loggedUser?.role || preset.portal || preset.key);
+      navigate(getRedirectDestination(location, dashboard), { replace: true });
     } catch (authError) {
       setError(authError.message || 'Demo sign-in failed.');
     } finally {
@@ -103,8 +104,8 @@ export default function AcademicLogin() {
 
           try {
             const user = await googleAuth({ access_token: response.access_token });
-            const fallback = user.role === 'lecturer' ? '/lecturer' : '/student';
-            navigate(getRedirectDestination(location, fallback), { replace: true });
+            const dashboard = getDashboardForRole(user?.role);
+            navigate(getRedirectDestination(location, dashboard), { replace: true });
           } catch (authError) {
             setError(authError.message || 'Google sign-in could not be completed.');
           } finally {

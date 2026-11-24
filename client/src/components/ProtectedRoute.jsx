@@ -25,11 +25,16 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
 
   // Not authenticated: redirect to appropriate login page based on target URL
   if (!user) {
+    const isExplicitLogout = Boolean(sessionStorage.getItem('fsktm_logged_out') || location.state?.loggedOut);
     const path = location.pathname;
     let redirectLogin = '/login';
 
     if (path.startsWith('/staff') || path.startsWith('/admin') || path.startsWith('/rooms') || path.startsWith('/maintenance')) {
       redirectLogin = '/login/staff';
+    }
+
+    if (isExplicitLogout) {
+      return <Navigate to={redirectLogin} state={{ loggedOut: true }} replace />;
     }
 
     return <Navigate to={redirectLogin} state={{ from: location }} replace />;

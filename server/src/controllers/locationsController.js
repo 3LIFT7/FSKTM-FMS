@@ -29,7 +29,7 @@ async function getAllLocations(req, res) {
         (SELECT COUNT(*) FROM devices d WHERE d.location_id = l.location_id) AS device_count,
         (SELECT COUNT(*) FROM location_bookings b WHERE b.location_id = l.location_id AND b.end_time > CURRENT_TIMESTAMP AND b.status IN ('pending', 'approved')) AS active_bookings_count
       FROM locations l
-      WHERE 1=1
+      WHERE UPPER(l.code) <> 'RMP'
     `;
     const params = [];
 

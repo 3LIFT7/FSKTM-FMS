@@ -33,6 +33,11 @@ export default function StaffLayout() {
   const screens = useBreakpoint();
   const isPhone = screens.md === false;
   const navigate = useNavigate();
+
+  const handleLogout = () => {
+    navigate('/login/staff', { replace: true, state: { loggedOut: true } });
+    logout();
+  };
   const location = useLocation();
 
   const isManager = user?.role === 'manager';
@@ -136,7 +141,7 @@ export default function StaffLayout() {
       key: 'logout',
       icon: <LogoutOutlined style={{ color: '#dc2626' }} />,
       label: <span style={{ color: '#dc2626' }}>Sign Out</span>,
-      onClick: () => logout(),
+      onClick: handleLogout,
     },
   ];
 
@@ -262,7 +267,7 @@ export default function StaffLayout() {
             icon={<LogoutOutlined />}
             onClick={() => {
               setMobileDrawerOpen(false);
-              logout();
+              handleLogout();
             }}
           >
             Sign Out

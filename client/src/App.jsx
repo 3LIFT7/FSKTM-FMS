@@ -29,6 +29,7 @@ import SettingsPage from './pages/admin/SettingsPage';
 import RoomsControl from './pages/admin/RoomsControl';
 import LabUsageLogs from './pages/admin/LabUsageLogs';
 import ClassroomFeedbackPage from './pages/feedback/ClassroomFeedbackPage';
+import { getDashboardForRole } from './utils/navigation';
 
 import { Spin } from 'antd';
 
@@ -42,9 +43,7 @@ function RootRedirect() {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role === 'student') return <Navigate to="/student" replace />;
-  if (user.role === 'lecturer') return <Navigate to="/lecturer" replace />;
-  return <Navigate to="/staff" replace />;
+  return <Navigate to={getDashboardForRole(user.role)} replace />;
 }
 
 export default function App() {

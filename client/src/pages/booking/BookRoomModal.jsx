@@ -14,6 +14,31 @@ import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
 
 const { Text, Paragraph } = Typography;
 
+const TIME_SLOTS = [
+  '08:00', '08:30',
+  '09:00', '09:30',
+  '10:00', '10:30',
+  '11:00', '11:30',
+  '12:00', '12:30',
+  '13:00', '13:30',
+  '14:00', '14:30',
+  '15:00', '15:30',
+  '16:00', '16:30',
+  '17:00', '17:30',
+  '18:00', '18:30',
+  '19:00', '19:30',
+  '20:00',
+];
+
+const QUICK_PRESETS = [
+  { label: '08:00 – 10:00', start: '08:00', end: '10:00' },
+  { label: '09:00 – 11:00', start: '09:00', end: '11:00' },
+  { label: '10:00 – 12:00', start: '10:00', end: '12:00' },
+  { label: '14:00 – 16:00', start: '14:00', end: '16:00' },
+  { label: '16:00 – 18:00', start: '16:00', end: '18:00' },
+  { label: '18:00 – 20:00', start: '18:00', end: '20:00' },
+];
+
 export default function BookRoomModal({ isOpen, onClose, initialLocation, initialSlot, onBookingCreated }) {
   const { user, isLecturer, isStaff } = useAuth();
   const courseDetailsRequired = !isStaff;
@@ -30,7 +55,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
 
   // Watch form values for conflict detection
   const selectedDate = Form.useWatch('date', form);
-  const selectedTimeRange = Form.useWatch('timeRange', form);
+  const selectedStartTime = Form.useWatch('startTime', form);
+  const selectedEndTime = Form.useWatch('endTime', form);
   const watchedLocationId = Form.useWatch('location_id', form);
 
   useEffect(() => {
@@ -76,10 +102,14 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
         setSelectedLocationId(locId);
       }
 
+      const startStr = `${String(startHour).padStart(2, '0')}:00`;
+      const endStr = `${String(endHour).padStart(2, '0')}:00`;
+
       form.setFieldsValue({
         location_id: locId,
         date: targetDate,
-        timeRange: [targetDate.hour(startHour).minute(0), targetDate.hour(endHour).minute(0)],
+        startTime: startStr,
+        endTime: endStr,
         weeks: 14,
       });
     }
@@ -133,15 +163,19 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
 
   // Conflict calculation adhering to Section 8
   const conflict = useMemo(() => {
-    if (!selectedDate || !selectedTimeRange || !selectedTimeRange[0] || !selectedTimeRange[1]) {
+    if (!selectedDate || !selectedStartTime || !selectedEndTime) {
       return null;
     }
     const chosenDateStr = selectedDate.format('YYYY-MM-DD');
-    const startStr = `${chosenDateStr}T${selectedTimeRange[0].format('HH:mm:00')}`;
-    const endStr = `${chosenDateStr}T${selectedTimeRange[1].format('HH:mm:00')}`;
+    const startStr = `${chosenDateStr}T${selectedStartTime}:00`;
+    const endStr = `${chosenDateStr}T${selectedEndTime}:00`;
 
     const reqStart = new Date(startStr);
     const reqEnd = new Date(endStr);
+
+    if (reqEnd <= reqStart) {
+      return null;
+    }
 
     for (const b of existingBookingsOnDate) {
       const bStart = new Date(b.start_time);
@@ -152,11 +186,79 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
       }
     }
     return null;
-  }, [selectedDate, selectedTimeRange, existingBookingsOnDate]);
+  }, [selectedDate, selectedStartTime, selectedEndTime, existingBookingsOnDate]);
+
+  const durationText = useMemo(() => {
+    if (!selectedStartTime || !selectedEndTime) return null;
+    const [startH, startM] = selectedStartTime.split(':').map(Number);
+    const [endH, endM] = selectedEndTime.split(':').map(Number);
+    const totalMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+    if (totalMinutes <= 0) return 'Invalid: End time must be after start time';
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const parts = [];
+    if (hours > 0) parts.push(`${hours} hr${hours > 1 ? 's' : ''}`);
+    if (mins > 0) parts.push(`${mins} min${mins > 1 ? 's' : ''}`);
+    return parts.join(' ');
+  }, [selectedStartTime, selectedEndTime]);
+
+  const startTimeOptions = useMemo(() => {
+    return TIME_SLOTS.slice(0, -1).map(t => ({
+      value: t,
+      label: t,
+    }));
+  }, []);
+
+  const endTimeOptions = useMemo(() => {
+    const currentStart = selectedStartTime || '08:00';
+    return TIME_SLOTS.filter(t => t > currentStart).map(t => ({
+      value: t,
+      label: t,
+    }));
+  }, [selectedStartTime]);
+
+  const handleStartTimeChange = (newStart) => {
+    form.setFieldsValue({ startTime: newStart });
+    const [h, m] = newStart.split(':').map(Number);
+    const currentEnd = form.getFieldValue('endTime');
+    const [curEndH, curEndM] = (currentEnd || '00:00').split(':').map(Number);
+    if (!currentEnd || (curEndH * 60 + curEndM) <= (h * 60 + m)) {
+      const targetEndMinutes = Math.min((h + 2) * 60 + m, 20 * 60);
+      const targetEndH = String(Math.floor(targetEndMinutes / 60)).padStart(2, '0');
+      const targetEndM = String(targetEndMinutes % 60).padStart(2, '0');
+      form.setFieldsValue({ endTime: `${targetEndH}:${targetEndM}` });
+    }
+  };
+
+  const setDuration = (hoursToAdd) => {
+    const start = form.getFieldValue('startTime') || '09:00';
+    const [h, m] = start.split(':').map(Number);
+    const targetEndMinutes = Math.min((h + hoursToAdd) * 60 + m, 20 * 60);
+    const targetEndH = String(Math.floor(targetEndMinutes / 60)).padStart(2, '0');
+    const targetEndM = String(targetEndMinutes % 60).padStart(2, '0');
+    form.setFieldsValue({ endTime: `${targetEndH}:${targetEndM}` });
+  };
+
+  const applyPreset = (preset) => {
+    form.setFieldsValue({
+      startTime: preset.start,
+      endTime: preset.end,
+    });
+  };
 
   async function handleFinish(values) {
     if (conflict) {
       setError('Cannot submit booking due to schedule overlap with an existing slot.');
+      return;
+    }
+
+    if (!values.startTime || !values.endTime) {
+      setError('Please select both start and end time.');
+      return;
+    }
+
+    if (values.endTime <= values.startTime) {
+      setError('End time must be after start time.');
       return;
     }
 
@@ -165,8 +267,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
 
     try {
       const chosenDateStr = values.date.format('YYYY-MM-DD');
-      const startTimeStr = `${chosenDateStr}T${values.timeRange[0].format('HH:mm:00')}`;
-      const endTimeStr = `${chosenDateStr}T${values.timeRange[1].format('HH:mm:00')}`;
+      const startTimeStr = `${chosenDateStr}T${values.startTime}:00`;
+      const endTimeStr = `${chosenDateStr}T${values.endTime}:00`;
 
       const payload = {
         location_id: values.location_id,
@@ -277,17 +379,106 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
             />
           </Form.Item>
 
-          <Form.Item
-            name="timeRange"
-            label="Reservation Time Window"
-            rules={[{ required: true, message: 'Please select start and end time' }]}
-          >
-            <TimePicker.RangePicker
-              style={{ width: '100%' }}
-              format={TIME_FORMAT}
-              minuteStep={15}
-            />
-          </Form.Item>
+          {/* Reservation Time Window */}
+          <div style={{ marginBottom: 16, background: '#F8FAFC', padding: 12, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontWeight: 600, color: '#1E293B', fontSize: 14 }}>
+                <ClockCircleOutlined style={{ marginRight: 6, color: '#2563EB' }} />
+                Reservation Time Window
+              </span>
+              {durationText && (
+                <Tag color={selectedEndTime && selectedStartTime && selectedEndTime > selectedStartTime ? 'blue' : 'error'} style={{ margin: 0 }}>
+                  {durationText.includes('Invalid') ? durationText : `⏱️ Duration: ${durationText}`}
+                </Tag>
+              )}
+            </div>
+
+            {/* Quick Preset Buttons */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Standard Class & Lab Slots:</div>
+              <Space wrap size={[6, 6]}>
+                {QUICK_PRESETS.map((p) => {
+                  const isSelected = selectedStartTime === p.start && selectedEndTime === p.end;
+                  return (
+                    <Button
+                      key={p.label}
+                      size="small"
+                      type={isSelected ? 'primary' : 'default'}
+                      onClick={() => applyPreset(p)}
+                      style={{
+                        fontSize: 12,
+                        borderRadius: 6,
+                        ...(isSelected ? {} : { background: '#FFFFFF', color: '#334155', borderColor: '#CBD5E1' }),
+                      }}
+                    >
+                      {p.label}
+                    </Button>
+                  );
+                })}
+              </Space>
+            </div>
+
+            <Row gutter={12}>
+              <Col xs={24} sm={12}>
+                <Form.Item
+                  name="startTime"
+                  label="Start Time"
+                  rules={[{ required: true, message: 'Select start time' }]}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Select
+                    options={startTimeOptions}
+                    onChange={handleStartTimeChange}
+                    placeholder="Select start time"
+                    showSearch
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Form.Item
+                  name="endTime"
+                  label="End Time"
+                  rules={[
+                    { required: true, message: 'Select end time' },
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        const start = getFieldValue('startTime');
+                        if (!value || !start || value > start) {
+                          return Promise.resolve();
+                        }
+                        return Promise.reject(new Error('End time must be after start time'));
+                      },
+                    }),
+                  ]}
+                  style={{ marginBottom: 8 }}
+                >
+                  <Select
+                    options={endTimeOptions}
+                    placeholder="Select end time"
+                    showSearch
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            {/* Quick Duration Adjusters */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: 12, color: '#64748B' }}>Quick Duration:</span>
+              <Space size={4}>
+                {[1, 2, 3, 4].map((h) => (
+                  <Button
+                    key={h}
+                    size="small"
+                    type="text"
+                    style={{ fontSize: 12, color: '#1D4ED8', padding: '0 8px', height: 22, background: '#EFF6FF', borderRadius: 4, fontWeight: 500 }}
+                    onClick={() => setDuration(h)}
+                  >
+                    +{h} hr{h > 1 ? 's' : ''}
+                  </Button>
+                ))}
+              </Space>
+            </div>
+          </div>
 
           {isLecturer ? (
             <Row gutter={12}>

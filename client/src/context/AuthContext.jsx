@@ -69,6 +69,7 @@ export function AuthProvider({ children }) {
     }
 
     localStorage.removeItem('fsktm_auth_token');
+    sessionStorage.removeItem('fsktm_logged_out');
     if (data.user) {
       localStorage.setItem('fsktm_user', JSON.stringify(data.user));
     }
@@ -104,6 +105,7 @@ export function AuthProvider({ children }) {
     }
 
     localStorage.removeItem('fsktm_auth_token');
+    sessionStorage.removeItem('fsktm_logged_out');
     if (data.user) {
       localStorage.setItem('fsktm_user', JSON.stringify(data.user));
     }
@@ -123,6 +125,7 @@ export function AuthProvider({ children }) {
     } finally {
       localStorage.removeItem('fsktm_auth_token');
       localStorage.removeItem('fsktm_user');
+      sessionStorage.setItem('fsktm_logged_out', 'true');
       setUser(null);
     }
   }
