@@ -437,7 +437,7 @@ export default function LabUsageLogs() {
           loading={loading}
           dataSource={filteredLogs}
           columns={columns}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
+          pagination={{ pageSize: 15, showSizeChanger: false }}
           scroll={{ x: 920 }}
           locale={{
             emptyText: <Empty description="No faculty reservation or QR attendance records found." />,
