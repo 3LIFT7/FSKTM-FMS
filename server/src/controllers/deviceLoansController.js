@@ -240,37 +240,19 @@ async function requestDeviceLoan(req, res) {
         throw err;
       }
 
-      // 1. Prevent the SAME user from submitting duplicate active/pending requests for the same device
-      const sameUserLoanRes = await tx.query(
-        `SELECT loan_id, status
+      // Multiple loan requests (including multiple requests from the same user or different users)
+      // are allowed while the device is available; the technician selects which request to approve.
+      const checkedOutLoanRes = await tx.query(
+        `SELECT loan_id
          FROM device_bookings
          WHERE device_id = $1
-           AND user_id = $2
-           AND status IN ('pending', 'pending_lecturer', 'pending_technician', 'approved', 'checked_out')`,
-        [device_id, userId]
-      );
-
-      if (sameUserLoanRes.rows.length > 0) {
-        const err = new Error(
-          `You already have an active or pending loan request for "${device.name}".`
-        );
-        err.status = 409;
-        throw err;
-      }
-
-      // 2. Check if this device is already approved or checked_out to another borrower
-      // (Multiple users CAN submit pending requests; the technician chooses which one to approve)
-      const activeLoanRes = await tx.query(
-        `SELECT loan_id, user_id, status
-         FROM device_bookings
-         WHERE device_id = $1
-           AND status IN ('approved', 'checked_out')`,
+           AND status = 'checked_out'`,
         [device_id]
       );
 
-      if (activeLoanRes.rows.length > 0) {
+      if (checkedOutLoanRes.rows.length > 0) {
         const err = new Error(
-          `Device "${device.name}" is already approved or checked out to another borrower.`
+          `Device "${device.name}" is currently checked out to another borrower.`
         );
         err.status = 409;
         throw err;

@@ -634,17 +634,17 @@ describe('FSKTM-FMS Comprehensive Automated Security & Workflow Test Suite', () 
       assert.equal(loanReq1.status, 201);
       assert.equal(loanReq2.status, 201);
 
-      // Same user submitting a duplicate pending request for the same device is blocked with 409
-      const duplicateSameUser = await apiRequest('/api/device-loans', {
+      // Even the same user can submit another request for the same available device; technician chooses which one to approve
+      const secondReqSameUser = await apiRequest('/api/device-loans', {
         method: 'POST',
         token: lecturerToken,
         body: {
           device_id: loanableDeviceId,
           expected_return_time: futureReturn,
-          purpose: 'Duplicate Request By Same User',
+          purpose: 'Second Request By Same User',
         },
       });
-      assert.equal(duplicateSameUser.status, 409);
+      assert.equal(secondReqSameUser.status, 201);
 
       const loanId = loanReq1.body.loan.loan_id;
       const competingLoanId = loanReq2.body.loan.loan_id;
