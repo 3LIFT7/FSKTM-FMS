@@ -14,9 +14,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Clean up any legacy raw JWT stored in localStorage; rely on httpOnly cookie
-    localStorage.removeItem('fsktm_auth_token');
     checkSession();
+    const handleExpired = () => {
+      setUser(null);
+      localStorage.removeItem('fsktm_auth_token');
+      localStorage.removeItem('fsktm_user');
+    };
+    window.addEventListener('fsktm-auth-expired', handleExpired);
+    return () => window.removeEventListener('fsktm-auth-expired', handleExpired);
   }, []);
 
   async function checkSession() {
@@ -68,7 +73,9 @@ export function AuthProvider({ children }) {
       throw err;
     }
 
-    localStorage.removeItem('fsktm_auth_token');
+    if (data.token) {
+      localStorage.setItem('fsktm_auth_token', data.token);
+    }
     sessionStorage.removeItem('fsktm_logged_out');
     if (data.user) {
       localStorage.setItem('fsktm_user', JSON.stringify(data.user));
@@ -104,7 +111,9 @@ export function AuthProvider({ children }) {
       throw err;
     }
 
-    localStorage.removeItem('fsktm_auth_token');
+    if (data.token) {
+      localStorage.setItem('fsktm_auth_token', data.token);
+    }
     sessionStorage.removeItem('fsktm_logged_out');
     if (data.user) {
       localStorage.setItem('fsktm_user', JSON.stringify(data.user));

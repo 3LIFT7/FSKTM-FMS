@@ -75,7 +75,7 @@ export default function ClassroomFeedbackPage() {
   const locationState = useLocation();
   const targetIdOrCode = codeOrId || searchParams.get('code') || searchParams.get('location_id') || 'DT2';
 
-  const { user } = useAuth();
+  const { user, checkSession } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [roomData, setRoomData] = useState(null);
@@ -245,6 +245,10 @@ export default function ClassroomFeedbackPage() {
       });
 
       const data = await res.json();
+      if (res.status === 401) {
+        await checkSession();
+        throw new Error('Your session has expired. Please sign in again to book this room.');
+      }
       if (!res.ok) throw new Error(data.error || 'Failed to submit room reservation.');
 
       confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
@@ -345,11 +349,12 @@ export default function ClassroomFeedbackPage() {
           padding: '8px 2px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <div
             style={{
-              width: 38,
-              height: 38,
+              width: 42,
+              height: 42,
+              flexShrink: 0,
               borderRadius: 10,
               background: 'linear-gradient(135deg, #0F172A 0%, #1E3A8A 100%)',
               color: '#FFFFFF',
@@ -357,7 +362,8 @@ export default function ClassroomFeedbackPage() {
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 900,
-              fontSize: 14
+              fontSize: 11,
+              letterSpacing: -0.3
             }}
           >
             FSKTM
