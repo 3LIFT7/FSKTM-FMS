@@ -206,7 +206,7 @@ export default function WeeklyTimetable({
     {
       title: 'Day & Date',
       key: 'day_and_date',
-      width: '22%',
+      width: 145,
       render: (_, record) => {
         const startD = dayjs(record.start_time);
         const dayName = record.day_name;
@@ -214,12 +214,13 @@ export default function WeeklyTimetable({
 
         return (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span
                 style={{
                   fontWeight: 800,
                   fontSize: 13,
                   color: '#1E3A8A',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {record.is_recurring_series ? `Every ${dayName}` : dayName}
@@ -231,7 +232,7 @@ export default function WeeklyTimetable({
               )}
             </div>
 
-            <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 3, whiteSpace: 'nowrap' }}>
               {record.is_recurring_series ? (
                 <span>
                   {dayjs(record.first_date).format('DD/MM/YYYY')} → {dayjs(record.last_date).format('DD/MM/YYYY')}
@@ -247,7 +248,7 @@ export default function WeeklyTimetable({
     {
       title: 'Time Window',
       key: 'time_window',
-      width: '16%',
+      width: 145,
       render: (_, record) => {
         const start = dayjs(record.start_time);
         const end = dayjs(record.end_time);
@@ -255,11 +256,11 @@ export default function WeeklyTimetable({
 
         return (
           <div>
-            <div style={{ fontWeight: 700, color: '#0F172A', fontSize: 12, fontFamily: 'monospace' }}>
+            <div style={{ fontWeight: 700, color: '#0F172A', fontSize: 12, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
               <ClockCircleOutlined style={{ color: '#2563EB', marginRight: 4 }} />
               {start.format('HH:mm')} → {end.format('HH:mm')}
             </div>
-            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 2, whiteSpace: 'nowrap' }}>
               Duration: {durationHrs} {durationHrs === 1 ? 'Hour' : 'Hours'}
             </div>
           </div>
@@ -270,7 +271,7 @@ export default function WeeklyTimetable({
       title: 'Course Code',
       dataIndex: 'course_id',
       key: 'course_id',
-      width: '13%',
+      width: 115,
       render: (courseId) => (
         courseId ? (
           <Tag color="cyan" style={{ fontWeight: 800, padding: '2px 6px', fontSize: 11, borderRadius: 6 }}>
@@ -284,7 +285,7 @@ export default function WeeklyTimetable({
     {
       title: 'Course Name',
       key: 'course_name',
-      width: '22%',
+      width: 170,
       render: (_, record) => {
         const fallback = record.purpose?.includes('(') ? record.purpose.split('(')[0].trim() : record.purpose;
         const displayName = record.course_name || fallback || 'Academic Course';
@@ -298,22 +299,22 @@ export default function WeeklyTimetable({
     {
       title: 'Facility / Room',
       key: 'location',
-      width: '20%',
+      width: 185,
       render: (_, record) => (
         <div>
           <div style={{ fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <EnvironmentOutlined style={{ color: '#1E3A8A', fontSize: 12 }} />
+            <EnvironmentOutlined style={{ color: '#1E3A8A', fontSize: 12, flexShrink: 0 }} />
             <span style={{ fontSize: 12 }}>{record.location_name}</span>
           </div>
           <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
             <Tag style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{record.location_code}</Tag>
             {record.location_floor && (
-              <span style={{ marginLeft: 6 }}>
+              <span style={{ marginLeft: 6, whiteSpace: 'nowrap' }}>
                 {record.location_floor?.startsWith('Blok') ? record.location_floor : `Floor ${record.location_floor}`}
               </span>
             )}
             {record.location_capacity && (
-              <span style={{ marginLeft: 6 }}>• Cap: {record.location_capacity}</span>
+              <span style={{ marginLeft: 6, whiteSpace: 'nowrap' }}>• Cap: {record.location_capacity}</span>
             )}
           </div>
         </div>
@@ -324,7 +325,7 @@ export default function WeeklyTimetable({
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      width: '9%',
+      width: 105,
       render: (status) => {
         if (status === 'approved') {
           return <StatusTag status="approved" />;
@@ -339,7 +340,7 @@ export default function WeeklyTimetable({
     {
       title: 'QR Attendance',
       key: 'attendance',
-      width: '15%',
+      width: 135,
       render: (_, record) => {
         const log = record.attendanceLog;
         if (!log) return <Tag color="default">Not scanned</Tag>;
@@ -352,7 +353,7 @@ export default function WeeklyTimetable({
     {
       title: 'Action',
       key: 'actions',
-      width: '13%',
+      width: 145,
       render: (_, record) => {
         const gId = record.recurrence_group_id;
         const isActive = record.status === 'approved' || record.status === 'pending';
@@ -543,14 +544,14 @@ export default function WeeklyTimetable({
           </Space>
         </div>
 
-        {/* Timetable Table — no horizontal scroll, percentage widths */}
+        {/* Timetable Table — horizontal scroll on mobile phones, full width on desktop */}
         <Table
           dataSource={timetableWithAttendance}
           columns={columns}
           rowKey={(r) => r.recurrence_group_id || r.booking_id}
           pagination={timetableWithAttendance.length > 8 ? { pageSize: 8 } : false}
           size="middle"
-          tableLayout="fixed"
+          scroll={{ x: 960 }}
           style={{ width: '100%' }}
           locale={{
             emptyText: (

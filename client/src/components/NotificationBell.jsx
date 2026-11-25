@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Alert, Badge, Button, Popover, Typography, Empty, Spin, Space, Tag, message } from 'antd';
+import { Alert, Badge, Button, Popover, Typography, Empty, Spin, Space, Tag, Grid, message } from 'antd';
 import { BellOutlined, CheckOutlined, ClockCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const TYPE_LABELS = {
   room_booking: 'ROOM BOOKING',
@@ -20,6 +21,8 @@ const TYPE_COLORS = {
 
 export default function NotificationBell() {
   const { user } = useAuth();
+  const screens = useBreakpoint();
+  const isPhone = screens.sm === false;
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -101,14 +104,14 @@ export default function NotificationBell() {
   }
 
   const popoverContent = (
-    <div style={{ width: 380, maxWidth: '90vw' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingBottom: 10, marginBottom: 8, borderBottom: '1px solid #F1F5F9' }}>
-        <Space size="small">
+    <div style={{ width: isPhone ? 'calc(100vw - 44px)' : 360, maxWidth: 'calc(100vw - 44px)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingBottom: 10, marginBottom: 8, borderBottom: '1px solid #F1F5F9' }}>
+        <Space size={6} wrap>
           <BellOutlined style={{ color: '#1E3A8A', fontSize: 16 }} />
           <Text strong style={{ fontSize: 14, color: '#0F172A' }}>System Notifications</Text>
           {unreadCount > 0 && <Tag color="red" style={{ margin: 0 }}>{unreadCount} new</Tag>}
         </Space>
-        {unreadCount > 0 && <Button size="small" type="link" icon={<CheckOutlined />} onClick={markAllRead}>Mark all read</Button>}
+        {unreadCount > 0 && <Button size="small" type="link" style={{ padding: 0, height: 'auto' }} icon={<CheckOutlined />} onClick={markAllRead}>Mark all read</Button>}
       </div>
 
       {loadError ? (
@@ -166,8 +169,9 @@ export default function NotificationBell() {
         setOpen(isOpen);
         if (isOpen) fetchNotifications();
       }}
-      placement="bottomRight"
-      arrow={{ pointAtCenter: true }}
+      placement={isPhone ? 'bottom' : 'bottomRight'}
+      overlayClassName="notification-bell-popover"
+      arrow={isPhone ? false : { pointAtCenter: true }}
     >
       <Badge count={unreadCount} offset={[-2, 2]} overflowCount={99}>
         <Button

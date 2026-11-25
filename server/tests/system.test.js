@@ -604,10 +604,10 @@ describe('FSKTM-FMS Comprehensive Automated Security & Workflow Test Suite', () 
       assert.equal(maintAttempt.status, 400);
     });
 
-    test('Prevents simultaneous duplicate loan requests, enforces approval/checkout/return state machine, and persists ratings', async () => {
+    test('Allows multiple users to request the same available device, prevents duplicate active approvals, and persists ratings', async () => {
       const futureReturn = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
 
-      // Two borrowers requesting the same physical device simultaneously
+      // Two different borrowers requesting the same available physical device simultaneously both succeed (pending queue)
       const [loanReq1, loanReq2] = await Promise.all([
         apiRequest('/api/device-loans', {
           method: 'POST',
@@ -631,36 +631,62 @@ describe('FSKTM-FMS Comprehensive Automated Security & Workflow Test Suite', () 
         }),
       ]);
 
-      const statuses = [loanReq1.status, loanReq2.status].sort();
-      assert.deepEqual(statuses, [201, 409], `Expected one 201 and one 409, got ${statuses}`);
+      assert.equal(loanReq1.status, 201);
+      assert.equal(loanReq2.status, 201);
 
-      const winningRes = loanReq1.status === 201 ? loanReq1 : loanReq2;
-      const loanId = winningRes.body.loan.loan_id;
+      // Same user submitting a duplicate pending request for the same device is blocked with 409
+      const duplicateSameUser = await apiRequest('/api/device-loans', {
+        method: 'POST',
+        token: lecturerToken,
+        body: {
+          device_id: loanableDeviceId,
+          expected_return_time: futureReturn,
+          purpose: 'Duplicate Request By Same User',
+        },
+      });
+      assert.equal(duplicateSameUser.status, 409);
 
-      // If student won, lecturer must approve first before technician can approve
-      if (winningRes.body.loan.status === 'pending_lecturer') {
-        const stuApprove = await apiRequest(`/api/device-loans/${loanId}/status`, {
-          method: 'PATCH',
-          token: studentToken,
-          body: { action: 'lecturer_approve' },
-        });
-        assert.equal(stuApprove.status, 403);
+      const loanId = loanReq1.body.loan.loan_id;
+      const competingLoanId = loanReq2.body.loan.loan_id;
 
-        const lecApprove = await apiRequest(`/api/device-loans/${loanId}/status`, {
-          method: 'PATCH',
-          token: lecturerToken,
-          body: { action: 'lecturer_approve' },
-        });
-        assert.equal(lecApprove.status, 200);
-      }
+      // Student request must be approved by lecturer first before technician can approve
+      const stuApprove = await apiRequest(`/api/device-loans/${loanId}/status`, {
+        method: 'PATCH',
+        token: studentToken,
+        body: { action: 'lecturer_approve' },
+      });
+      assert.equal(stuApprove.status, 403);
 
-      // Technician approves with pickup location
+      const lecApprove = await apiRequest(`/api/device-loans/${loanId}/status`, {
+        method: 'PATCH',
+        token: lecturerToken,
+        body: { action: 'lecturer_approve' },
+      });
+      assert.equal(lecApprove.status, 200);
+
+      // Technician approves the chosen request (loanId) with pickup location
       const techApprove = await apiRequest(`/api/device-loans/${loanId}/status`, {
         method: 'PATCH',
         token: techToken,
         body: { action: 'approve', pickup_location: 'FSKTM Counter Level 1' },
       });
       assert.equal(techApprove.status, 200);
+
+      // Attempting to approve the second competing request while the first is already approved is blocked with 409
+      const techApproveCompeting = await apiRequest(`/api/device-loans/${competingLoanId}/status`, {
+        method: 'PATCH',
+        token: techToken,
+        body: { action: 'approve', pickup_location: 'FSKTM Counter Level 1' },
+      });
+      assert.equal(techApproveCompeting.status, 409);
+
+      // Technician rejects the competing request
+      const techRejectCompeting = await apiRequest(`/api/device-loans/${competingLoanId}/status`, {
+        method: 'PATCH',
+        token: techToken,
+        body: { action: 'reject' },
+      });
+      assert.equal(techRejectCompeting.status, 200);
 
       // First checkout succeeds
       const checkout1 = await apiRequest(`/api/device-loans/${loanId}/status`, {

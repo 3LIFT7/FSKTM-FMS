@@ -213,20 +213,21 @@ export default function LecturerDashboard() {
           size="small"
           rowKey="loan_id"
           dataSource={loanRequests}
+          scroll={{ x: 680 }}
           pagination={{ pageSize: 5, simple: true }}
           locale={{ emptyText: <Empty description="No device requests need your approval" /> }}
           columns={[
-            { title: 'Student', dataIndex: 'borrower_name', key: 'borrower_name', render: (name, row) => <div><Text strong>{name}</Text><div style={{ color: '#64748B', fontSize: 12 }}>{row.matric_or_staff_id}</div></div> },
+            { title: 'Student', dataIndex: 'borrower_name', key: 'borrower_name', width: 155, render: (name, row) => <div><Text strong>{name}</Text><div style={{ color: '#64748B', fontSize: 12, whiteSpace: 'nowrap' }}>{row.matric_or_staff_id}</div></div> },
             {
-              title: 'Device & Accessories', dataIndex: 'device_name', key: 'device_name',
+              title: 'Device & Accessories', dataIndex: 'device_name', key: 'device_name', width: 210,
               render: (name, row) => {
                 const selAcc = Array.isArray(row.selected_accessories) ? row.selected_accessories : [];
                 return <div><Text strong>{name}</Text>{selAcc.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>{selAcc.map((acc) => <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>+ {acc}</Tag>)}</div>}</div>;
               },
             },
-            { title: 'Return By', dataIndex: 'expected_return_time', key: 'expected_return_time', sorter: (a, b) => new Date(a.expected_return_time) - new Date(b.expected_return_time), defaultSortOrder: 'descend', render: formatDateTime },
-            { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', ellipsis: true },
-            { title: 'Review', key: 'review', render: (_, row) => <Space><Button size="small" type="primary" loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'lecturer_approve')}>Approve</Button><Button size="small" danger loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'reject')}>Reject</Button></Space> },
+            { title: 'Return By', dataIndex: 'expected_return_time', key: 'expected_return_time', width: 135, sorter: (a, b) => new Date(a.expected_return_time) - new Date(b.expected_return_time), defaultSortOrder: 'descend', render: (val) => <span style={{ whiteSpace: 'nowrap', fontSize: 12, fontFamily: 'monospace' }}>{formatDateTime(val)}</span> },
+            { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', width: 140, ellipsis: true },
+            { title: 'Review', key: 'review', width: 155, render: (_, row) => <Space size={6}><Button size="small" type="primary" loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'lecturer_approve')}>Approve</Button><Button size="small" danger loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'reject')}>Reject</Button></Space> },
           ]}
         />
       </Card>

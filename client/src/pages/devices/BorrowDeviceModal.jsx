@@ -76,7 +76,7 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
     try {
       const datePart = values.returnDate.format('YYYY-MM-DD');
       const timePart = `${values.returnTime}:00`;
-      const expected_return_time = `${datePart}T${timePart}`;
+      const expected_return_time = new Date(`${datePart}T${timePart}`).toISOString();
 
       const res = await fetch('/api/device-loans', {
         method: 'POST',
@@ -148,7 +148,17 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
           )}
         </div>
 
-        <Form form={form} layout="vertical" onFinish={handleFinish} requiredMark="optional">
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleFinish}
+          requiredMark="optional"
+          initialValues={{
+            returnDate: dayjs().add(1, 'day'),
+            returnTime: '17:00',
+            selected_accessories: [],
+          }}
+        >
           {user?.role === 'student' && (
             <Form.Item
               name="lecturer_approver_id"
@@ -180,12 +190,12 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
                 marginBottom: 16,
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: '#0F172A', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <AppstoreAddOutlined style={{ color: '#2563EB' }} />
-                  Optional Accessories (Choose what you need)
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#0F172A', display: 'inline-flex', alignItems: 'center', gap: 6, flex: '1 1 200px' }}>
+                  <AppstoreAddOutlined style={{ color: '#2563EB', flexShrink: 0 }} />
+                  <span>Optional Accessories (Choose what you need)</span>
                 </span>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <Button
                     type="link"
                     size="small"

@@ -374,34 +374,59 @@ body[style*="overflow-y: hidden"] {
   color: #475569 !important;
 }
 
-/* Staff dashboard tables wrap content to their card instead of adding a horizontal rail. */
-.staff-dashboard-table .ant-table-content {
-  overflow-x: hidden !important;
+/* Staff & Student dashboard tables: wrap cleanly on tablet/desktop, scroll smoothly on narrow phones */
+@media (min-width: 768px) {
+  .staff-dashboard-table .ant-table-content {
+    overflow-x: hidden !important;
+  }
+
+  .staff-dashboard-table .ant-table-thead > tr > th,
+  .staff-dashboard-table .ant-table-tbody > tr > td {
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: anywhere !important;
+    font-size: clamp(10px, 0.75vw, 12px) !important;
+  }
+
+  .staff-dashboard-table .ant-space {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-compact-table .ant-table-thead > tr > th {
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .dashboard-compact-table .ant-table-tbody > tr > td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
-.staff-dashboard-table .ant-table-thead > tr > th,
-.staff-dashboard-table .ant-table-tbody > tr > td {
-  white-space: normal !important;
-  word-break: normal !important;
-  overflow-wrap: anywhere !important;
-  font-size: clamp(10px, 0.75vw, 12px) !important;
-}
+@media (max-width: 767px) {
+  .staff-dashboard-table .ant-table-content,
+  .dashboard-compact-table .ant-table-content {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
 
-.staff-dashboard-table .ant-space {
-  flex-wrap: wrap;
-}
+  .staff-dashboard-table .ant-table-content > table,
+  .dashboard-compact-table .ant-table-content > table {
+    min-width: 580px !important;
+    table-layout: auto !important;
+  }
 
-/* Student dashboard tables keep their columns inside the card at all widths. */
-.dashboard-compact-table .ant-table-thead > tr > th {
-  white-space: normal !important;
-  word-break: normal !important;
-  overflow-wrap: anywhere !important;
-}
+  .notification-bell-popover {
+    max-width: calc(100vw - 16px) !important;
+    left: 8px !important;
+    right: 8px !important;
+  }
 
-.dashboard-compact-table .ant-table-tbody > tr > td {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  .notification-bell-popover .ant-popover-inner {
+    padding: 12px !important;
+  }
 }
 
 .dashboard-compact-table .ant-table-cell .ant-tag {
