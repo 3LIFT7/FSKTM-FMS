@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { Row, Col, Card, Statistic, Table, Button, Popconfirm, Empty, Space, Typography, Tag, Modal, Input, message } from 'antd';
+import { Row, Col, Card, Statistic, Table, Button, Empty, Space, Typography, Tag, Modal, Input, message } from 'antd';
 import {
   ToolOutlined,
   CalendarOutlined,
@@ -13,7 +13,6 @@ import {
   AppstoreOutlined,
   ReloadOutlined,
   CompassOutlined,
-  StopOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import StatusTag from '../../components/StatusTag';
@@ -30,6 +29,7 @@ export default function StaffDashboard() {
   const [pendingBookings, setPendingBookings] = useState([]);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const fetchingRef = React.useRef(false);
 
   // Reject modal state
   const [rejectingBookingId, setRejectingBookingId] = useState(null);
@@ -40,14 +40,17 @@ export default function StaffDashboard() {
   }, []);
 
   async function fetchOperationalData() {
+    // Prevent duplicate calls (React StrictMode double-invoke in dev)
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     setLoading(true);
     try {
       const [locRes, issueRes, loanRes, statsRes, bookRes] = await Promise.all([
-        fetch('/api/locations'),
-        fetch('/api/issues'),
-        fetch('/api/device-loans'),
+        fetch('/api/locations', { credentials: 'include' }),
+        fetch('/api/issues', { credentials: 'include' }),
+        fetch('/api/device-loans', { credentials: 'include' }),
         fetch('/api/admin/reports/summary', { credentials: 'include' }).catch(() => ({ json: () => ({ stats: {} }) })),
-        fetch('/api/bookings?status=pending'),
+        fetch('/api/bookings?status=pending', { credentials: 'include' }),
       ]);
 
       const locData = await locRes.json();
@@ -76,6 +79,7 @@ export default function StaffDashboard() {
       message.error('Failed to load operational data');
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   }
 
@@ -117,44 +121,6 @@ export default function StaffDashboard() {
       message.success('Booking rejected');
       setRejectingBookingId(null);
       setRejectReason('');
-      fetchOperationalData();
-    } catch (err) {
-      message.error(err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
-  async function handleCancelBooking(bookingId) {
-    setActionLoadingId(bookingId);
-    try {
-      const res = await fetch(`/api/bookings/${bookingId}/cancel-week`, {
-        method: 'PATCH',
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to cancel booking.');
-      message.success(data.message || 'Booking cancelled.');
-      fetchOperationalData();
-    } catch (err) {
-      message.error(err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
-  async function handleCancelSeries(groupId) {
-    setActionLoadingId(groupId);
-    try {
-      const res = await fetch(`/api/bookings/recurring/${groupId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ action: 'cancel' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to cancel series.');
-      message.success(data.message || 'Series cancelled.');
       fetchOperationalData();
     } catch (err) {
       message.error(err.message);
@@ -291,48 +257,8 @@ export default function StaffDashboard() {
               setRejectReason('');
             }}
           >
-            {record.is_recurring_series ? 'Reject Series' : 'Reject'}
+            {record.is_recurring_series ? 'Reject Series' : 'Reject Request'}
           </Button>
-
-          {/* Cancel this one occurrence */}
-          <Popconfirm
-            title="Cancel This Booking"
-            description={record.is_recurring_series ? 'Cancel this one occurrence only?' : 'Cancel this booking?'}
-            onConfirm={() => handleCancelBooking(record.booking_id)}
-            okText="Yes, Cancel"
-            cancelText="No"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              size="small"
-              icon={<StopOutlined />}
-              loading={actionLoadingId === record.booking_id}
-              style={{ borderColor: '#F59E0B', color: '#B45309' }}
-            >
-              {record.is_recurring_series ? 'Cancel Week' : 'Cancel'}
-            </Button>
-          </Popconfirm>
-
-          {/* Cancel entire recurring series */}
-          {record.is_recurring_series && record.recurrence_group_id && (
-            <Popconfirm
-              title="Cancel Entire Series"
-              description="Cancel ALL remaining weeks of this recurring series? This cannot be undone."
-              onConfirm={() => handleCancelSeries(record.recurrence_group_id)}
-              okText="Yes, Cancel All"
-              cancelText="No"
-              okButtonProps={{ danger: true }}
-            >
-              <Button
-                size="small"
-                danger
-                icon={<StopOutlined />}
-                loading={actionLoadingId === record.recurrence_group_id}
-              >
-                Cancel Series
-              </Button>
-            </Popconfirm>
-          )}
         </Space>
       ),
     },
@@ -467,7 +393,8 @@ export default function StaffDashboard() {
           pagination={{ pageSize: 5 }}
           locale={{ emptyText: <Empty description="No pending room reservations awaiting approval" /> }}
           size="small"
-          scroll={{ x: 'max-content' }}
+          tableLayout="fixed"
+          className="staff-dashboard-table"
         />
       </Card>
 
@@ -494,7 +421,8 @@ export default function StaffDashboard() {
               pagination={{ pageSize: 4, simple: true }}
               locale={{ emptyText: <Empty description="No open breakdown tickets" /> }}
               size="small"
-              scroll={{ x: 'max-content' }}
+              tableLayout="fixed"
+              className="staff-dashboard-table"
             />
           </Card>
         </Col>
@@ -546,14 +474,14 @@ export default function StaffDashboard() {
       {/* Rejection Modal with input reason */}
       <Modal
         open={Boolean(rejectingBookingId)}
-        title="Reject Room Booking Request"
+        title={groupedPendingBookings.find((booking) => booking.booking_id === rejectingBookingId)?.is_recurring_series ? 'Reject Entire Booking Series' : 'Reject Booking Request'}
         onOk={handleRejectConfirm}
         onCancel={() => setRejectingBookingId(null)}
         okText="Confirm Rejection"
         okButtonProps={{ danger: true, loading: Boolean(actionLoadingId) }}
       >
         <p style={{ color: '#64748B', fontSize: 13 }}>
-          Please specify the administrative or scheduling reason for rejecting this booking request:
+          Rejecting declines the pending request and releases its requested time slots. For a series, every session in the request will be rejected. This is different from cancelling an already approved series. Please provide a reason:
         </p>
         <Input.TextArea
           rows={3}

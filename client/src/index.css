@@ -3,9 +3,275 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+    font-family: Inter, system-ui, sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    --fms-navy: #152A61;
+    --fms-blue: #203F91;
+    --fms-ink: #15213A;
+    --fms-muted: #52627A;
+    --fms-ground: #F5F7FB;
+    --fms-border: #D9E0EA;
+  }
+
   body {
-    @apply bg-slate-50 text-slate-900 font-sans min-h-screen flex flex-col;
+    @apply min-h-screen flex flex-col;
+    background: var(--fms-ground);
+    color: var(--fms-ink);
     -webkit-tap-highlight-color: transparent;
+  }
+}
+
+::selection {
+  color: #fff;
+  background: var(--fms-blue);
+}
+
+:focus-visible {
+  outline: 3px solid rgb(32 63 145 / 40%);
+  outline-offset: 2px;
+}
+
+.ant-layout {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.ant-layout-content {
+  color: var(--fms-ink);
+}
+
+.ant-card,
+.ant-modal-content,
+.ant-drawer-content {
+  border-color: var(--fms-border);
+}
+
+.ant-card {
+  box-shadow: 0 1px 2px rgb(21 33 58 / 4%);
+}
+
+.ant-menu-horizontal > .ant-menu-item-selected::after,
+.ant-menu-horizontal > .ant-menu-submenu-selected::after {
+  border-bottom-width: 2px;
+}
+
+.ant-btn-primary {
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.ant-btn-primary:hover {
+  box-shadow: 0 3px 10px rgb(32 63 145 / 18%);
+}
+
+/* Lab Manager reporting workspace */
+.reports-analytics-page {
+  --reports-ink: #15213A;
+  --reports-muted: #52627A;
+  --reports-border: #D9E0EA;
+  --reports-ground: #F5F7FB;
+  width: 100%;
+  max-width: 1560px;
+  margin-inline: auto;
+  color: var(--reports-ink);
+}
+
+.reports-analytics-page > .flex:first-child {
+  align-items: center;
+  padding: 20px 24px;
+  margin: 0 0 2px;
+  border: 1px solid var(--reports-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.reports-analytics-page > .flex:first-child h3 {
+  color: var(--reports-ink);
+  letter-spacing: -0.025em;
+}
+
+.reports-analytics-page > .flex:first-child .ant-typography-secondary {
+  max-width: 62ch;
+  color: var(--reports-muted);
+}
+
+.reports-analytics-page > .ant-row {
+  align-items: stretch;
+}
+
+.reports-analytics-page > .ant-row:first-of-type .ant-col {
+  display: flex;
+}
+
+.reports-analytics-page > .ant-row:first-of-type .ant-card {
+  width: 100%;
+  min-height: 148px;
+  border: 1px solid var(--reports-border);
+  border-top: 3px solid var(--reports-blue, #203F91);
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+.reports-analytics-page > .ant-row:first-of-type .ant-col:nth-child(2) .ant-card {
+  border-top-color: #52627A;
+}
+
+.reports-analytics-page > .ant-row:first-of-type .ant-col:nth-child(3) .ant-card {
+  border-top-color: #DC2626;
+}
+
+.reports-analytics-page > .ant-row:first-of-type .ant-col:nth-child(4) .ant-card {
+  border-top-color: #F59E0B;
+}
+
+.reports-analytics-page .ant-statistic-content-prefix {
+  margin-right: 10px;
+  font-size: 17px;
+}
+
+.reports-analytics-page .ant-statistic-content-suffix {
+  margin-left: 6px;
+  color: var(--reports-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reports-analytics-page > .ant-card {
+  padding: 4px;
+}
+
+.reports-analytics-page > .ant-card > .ant-card-body {
+  padding: 20px;
+}
+
+.reports-analytics-page .ant-tabs-nav::before {
+  border-bottom-color: var(--reports-border);
+}
+
+.reports-analytics-page .ant-tabs-tab-active .ant-tabs-tab-btn {
+  font-weight: 650;
+}
+
+.reports-analytics-page .ant-table-tbody > tr > td {
+  padding-block: 12px;
+}
+
+.reports-analytics-page > .ant-row:first-of-type .ant-card {
+  min-height: 132px;
+  border: 1px solid var(--reports-border);
+  border-radius: 12px !important;
+  box-shadow: 0 1px 2px rgb(21 33 58 / 4%) !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.reports-analytics-page > .ant-row:first-of-type .ant-card:hover {
+  border-color: #AAB9D2;
+  box-shadow: 0 5px 16px rgb(21 33 58 / 7%) !important;
+  transform: translateY(-1px);
+}
+
+.reports-analytics-page .ant-statistic-title {
+  color: var(--reports-muted);
+  line-height: 1.4;
+}
+
+.reports-analytics-page .ant-statistic-content {
+  letter-spacing: -0.025em;
+}
+
+.reports-analytics-page .ant-card-head {
+  min-height: 52px;
+  border-bottom-color: var(--reports-border);
+}
+
+.reports-analytics-page .ant-card-head-title {
+  white-space: normal;
+}
+
+.reports-analytics-page > .ant-card {
+  border: 1px solid var(--reports-border);
+  border-radius: 12px !important;
+  box-shadow: 0 1px 2px rgb(21 33 58 / 4%) !important;
+}
+
+.reports-analytics-page .ant-tabs-nav {
+  margin-bottom: 18px;
+}
+
+.reports-analytics-page .ant-tabs-tab {
+  padding-block: 12px;
+}
+
+.reports-analytics-page .ant-table-wrapper {
+  border: 1px solid var(--reports-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.reports-analytics-page .ant-table-thead > tr > th {
+  color: var(--reports-ink);
+  background: var(--reports-ground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reports-analytics-page .ant-table-tbody > tr:hover > td {
+  background: #F8FAFD;
+}
+
+.reports-analytics-page .ant-input,
+.reports-analytics-page .ant-select-selector {
+  min-height: 38px;
+}
+
+@media (max-width: 767px) {
+  .reports-analytics-page {
+    gap: 16px !important;
+  }
+
+  .reports-analytics-page .ant-page-header-heading,
+  .reports-analytics-page .page-header {
+    align-items: flex-start;
+  }
+
+  .reports-analytics-page .ant-tabs-nav-list {
+    gap: 4px;
+  }
+
+  .reports-analytics-page .ant-tabs-tab {
+    margin-inline-start: 8px;
+    padding: 10px 6px;
+  }
+
+  .reports-analytics-page > .flex:first-child {
+    padding: 16px;
+  }
+
+  .reports-analytics-page > .flex:first-child .ant-space {
+    width: 100%;
+  }
+
+  .reports-analytics-page > .flex:first-child .ant-btn {
+    flex: 1;
+  }
+
+  .reports-analytics-page > .ant-row:first-of-type .ant-card {
+    min-height: 128px;
+  }
+
+  .reports-analytics-page .ant-table-wrapper {
+    overflow-x: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -96,6 +362,23 @@ html, body {
   padding: 8px 10px !important;
   font-weight: 700 !important;
   color: #475569 !important;
+}
+
+/* Staff dashboard tables wrap content to their card instead of adding a horizontal rail. */
+.staff-dashboard-table .ant-table-content {
+  overflow-x: hidden !important;
+}
+
+.staff-dashboard-table .ant-table-thead > tr > th,
+.staff-dashboard-table .ant-table-tbody > tr > td {
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: anywhere !important;
+  font-size: clamp(10px, 0.75vw, 12px) !important;
+}
+
+.staff-dashboard-table .ant-space {
+  flex-wrap: wrap;
 }
 
 /* Student dashboard tables keep their columns inside the card at all widths. */
@@ -483,4 +766,11 @@ html, body {
     padding: 8px 6px;
     font-size: 13px;
   }
+}
+/* Booking calendar displays weekdays only (Ant Design week starts Sunday). */
+.weekday-only-calendar .ant-picker-content th:first-child,
+.weekday-only-calendar .ant-picker-content th:last-child,
+.weekday-only-calendar .ant-picker-content td:first-child,
+.weekday-only-calendar .ant-picker-content td:last-child {
+  display: none;
 }

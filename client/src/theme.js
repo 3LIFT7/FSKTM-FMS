@@ -1,6 +1,10 @@
 export const theme = {
   token: {
-    colorPrimary: '#1E3A8A',
+    colorPrimary: '#203F91',
+    colorText: '#15213A',
+    colorTextSecondary: '#52627A',
+    colorBgLayout: '#F5F7FB',
+    colorBorder: '#D9E0EA',
     colorSuccess: '#16A34A', // Available, Resolved
     colorWarning: '#F59E0B', // Maintenance, In Progress
     colorError: '#DC2626',   // Broken, Open
@@ -11,20 +15,21 @@ export const theme = {
   },
   components: {
     Layout: {
-      siderBg: '#172554',
+      siderBg: '#152A61',
       headerBg: '#FFFFFF',
     },
     Menu: {
-      darkItemBg: '#172554',
-      darkItemSelectedBg: '#1E3A8A',
+      darkItemBg: '#152A61',
+      darkItemSelectedBg: '#203F91',
+      darkItemHoverBg: 'rgba(255,255,255,0.09)',
     },
     Table: {
-      headerBg: '#F8FAFC',
+      headerBg: '#FFFFFF',
       cellPaddingBlock: 10,
       cellPaddingInline: 12,
     },
     Card: {
-      paddingLG: 16,
+      paddingLG: 20,
     },
     Button: {
       controlHeight: 36,

@@ -324,7 +324,7 @@ async function requestDeviceLoan(req, res) {
 async function updateLoanStatus(req, res) {
   try {
     const { id } = req.params;
-    const { action, pickup_location, return_rating, return_condition, return_notes } = req.body;
+    const { action, pickup_location, return_condition, return_notes } = req.body;
     const staffId = req.user.user_id;
     const staffRole = req.user.role;
 
@@ -559,33 +559,17 @@ async function updateLoanStatus(req, res) {
           throw err;
         }
 
-        let parsedRating = null;
-        if (return_rating !== undefined && return_rating !== null && return_rating !== '') {
-          const r = parseInt(return_rating, 10);
-          if (isNaN(r) || r < 1 || r > 5) {
-            const err = new Error('Return rating must be an integer between 1 and 5.');
-            err.status = 400;
-            throw err;
-          }
-          parsedRating = r;
-        } else if (CONDITION_DEFAULT_RATING[condVal]) {
-          parsedRating = CONDITION_DEFAULT_RATING[condVal];
-        }
-
         const notesVal = return_notes ? String(return_notes).trim() : null;
 
         await tx.query(
           `UPDATE device_bookings
            SET status = 'returned',
                actual_return_time = CURRENT_TIMESTAMP,
-               return_rating = COALESCE($2, return_rating),
-               device_rating = COALESCE($2, device_rating),
-               return_condition = COALESCE($3, return_condition),
-               return_notes = COALESCE($4, return_notes),
-               device_review = COALESCE($4, device_review),
-               rated_at = CASE WHEN $2 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE rated_at END
+               return_condition = COALESCE($2, return_condition),
+               return_notes = COALESCE($3, return_notes),
+               device_review = COALESCE($3, device_review)
            WHERE loan_id = $1`,
-          [id, parsedRating, condVal, notesVal]
+          [id, condVal, notesVal]
         );
 
         // Verify no other active checked_out loan exists for this device before marking it available
@@ -615,7 +599,7 @@ async function updateLoanStatus(req, res) {
           },
           body: {
             success: true,
-            message: `Device returned${parsedRating ? ` with ${parsedRating}/5 ★ rating` : ''} and marked ${nextDeviceStatus} in inventory.`,
+            message: `Device returned and marked ${nextDeviceStatus} in inventory.`,
           },
         };
       }

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, TimePicker, InputNumber, Switch, Button, Alert, Typography, message, Space, Row, Col } from 'antd';
+import { Card, Form, InputNumber, Switch, Button, Alert, Typography, message, Space, Row, Col } from 'antd';
 import { SettingOutlined, SaveOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import PageHeader from '../../components/PageHeader';
-import { TIME_FORMAT } from '../../utils/date';
+import TimeWheelPicker from '../../components/TimeWheelPicker';
 
 const { Text, Paragraph } = Typography;
 
@@ -25,8 +24,8 @@ export default function SettingsPage() {
         const s = data.settings;
         form.setFieldsValue({
           device_booking_requires_approval: s.device_booking_requires_approval === 'true',
-          operating_hours_start: s.operating_hours_start ? dayjs(`2000-01-01T${s.operating_hours_start}`) : dayjs('2000-01-01T08:00'),
-          operating_hours_end: s.operating_hours_end ? dayjs(`2000-01-01T${s.operating_hours_end}`) : dayjs('2000-01-01T20:00'),
+          operating_hours_start: s.operating_hours_start || '08:00',
+          operating_hours_end: s.operating_hours_end || '20:00',
           max_booking_duration_hours: parseInt(s.max_booking_duration_hours || '4', 10),
         });
       }
@@ -44,8 +43,8 @@ export default function SettingsPage() {
       const payload = {
         settings: {
           device_booking_requires_approval: String(values.device_booking_requires_approval),
-          operating_hours_start: values.operating_hours_start.format('HH:mm'),
-          operating_hours_end: values.operating_hours_end.format('HH:mm'),
+          operating_hours_start: values.operating_hours_start,
+          operating_hours_end: values.operating_hours_end,
           max_booking_duration_hours: String(values.max_booking_duration_hours),
         },
       };
@@ -105,7 +104,7 @@ export default function SettingsPage() {
                 label="Daily Facility Opening Time"
                 rules={[{ required: true }]}
               >
-                <TimePicker format={TIME_FORMAT} style={{ width: '100%' }} minuteStep={30} />
+                <TimeWheelPicker />
               </Form.Item>
             </Col>
 
@@ -115,7 +114,7 @@ export default function SettingsPage() {
                 label="Daily Facility Closing Time"
                 rules={[{ required: true }]}
               >
-                <TimePicker format={TIME_FORMAT} style={{ width: '100%' }} minuteStep={30} />
+                <TimeWheelPicker />
               </Form.Item>
             </Col>
           </Row>

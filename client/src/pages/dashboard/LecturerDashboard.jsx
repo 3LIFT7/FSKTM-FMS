@@ -7,9 +7,6 @@ import {
   CompassOutlined,
   BookOutlined,
   LaptopOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  CloseCircleOutlined,
   QrcodeOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
@@ -195,6 +192,17 @@ export default function LecturerDashboard() {
         </Col>
       </Row>
 
+      <WeeklyTimetable
+        bookings={myBookings}
+        attendanceLogs={myUsageLogs}
+        onBookSlot={(slot) => {
+          setSelectedSlotForBooking(slot || null);
+          setIsBookModalOpen(true);
+        }}
+        onRefresh={fetchLecturerData}
+        lecturerName={user?.name}
+      />
+
       {/* Device Loans Awaiting Approval */}
       <Card
         title={<Space><LaptopOutlined /><span>Device Loans Awaiting Your Approval</span><Tag color="blue">{loanRequests.length}</Tag></Space>}
@@ -210,149 +218,18 @@ export default function LecturerDashboard() {
           columns={[
             { title: 'Student', dataIndex: 'borrower_name', key: 'borrower_name', render: (name, row) => <div><Text strong>{name}</Text><div style={{ color: '#64748B', fontSize: 12 }}>{row.matric_or_staff_id}</div></div> },
             {
-              title: 'Device & Accessories',
-              dataIndex: 'device_name',
-              key: 'device_name',
+              title: 'Device & Accessories', dataIndex: 'device_name', key: 'device_name',
               render: (name, row) => {
                 const selAcc = Array.isArray(row.selected_accessories) ? row.selected_accessories : [];
-                return (
-                  <div>
-                    <Text strong>{name}</Text>
-                    {selAcc.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                        {selAcc.map((acc) => (
-                          <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>
-                            + {acc}
-                          </Tag>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
+                return <div><Text strong>{name}</Text>{selAcc.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>{selAcc.map((acc) => <Tag key={acc} color="geekblue" style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4 }}>+ {acc}</Tag>)}</div>}</div>;
               },
             },
-            {
-              title: 'Return By',
-              dataIndex: 'expected_return_time',
-              key: 'expected_return_time',
-              sorter: (a, b) => new Date(a.expected_return_time) - new Date(b.expected_return_time),
-              defaultSortOrder: 'descend',
-              render: formatDateTime,
-            },
+            { title: 'Return By', dataIndex: 'expected_return_time', key: 'expected_return_time', sorter: (a, b) => new Date(a.expected_return_time) - new Date(b.expected_return_time), defaultSortOrder: 'descend', render: formatDateTime },
             { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', ellipsis: true },
             { title: 'Review', key: 'review', render: (_, row) => <Space><Button size="small" type="primary" loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'lecturer_approve')}>Approve</Button><Button size="small" danger loading={loanActionId === row.loan_id} onClick={() => reviewLoan(row.loan_id, 'reject')}>Reject</Button></Space> },
           ]}
         />
       </Card>
-
-      {/* QR Lecture Attendance & Lab Usage Log Card */}
-      <Card
-        title={
-          <Space>
-            <QrcodeOutlined style={{ color: '#1E3A8A' }} />
-            <span>My QR-Verified Lecture Attendance &amp; Lab Reservations</span>
-            <Tag color="blue">{myUsageLogs.length}</Tag>
-          </Space>
-        }
-        extra={
-          <Tag color="geekblue" style={{ margin: 0, fontWeight: 600 }}>
-            Scan QR code inside reserved room (15m before start &rarr; end time)
-          </Tag>
-        }
-        bordered={false}
-        style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
-      >
-        <Table
-          size="small"
-          rowKey="record_key"
-          loading={loading}
-          dataSource={myUsageLogs}
-          pagination={{ pageSize: 5, simple: true }}
-          locale={{ emptyText: <Empty description="No room reservations or QR attendance sessions found" /> }}
-          columns={[
-            {
-              title: 'Lab / Room Facility',
-              key: 'facility',
-              render: (_, row) => (
-                <div>
-                  <Text strong>{row.location_name}</Text>
-                  <div style={{ fontSize: 12, color: '#64748B' }}>{row.location_code}</div>
-                </div>
-              ),
-            },
-            {
-              title: 'Course',
-              key: 'course',
-              render: (_, row) => (
-                <div>
-                  <Tag color="blue" style={{ fontWeight: 700, marginBottom: 2 }}>{row.course_id}</Tag>
-                  <div style={{ fontSize: 12 }}>{row.course_name}</div>
-                </div>
-              ),
-            },
-            {
-              title: 'Scheduled Time Window',
-              key: 'time_window',
-              sorter: (a, b) => new Date(a.start_time) - new Date(b.start_time),
-              defaultSortOrder: 'descend',
-              render: (_, row) => (
-                <Space direction="vertical" size={2}>
-                  <span style={{ fontSize: 12, fontFamily: 'monospace' }}>
-                    {formatDateTime(row.start_time)} &rarr; {formatDateTime(row.end_time)}
-                  </span>
-                  {row.checked_in_at && (
-                    <span style={{ fontSize: 11, color: '#059669', fontFamily: 'monospace', fontWeight: 600 }}>
-                      Scanned: {formatDateTime(row.checked_in_at)}
-                    </span>
-                  )}
-                </Space>
-              ),
-            },
-            {
-              title: 'QR Attendance Status',
-              key: 'status',
-              render: (_, row) => {
-                if (row.attendance_status === 'on_time') {
-                  return (
-                    <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontWeight: 700 }}>
-                      Attended (On-Time)
-                    </Tag>
-                  );
-                }
-                if (row.attendance_status === 'late') {
-                  return (
-                    <Tag icon={<ClockCircleOutlined />} color="warning" style={{ fontWeight: 700 }}>
-                      Late ({row.late_minutes ? `+${row.late_minutes}m` : 'Late'})
-                    </Tag>
-                  );
-                }
-                if (row.attendance_status === 'pending_checkin') {
-                  return (
-                    <Tag icon={<QrcodeOutlined />} color="processing" style={{ fontWeight: 600 }}>
-                      Pending QR Scan
-                    </Tag>
-                  );
-                }
-                return (
-                  <Tag icon={<CloseCircleOutlined />} color="error" style={{ fontWeight: 700 }}>
-                    Missed / Absent
-                  </Tag>
-                );
-              },
-            },
-          ]}
-        />
-      </Card>
-
-      <WeeklyTimetable
-        bookings={myBookings}
-        onBookSlot={(slot) => {
-          setSelectedSlotForBooking(slot || null);
-          setIsBookModalOpen(true);
-        }}
-        onRefresh={fetchLecturerData}
-        lecturerName={user?.name}
-      />
 
       <BookRoomModal
         isOpen={isBookModalOpen}

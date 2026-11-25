@@ -252,6 +252,14 @@ export default function CalendarView() {
               onChange={setSelectedDate}
               fullscreen={!isMobile}
               dateCellRender={isMobile ? undefined : dateCellRender}
+              className="weekday-only-calendar"
+              mode="month"
+              headerRender={({ value, onChange }) => (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '8px 0' }}>
+                  <Select value={value.year()} onChange={year => onChange(value.year(year))} options={Array.from({ length: 11 }, (_, i) => value.year() - 5 + i).map(year => ({ value: year, label: String(year) }))} />
+                  <Select value={value.month()} onChange={month => onChange(value.month(month))} options={Array.from({ length: 12 }, (_, month) => ({ value: month, label: dayjs().month(month).format('MMM') }))} />
+                </div>
+              )}
             />
           </Card>
         </Col>

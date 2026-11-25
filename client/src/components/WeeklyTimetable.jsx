@@ -35,6 +35,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 export default function WeeklyTimetable({
   bookings = [],
+  attendanceLogs = [],
   onBookSlot,
   onRefresh,
   lecturerName = 'Lecturer'
@@ -121,6 +122,15 @@ export default function WeeklyTimetable({
       return dayjs(a.start_time).hour() - dayjs(b.start_time).hour();
     });
   }, [bookings, selectedDay, selectedCourse]);
+
+  const attendanceByBookingId = useMemo(() => new Map(
+    attendanceLogs.map((log) => [String(log.booking_id), log])
+  ), [attendanceLogs]);
+
+  const timetableWithAttendance = useMemo(() => consolidatedTimetableItems.map((item) => ({
+    ...item,
+    attendanceLog: attendanceByBookingId.get(String(item.booking_id)),
+  })), [consolidatedTimetableItems, attendanceByBookingId]);
 
   // Calculate stats (only approved/pending shown in table)
   const totalWeeklyHours = useMemo(() => {
@@ -327,6 +337,19 @@ export default function WeeklyTimetable({
       },
     },
     {
+      title: 'QR Attendance',
+      key: 'attendance',
+      width: '15%',
+      render: (_, record) => {
+        const log = record.attendanceLog;
+        if (!log) return <Tag color="default">Not scanned</Tag>;
+        if (log.attendance_status === 'on_time') return <Tag color="success">Attended</Tag>;
+        if (log.attendance_status === 'late') return <Tag color="warning">Late ({log.late_minutes ? `+${log.late_minutes}m` : 'Late'})</Tag>;
+        if (log.attendance_status === 'pending_checkin') return <Tag color="processing">Pending QR scan</Tag>;
+        return <Tag color="error">Missed / absent</Tag>;
+      },
+    },
+    {
       title: 'Action',
       key: 'actions',
       width: '13%',
@@ -434,10 +457,10 @@ export default function WeeklyTimetable({
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, color: '#0F172A', lineHeight: 1.2 }}>
-                Weekly Teaching Timetable
+                Teaching Timetable & QR Attendance
               </div>
               <div style={{ fontSize: 11, color: '#64748B', fontWeight: 500 }}>
-                Weekly timetable of assigned lectures and laboratory classes
+                Assigned room sessions, booking status, and QR attendance
               </div>
             </div>
           </div>
@@ -522,10 +545,10 @@ export default function WeeklyTimetable({
 
         {/* Timetable Table — no horizontal scroll, percentage widths */}
         <Table
-          dataSource={consolidatedTimetableItems}
+          dataSource={timetableWithAttendance}
           columns={columns}
           rowKey={(r) => r.recurrence_group_id || r.booking_id}
-          pagination={consolidatedTimetableItems.length > 8 ? { pageSize: 8 } : false}
+          pagination={timetableWithAttendance.length > 8 ? { pageSize: 8 } : false}
           size="middle"
           tableLayout="fixed"
           style={{ width: '100%' }}

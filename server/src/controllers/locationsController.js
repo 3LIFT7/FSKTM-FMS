@@ -93,7 +93,7 @@ async function getLocationById(req, res) {
               u.name AS booked_by, u.role AS booked_by_role
        FROM location_bookings b
        JOIN users u ON b.user_id = u.user_id
-       WHERE b.location_id = $1 AND b.end_time >= CURRENT_TIMESTAMP AND b.status IN ('pending', 'approved')
+       WHERE b.location_id = $1 AND b.end_time >= CURRENT_TIMESTAMP AND b.status = 'approved'
        ORDER BY b.start_time ASC LIMIT 10`,
       [locId]
     );

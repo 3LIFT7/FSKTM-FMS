@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Modal, Form, DatePicker, TimePicker, Input, Button, Alert, Typography, message, Select, Checkbox } from 'antd';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Modal, Form, DatePicker, Input, Button, Alert, Typography, message, Select, Checkbox } from 'antd';
 import { LaptopOutlined, AppstoreAddOutlined, EnvironmentOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
-import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
+import { DATE_FORMAT } from '../../utils/date';
+import TimeWheelPicker from '../../components/TimeWheelPicker';
 
 const { Text, Title } = Typography;
 
@@ -16,18 +17,18 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
   const [lecturersLoading, setLecturersLoading] = useState(false);
   const selectedAccessories = Form.useWatch('selected_accessories', form) || [];
 
-  const availableAccessories = Array.isArray(device?.accessories)
-    ? device.accessories
-    : typeof device?.accessories === 'string' && device.accessories.trim()
-    ? (() => {
-        try {
-          const p = JSON.parse(device.accessories);
-          return Array.isArray(p) ? p : [];
-        } catch {
-          return device.accessories.split(',').map((s) => s.trim()).filter(Boolean);
-        }
-      })()
-    : [];
+  const availableAccessories = useMemo(() => {
+    const raw = device?.accessories;
+    if (Array.isArray(raw)) return raw.filter((item) => typeof item === 'string' && item.trim());
+    if (typeof raw !== 'string' || !raw.trim()) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((item) => typeof item === 'string' && item.trim());
+      return typeof parsed === 'string' ? parsed.split(',').map((item) => item.trim()).filter(Boolean) : [];
+    } catch {
+      return raw.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }, [device?.accessories]);
 
   useEffect(() => {
     if (isOpen && device) {
@@ -35,7 +36,7 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
       form.resetFields();
       form.setFieldsValue({
         returnDate: dayjs().add(1, 'day'),
-        returnTime: dayjs().hour(17).minute(0),
+        returnTime: '17:00',
         selected_accessories: [],
       });
       if (user?.role === 'student') {
@@ -43,19 +44,23 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
         setLecturersLoading(true);
         fetch('/api/device-loans/lecturers', { credentials: 'include' })
           .then(async (res) => {
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              const responseText = await res.text();
+              throw new Error(`Lecturer list API returned a non-JSON response (${res.status}). ${responseText.slice(0, 120)}`);
+            }
             const data = await res.json();
             if (!res.ok || !data.success) {
               throw new Error(data.error || `Lecturer list request failed (${res.status}).`);
             }
-            setLecturers(data.lecturers || []);
-            if (!(data.lecturers || []).length) {
+            const lecturerList = Array.isArray(data.lecturers) ? data.lecturers : [];
+            setLecturers(lecturerList);
+            if (!lecturerList.length) {
               setError('No accounts currently have the Lecturer role. Ask an administrator to check Users & Roles.');
             }
           })
           .catch((err) => {
-            setError(err instanceof SyntaxError
-              ? 'The lecturer list API did not return JSON. Restart the backend server, then reopen this form.'
-              : `${err.message} Check that the backend server is running and restart it if it was already open when this feature was added.`);
+            setError(`${err.message || 'Could not load lecturer approvers.'} Check that the backend server is running and the device-loans lecturer endpoint is available.`);
           })
           .finally(() => setLecturersLoading(false));
       }
@@ -70,7 +75,7 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
 
     try {
       const datePart = values.returnDate.format('YYYY-MM-DD');
-      const timePart = values.returnTime.format('HH:mm:00');
+      const timePart = `${values.returnTime}:00`;
       const expected_return_time = `${datePart}T${timePart}`;
 
       const res = await fetch('/api/device-loans', {
@@ -258,7 +263,7 @@ export default function BorrowDeviceModal({ isOpen, onClose, device, onRequested
             label="Expected Return Time"
             rules={[{ required: true, message: 'Please select return time' }]}
           >
-            <TimePicker style={{ width: '100%' }} format={TIME_FORMAT} minuteStep={15} />
+            <TimeWheelPicker />
           </Form.Item>
 
           <Form.Item

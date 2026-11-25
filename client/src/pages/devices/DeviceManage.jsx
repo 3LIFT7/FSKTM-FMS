@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Empty, Checkbox, Descriptions, message } from 'antd';
+import { Card, Tabs, Table, Button, Input, Select, Tag, Space, Typography, Popconfirm, Modal, Form, Radio, Row, Col, Empty, Checkbox, Descriptions, Rate, message } from 'antd';
 import {
   LaptopOutlined,
   PlusOutlined,
@@ -13,7 +13,6 @@ import {
   AppstoreAddOutlined,
   HistoryOutlined,
   StarFilled,
-  StarOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -51,7 +50,7 @@ export default function DeviceManage() {
   const [approvingLoan, setApprovingLoan] = useState(null);
   const [approvalForm] = Form.useForm();
 
-  // Receive & Rate Returned Device modal state
+  // Receive and review returned device modal state
   const [returningLoan, setReturningLoan] = useState(null);
   const [returnForm] = Form.useForm();
 
@@ -137,32 +136,6 @@ export default function DeviceManage() {
     }
   }
 
-  async function handleRateAlreadyReturnedLoan(loanId, values) {
-    setActionLoadingId(loanId);
-    try {
-      const res = await fetch(`/api/device-loans/${loanId}/rating`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          rating: values.return_rating,
-          return_condition: values.return_condition,
-          review: values.return_notes,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      message.success(data.message || 'Return rating saved!');
-      fetchData();
-      return true;
-    } catch (err) {
-      message.error(err.message);
-      return false;
-    } finally {
-      setActionLoadingId(null);
-    }
-  }
-
   async function handleDeleteDevice(deviceId) {
     try {
       const res = await fetch(`/api/devices/${deviceId}`, {
@@ -226,7 +199,7 @@ export default function DeviceManage() {
     }
   }
 
-  const openReturnAndRateModal = (record) => {
+  const openReceiveReturnModal = (record) => {
     setReturningLoan(record);
     returnForm.setFieldsValue({
       return_condition: record.return_condition || 'Excellent',
@@ -380,7 +353,7 @@ export default function DeviceManage() {
               </div>
             ) : (
               <Text type="secondary" style={{ fontStyle: 'italic' }}>
-                {record.status === 'returned' ? 'Returned (not rated yet)' : 'Available after device is returned'}
+                {record.status === 'returned' ? 'Returned and reviewed by technician' : 'Available after device is returned'}
               </Text>
             )}
           </Descriptions.Item>
@@ -558,23 +531,13 @@ export default function DeviceManage() {
               <Button
                 size="small"
                 loading={isLoading}
-                onClick={() => openReturnAndRateModal(record)}
+                onClick={() => openReceiveReturnModal(record)}
                 style={{ background: '#059669', borderColor: '#059669', color: '#fff', fontWeight: 600 }}
               >
-                Receive &amp; Rate Return
+              Receive &amp; Review Return
               </Button>
             )}
 
-            {record.status === 'returned' && (
-              <Button
-                size="small"
-                icon={<StarOutlined />}
-                onClick={() => openReturnAndRateModal(record)}
-                style={{ color: '#B45309', borderColor: '#FDE68A', background: '#FFFBEB', fontWeight: 600 }}
-              >
-                {record.return_rating ? 'Edit Rating' : 'Rate Return'}
-              </Button>
-            )}
           </Space>
         );
       },
@@ -941,12 +904,12 @@ export default function DeviceManage() {
             <CheckCircleOutlined style={{ color: '#059669' }} />
             <span>
               {returningLoan?.status === 'returned'
-                ? `Update Returned Device — Loan #${returningLoan?.loan_id}`
-                : `Receive Returned Device — Loan #${returningLoan?.loan_id}`}
+                ? `Review Returned Device — Loan #${returningLoan?.loan_id}`
+                : `Receive & Review Return — Loan #${returningLoan?.loan_id}`}
             </span>
           </div>
         }
-        okText={returningLoan?.status === 'returned' ? 'Save Return Details' : 'Confirm Return'}
+        okText={returningLoan?.status === 'returned' ? 'Save Review' : 'Confirm Return'}
         cancelText="Cancel"
         confirmLoading={actionLoadingId === returningLoan?.loan_id}
         onCancel={() => setReturningLoan(null)}
@@ -981,28 +944,14 @@ export default function DeviceManage() {
               form={returnForm}
               layout="vertical"
               initialValues={{
-                return_rating: 5,
                 return_condition: 'Excellent',
                 return_notes: '',
               }}
               onFinish={async (values) => {
-                if (returningLoan.status === 'returned') {
-                  const ok = await handleRateAlreadyReturnedLoan(returningLoan.loan_id, values);
-                  if (ok) setReturningLoan(null);
-                } else {
-                  const ok = await handleLoanAction(returningLoan.loan_id, 'return', values);
-                  if (ok) setReturningLoan(null);
-                }
+                const ok = await handleLoanAction(returningLoan.loan_id, 'return', values);
+                if (ok) setReturningLoan(null);
               }}
             >
-              <Form.Item
-                name="return_rating"
-                label="Rate Returned Device Condition (1–5 Stars)"
-                rules={[{ required: true, message: 'Please select a star rating for the returned device' }]}
-              >
-                <Rate style={{ fontSize: 26 }} />
-              </Form.Item>
-
               <Form.Item
                 name="return_condition"
                 label="Returned Equipment Condition"

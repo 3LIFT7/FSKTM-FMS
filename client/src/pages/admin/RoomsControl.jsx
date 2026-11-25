@@ -363,14 +363,14 @@ export default function RoomsControl() {
             </>
           )}
 
-          {/* Cancel buttons — available for approved (and pending) bookings */}
-          {(r.status === 'approved' || r.status === 'pending') && (
+          {/* Cancellation is for approved bookings; pending requests should be rejected. */}
+          {r.status === 'approved' && (
             <>
               <Popconfirm
-                title="Cancel This Booking"
+                title={r.is_recurring_series ? 'Cancel This Session' : 'Cancel This Booking'}
                 description={
                   r.is_recurring_series
-                    ? 'Cancel this one session occurrence only?'
+                    ? 'Cancel only this approved session. Other sessions in the series will stay booked.'
                     : 'Are you sure you want to cancel this booking?'
                 }
                 onConfirm={() => handleCancelBooking(r.booking_id)}
@@ -384,14 +384,14 @@ export default function RoomsControl() {
                   loading={actionLoadingId === r.booking_id}
                   style={{ borderColor: '#F59E0B', color: '#B45309' }}
                 >
-                  {r.is_recurring_series ? 'Cancel Week' : 'Cancel'}
+                  {r.is_recurring_series ? 'Cancel Session' : 'Cancel Booking'}
                 </Button>
               </Popconfirm>
 
               {r.is_recurring_series && r.recurrence_group_id && (
                 <Popconfirm
-                  title="Cancel Entire Series"
-                  description="Cancel ALL remaining weeks of this recurring series? This cannot be undone."
+                  title="Cancel Future Sessions in Series"
+                  description="This permanently cancels every future session in this series and releases those time slots. Past sessions are unchanged."
                   onConfirm={() => handleCancelSeries(r.recurrence_group_id)}
                   okText="Yes, Cancel All"
                   cancelText="No"
@@ -403,7 +403,7 @@ export default function RoomsControl() {
                     icon={<StopOutlined />}
                     loading={actionLoadingId === r.recurrence_group_id}
                   >
-                    Cancel Series
+                    Cancel Future Series
                   </Button>
                 </Popconfirm>
               )}
@@ -817,14 +817,14 @@ export default function RoomsControl() {
       {/* Reject Modal */}
       <Modal
         open={Boolean(rejectingBookingId)}
-        title="Reject Room Booking Request"
+        title={bookings.find((booking) => booking.booking_id === rejectingBookingId)?.recurrence_group_id ? 'Reject Entire Booking Series' : 'Reject Booking Request'}
         onOk={handleRejectConfirm}
         onCancel={() => setRejectingBookingId(null)}
         okText="Confirm Rejection"
         okButtonProps={{ danger: true, loading: Boolean(actionLoadingId) }}
       >
         <p style={{ color: '#64748B', fontSize: 13 }}>
-          Specify rejection reason:
+          Rejecting declines the pending request and releases its requested time slots. For a series, every session in the request will be rejected. Cancelling is for approved bookings and releases future sessions. Please provide a reason:
         </p>
         <Input.TextArea
           rows={3}

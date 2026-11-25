@@ -22,11 +22,11 @@ import {
   message,
   Timeline,
   DatePicker,
-  TimePicker,
   Checkbox,
   InputNumber,
   Statistic
 } from 'antd';
+import TimeWheelPicker from '../../components/TimeWheelPicker';
 import {
   AlertOutlined,
   StarOutlined,
@@ -217,8 +217,8 @@ export default function ClassroomFeedbackPage() {
     setSubmittingBooking(true);
     try {
       const dateStr = values.date.format('YYYY-MM-DD');
-      const startStr = values.startTime.format('HH:mm:00');
-      const endStr = values.endTime.format('HH:mm:00');
+      const startStr = `${values.startTime}:00`;
+      const endStr = `${values.endTime}:00`;
       const startDateTime = new Date(`${dateStr}T${startStr}`);
       const endDateTime = new Date(`${dateStr}T${endStr}`);
 
@@ -726,8 +726,8 @@ export default function ClassroomFeedbackPage() {
                       onFinish={handleBookingSubmit}
                       initialValues={{
                         date: dayjs(),
-                        startTime: dayjs().hour(9).minute(0),
-                        endTime: dayjs().hour(11).minute(0),
+                        startTime: '09:00',
+                        endTime: '11:00',
                         weeks: 14
                       }}
                     >
@@ -751,7 +751,7 @@ export default function ClassroomFeedbackPage() {
                             label={<span style={{ fontWeight: 600 }}>Start Time</span>}
                             rules={[{ required: true, message: 'Start time required' }]}
                           >
-                            <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%', borderRadius: 8 }} />
+                            <TimeWheelPicker />
                           </Form.Item>
                         </Col>
                         <Col xs={12} sm={6}>
@@ -760,7 +760,7 @@ export default function ClassroomFeedbackPage() {
                             label={<span style={{ fontWeight: 600 }}>End Time</span>}
                             rules={[{ required: true, message: 'End time required' }]}
                           >
-                            <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%', borderRadius: 8 }} />
+                            <TimeWheelPicker />
                           </Form.Item>
                         </Col>
                       </Row>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Segmented, DatePicker, TimePicker, Button, Space, Typography, Tag, Row, Col, Alert, Tooltip, Grid } from 'antd';
+import { Card, Segmented, DatePicker, Select, Button, Space, Typography, Tag, Row, Col, Alert, Tooltip, Grid, Popover } from 'antd';
 import {
   CompassOutlined,
   CalendarOutlined,
@@ -22,6 +22,14 @@ import { DATE_FORMAT, TIME_FORMAT } from '../../utils/date';
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
+// 30-minute time slots for the availability checker (08:00 – 20:00)
+const MAP_TIME_SLOTS = Array.from({ length: 25 }, (_, i) => {
+  const totalMins = 8 * 60 + i * 30;
+  const h = String(Math.floor(totalMins / 60)).padStart(2, '0');
+  const m = String(totalMins % 60).padStart(2, '0');
+  return `${h}:${m}`;
+});
+
 export default function InteractiveFloorMap({ onBookRoom }) {
   const screens = useBreakpoint();
   const isPhone = screens.md === false;
@@ -32,9 +40,17 @@ export default function InteractiveFloorMap({ onBookRoom }) {
   const [loading, setLoading] = useState(true);
   const [selectedLocationId, setSelectedLocationId] = useState(null);
 
-  // Time-slot availability filter (custom date and time)
+  // Time-slot availability filter (custom date and time string HH:mm)
   const [customDate, setCustomDate] = useState(dayjs());
-  const [customTime, setCustomTime] = useState(dayjs());
+  const [customTimeStr, setCustomTimeStr] = useState(
+    () => {
+      const now = dayjs();
+      const h = now.hour();
+      const m = now.minute() < 30 ? '00' : '30';
+      const hClamped = Math.max(8, Math.min(h, 20));
+      return `${String(hClamped).padStart(2, '0')}:${m}`;
+    }
+  );
 
   // Booking modal state
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -76,11 +92,10 @@ export default function InteractiveFloorMap({ onBookRoom }) {
 
   // Target timestamp to evaluate availability against
   const targetCheckTime = useMemo(() => {
-    if (!customDate || !customTime) return new Date();
+    if (!customDate || !customTimeStr) return new Date();
     const dateStr = customDate.format('YYYY-MM-DD');
-    const timeStr = customTime.format('HH:mm:00');
-    return new Date(`${dateStr}T${timeStr}`);
-  }, [customDate, customTime]);
+    return new Date(`${dateStr}T${customTimeStr}:00`);
+  }, [customDate, customTimeStr]);
 
   // Active bookings at check time
   const activeBookingsAtTime = useMemo(() => {
@@ -113,6 +128,10 @@ export default function InteractiveFloorMap({ onBookRoom }) {
       locationLookup[roomDef.name.toUpperCase()];
     const isMaintenance = backendLoc?.status === 'maintenance';
     const activeBooking = backendLoc ? activeBookingsAtTime[backendLoc.location_id] : null;
+    const roomBookings = backendLoc ? bookings
+      .filter(b => Number(b.location_id) === Number(backendLoc.location_id) && b.status === 'approved' && new Date(b.end_time) >= new Date())
+      .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))
+      .slice(0, 4) : [];
     const isBooked = Boolean(activeBooking);
     const isPending = activeBooking?.status === 'pending';
 
@@ -140,7 +159,24 @@ export default function InteractiveFloorMap({ onBookRoom }) {
       }
     }
 
+    const hoverDetails = (
+      <div style={{ width: 250 }}>
+        <div style={{ fontWeight: 700, color: '#0F172A', marginBottom: 6 }}>{roomDef.name}</div>
+        <div style={{ fontSize: 12, color: '#64748B', marginBottom: 10 }}>
+          {roomDef.code} · {backendLoc?.capacity || roomDef.capacity || 30} seats
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Upcoming bookings</div>
+        {roomBookings.length ? roomBookings.map(booking => (
+          <div key={booking.booking_id} style={{ fontSize: 12, padding: '6px 0', borderTop: '1px solid #E2E8F0' }}>
+            <div style={{ fontWeight: 600 }}>{dayjs(booking.start_time).format('ddd, D MMM')}</div>
+            <div style={{ color: '#475569' }}>{dayjs(booking.start_time).format('HH:mm')}–{dayjs(booking.end_time).format('HH:mm')} · Approved</div>
+          </div>
+        )) : <div style={{ fontSize: 12, color: '#64748B' }}>No upcoming bookings</div>}
+      </div>
+    );
+
     return (
+      <Popover content={hoverDetails} title={null} trigger="hover" placement="top" mouseEnterDelay={0.25}>
       <div
         key={roomDef.code}
         onClick={() => {
@@ -198,6 +234,7 @@ export default function InteractiveFloorMap({ onBookRoom }) {
           )}
         </div>
       </div>
+      </Popover>
     );
   };
 
@@ -275,12 +312,13 @@ export default function InteractiveFloorMap({ onBookRoom }) {
                 format={DATE_FORMAT}
                 allowClear={false}
               />
-              <TimePicker
-                value={customTime}
-                onChange={(val) => setCustomTime(val || dayjs())}
-                format={TIME_FORMAT}
-                minuteStep={15}
-                allowClear={false}
+              <Select
+                value={customTimeStr}
+                onChange={(val) => setCustomTimeStr(val)}
+                style={{ width: 110 }}
+                showSearch
+                options={MAP_TIME_SLOTS.map(t => ({ value: t, label: t }))}
+                popupMatchSelectWidth={false}
               />
             </Space>
           </Col>

@@ -514,10 +514,10 @@ export default function Reports() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="reports-analytics-page" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <PageHeader
-        title="Requests Records & Facility Analytics"
-        subtitle="Centralized management record of all room reservation requests, equipment borrowing, damage reports, and hardware demand descriptions."
+        title="Reports & Analytics"
+        subtitle="Review facility bookings, equipment loans, issue reports, and usage trends."
         extra={
           <Space>
             <Button icon={<DownloadOutlined />} onClick={exportCSV}>

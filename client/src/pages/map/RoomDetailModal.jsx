@@ -16,6 +16,7 @@ import EditRoomModal from '../../components/EditRoomModal';
 import EditDeviceModal from '../../components/EditDeviceModal';
 import ClassroomQRPlacard from '../../components/ClassroomQRPlacard';
 import StatusTag from '../../components/StatusTag';
+import dayjs from 'dayjs';
 
 const { Text, Title, Paragraph } = Typography;
 
@@ -25,6 +26,7 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const approvedBookings = (data?.upcoming_bookings || []).filter(booking => booking.status === 'approved');
 
   // Sub-modals
   const [isEditRoomOpen, setIsEditRoomOpen] = useState(false);
@@ -229,6 +231,24 @@ export default function RoomDetailModal({ locationId, onClose, onBookClick, onSt
                 <StatusTag status={data.status} />
               </Descriptions.Item>
             </Descriptions>
+
+            {/* Approved room booking times */}
+            {approvedBookings.length > 0 && <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <CalendarOutlined style={{ color: '#1D4ED8' }} />
+                <Text strong style={{ fontSize: 14 }}>Approved Bookings</Text>
+              </div>
+              {approvedBookings.length ? (
+                <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+                  {approvedBookings.map((booking, index) => (
+                    <div key={booking.booking_id} style={{ padding: '10px 12px', borderTop: index ? '1px solid #E2E8F0' : 'none' }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{dayjs(booking.start_time).format('ddd, D MMM YYYY')}</div>
+                      <div style={{ color: '#475569', fontSize: 12 }}>{dayjs(booking.start_time).format('HH:mm')}–{dayjs(booking.end_time).format('HH:mm')}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>}
 
             {/* In-room Equipment Section */}
             <div>
