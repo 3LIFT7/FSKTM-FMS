@@ -146,9 +146,9 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
   async function fetchSlotsForDate(locationId, chosenDateStr) {
     setFetchingSlots(true);
     try {
-      const startOfDay = `${chosenDateStr}T00:00:00`;
-      const endOfDay = `${chosenDateStr}T23:59:59`;
-      const res = await fetch(`/api/bookings?location_id=${locationId}&startDate=${startOfDay}&endDate=${endOfDay}`);
+      const startOfDay = new Date(`${chosenDateStr}T00:00:00`).toISOString();
+      const endOfDay = new Date(`${chosenDateStr}T23:59:59`).toISOString();
+      const res = await fetch(`/api/bookings?location_id=${locationId}&startDate=${encodeURIComponent(startOfDay)}&endDate=${encodeURIComponent(endOfDay)}`);
       const data = await res.json();
       if (data.success) {
         const active = data.bookings.filter(b => b.status === 'approved' || b.status === 'pending');
@@ -202,10 +202,17 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
     return parts.join(' ');
   }, [selectedStartTime, selectedEndTime]);
 
+  const formatTimeSlotLabel = (hhmm) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 || 12;
+    return `${hhmm} (${hour12}:${String(m).padStart(2, '0')} ${period})`;
+  };
+
   const startTimeOptions = useMemo(() => {
     return TIME_SLOTS.slice(0, -1).map(t => ({
       value: t,
-      label: t,
+      label: formatTimeSlotLabel(t),
     }));
   }, []);
 
@@ -213,7 +220,7 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
     const currentStart = selectedStartTime || '08:00';
     return TIME_SLOTS.filter(t => t > currentStart).map(t => ({
       value: t,
-      label: t,
+      label: formatTimeSlotLabel(t),
     }));
   }, [selectedStartTime]);
 
@@ -267,8 +274,8 @@ export default function BookRoomModal({ isOpen, onClose, initialLocation, initia
 
     try {
       const chosenDateStr = values.date.format('YYYY-MM-DD');
-      const startTimeStr = `${chosenDateStr}T${values.startTime}:00`;
-      const endTimeStr = `${chosenDateStr}T${values.endTime}:00`;
+      const startTimeStr = new Date(`${chosenDateStr}T${values.startTime}:00`).toISOString();
+      const endTimeStr = new Date(`${chosenDateStr}T${values.endTime}:00`).toISOString();
 
       const payload = {
         location_id: values.location_id,

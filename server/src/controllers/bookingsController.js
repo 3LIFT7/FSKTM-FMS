@@ -8,6 +8,38 @@ function parseHHMMToMinutes(hhmm, fallbackMinutes) {
   return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
 }
 
+// Parse date string, defaulting timezone-less ISO strings ("YYYY-MM-DDTHH:mm:ss") to Malaysia Time (+08:00)
+function parseMalaysiaDate(input) {
+  if (input instanceof Date) return input;
+  const str = String(input || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(str)) {
+    return new Date(`${str}+08:00`);
+  }
+  return new Date(str);
+}
+
+function getMalaysiaDateParts(date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const map = {};
+  parts.forEach((p) => {
+    map[p.type] = p.value;
+  });
+  const hour = parseInt(map.hour, 10) % 24;
+  const minute = parseInt(map.minute, 10);
+  return {
+    dateKey: `${map.year}-${map.month}-${map.day}`,
+    minutes: hour * 60 + minute,
+  };
+}
+
 async function getBookingPolicySettings(dbOrTx = { query }) {
   const res = await dbOrTx.query(
     `SELECT setting_key, setting_value
@@ -195,8 +227,8 @@ async function createBooking(req, res) {
       return res.status(400).json({ error: 'Location, start time, end time, and purpose are required.' });
     }
 
-    const start = new Date(start_time);
-    const end = new Date(end_time);
+    const start = parseMalaysiaDate(start_time);
+    const end = parseMalaysiaDate(end_time);
 
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       return res.status(400).json({ error: 'Invalid start or end date format.' });
@@ -206,12 +238,11 @@ async function createBooking(req, res) {
       return res.status(400).json({ error: 'End time must be after start time.' });
     }
 
-    // Prevent overnight / multi-day single bookings
-    if (
-      start.getFullYear() !== end.getFullYear() ||
-      start.getMonth() !== end.getMonth() ||
-      start.getDate() !== end.getDate()
-    ) {
+    const startMyt = getMalaysiaDateParts(start);
+    const endMyt = getMalaysiaDateParts(end);
+
+    // Prevent overnight / multi-day single bookings (evaluated in Malaysia Time)
+    if (startMyt.dateKey !== endMyt.dateKey) {
       return res.status(400).json({
         error: 'Overnight or multi-day bookings are not permitted. Start and end times must be on the same day.',
       });
@@ -242,8 +273,8 @@ async function createBooking(req, res) {
       });
     }
 
-    const reqStartMinutes = start.getHours() * 60 + start.getMinutes();
-    const reqEndMinutes = end.getHours() * 60 + end.getMinutes();
+    const reqStartMinutes = startMyt.minutes;
+    const reqEndMinutes = endMyt.minutes;
 
     if (reqStartMinutes < policy.startMinutes || reqEndMinutes > policy.endMinutes) {
       return res.status(400).json({

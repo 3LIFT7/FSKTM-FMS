@@ -86,10 +86,17 @@ export default function LabUsageModal({ isOpen, onClose, initialLocation, onLogC
     return parts.join(' ');
   }, [selectedStartTime, selectedEndTime]);
 
+  const formatTimeSlotLabel = (hhmm) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 || 12;
+    return `${hhmm} (${hour12}:${String(m).padStart(2, '0')} ${period})`;
+  };
+
   const startTimeOptions = useMemo(() => {
     return TIME_SLOTS.slice(0, -1).map((t) => ({
       value: t,
-      label: t,
+      label: formatTimeSlotLabel(t),
     }));
   }, []);
 
@@ -97,7 +104,7 @@ export default function LabUsageModal({ isOpen, onClose, initialLocation, onLogC
     const currentStart = selectedStartTime || '08:00';
     return TIME_SLOTS.filter((t) => t > currentStart).map((t) => ({
       value: t,
-      label: t,
+      label: formatTimeSlotLabel(t),
     }));
   }, [selectedStartTime]);
 
@@ -145,8 +152,8 @@ export default function LabUsageModal({ isOpen, onClose, initialLocation, onLogC
 
     try {
       const chosenDateStr = values.date.format('YYYY-MM-DD');
-      const startTimeStr = `${chosenDateStr}T${values.startTime}:00`;
-      const endTimeStr = `${chosenDateStr}T${values.endTime}:00`;
+      const startTimeStr = new Date(`${chosenDateStr}T${values.startTime}:00`).toISOString();
+      const endTimeStr = new Date(`${chosenDateStr}T${values.endTime}:00`).toISOString();
 
       const payload = {
         location_id: values.location_id,

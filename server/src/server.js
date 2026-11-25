@@ -1,5 +1,6 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+process.env.TZ = process.env.TZ || 'Asia/Kuala_Lumpur';
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
